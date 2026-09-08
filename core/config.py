@@ -13,6 +13,10 @@ DEFAULT_CONFIG = {
             "to_city": "重庆",
             "window_days": 60,
             "threshold_total": 500,
+            "trip_type": "oneway",
+            "intl": False,
+            "from_iata": "",
+            "to_iata": "",
             "train_compare": {
                 "enabled": True,
                 "station_pairs": [
@@ -47,7 +51,13 @@ DEFAULT_CONFIG = {
     "sources": {
         "enabled": {
             "qunar-calendar": True,
-            "12306-train": True
+            "12306-train": True,
+            "amadeus-intl": False
+        },
+        "amadeus": {
+            "env": "test",
+            "client_id": "",
+            "client_secret": ""
         }
     },
     "webui": {

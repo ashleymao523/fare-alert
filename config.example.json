@@ -6,6 +6,10 @@
       "to_city": "重庆",
       "window_days": 60,
       "threshold_total": 500,
+      "trip_type": "oneway",
+      "intl": false,
+      "from_iata": "HGH",
+      "to_iata": "CKG",
       "train_compare": {
         "enabled": true,
         "station_pairs": [
@@ -49,7 +53,14 @@
   "sources": {
     "enabled": {
       "qunar-calendar": true,
-      "12306-train": true
+      "12306-train": true,
+      "amadeus-intl": false
+    },
+    "amadeus": {
+      "env": "test",
+      "client_id": "",
+      "client_secret": "",
+      "note": "developer.amadeus.com免费注册Self-Service后填入;env=test为免费测试环境,prod为生产;可选currency如CNY/USD指定返回币种"
     }
   },
   "webui": {

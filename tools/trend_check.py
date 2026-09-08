@@ -12,7 +12,7 @@ if not m:
     sys.exit(1)
 svg = m.group(0)
 
-weekend_bands = svg.count("rgba(148,163,184,0.05)")
+weekend_bands = svg.count("rgba(23,32,64,0.03)")
 
 # threshold / min values from the rendered chips (data-aware checks)
 th_m = re.search(r"\u5fc3\u7406\u4ef7\u4f4d \u00a5(\d+)", svg)
@@ -26,9 +26,9 @@ checks = {
     "area fill uses gradient": re.search(r"url\(#areaGrad\)", svg) is not None,
     "line stroke uses gradient": re.search(r"url\(#lineGrad\)", svg) is not None,
     "weekend bands >= 10": weekend_bands >= 10,
-    "threshold dashed line": svg.count("#ef4444") >= 1,
-    "threshold label chip": svg.count("rgba(239,68,68,0.16)") == 1,
-    "below-threshold glow dots (data-aware)": ("rgba(34,197,94,0.18)" in svg) == below_days,
+    "threshold dashed line": svg.count("#dc2626") >= 1,
+    "threshold label chip": svg.count("rgba(220,38,38,0.10)") == 1,
+    "below-threshold glow dots (data-aware)": ("rgba(22,163,74,0.16)" in svg) == below_days,
     "min pulse animation": 'animate attributeName' in svg,
     "min pill badge": 'rx="10.5"' in svg,
     "hover crosshair": "trendCross" in svg,

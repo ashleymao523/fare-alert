@@ -3,22 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b1220">
+<meta name="theme-color" content="#f6f7fb">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="FareAlert">
 <link rel="manifest" href="/static/manifest.webmanifest">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon.svg">
 <title>FareAlert · 低价出行提醒</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=6">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
     <span class="logo">✈️</span>
     <span class="brand-name">FareAlert</span>
-    <span class="ver">v0.5</span>
+    <span class="ver">v0.6</span>
   </div>
   <nav id="routeTabs" class="route-tabs"></nav>
   <div class="top-actions">
@@ -46,8 +46,15 @@
       <div id="dayDetail" class="day-detail hidden"></div>
     </div>
     <div class="card">
-      <div class="card-head"><h3>价格趋势</h3><span class="muted">绿点=低于心理价位</span></div>
+      <div class="card-head"><h3 id="trendTitle">价格趋势</h3><span id="trendHint" class="muted">绿点=低于心理价位 · 悬停看每日明细</span></div>
       <div id="trend" class="trend"></div>
+    </div>
+    <div class="card hidden" id="returnTrendCard">
+      <div class="card-head">
+        <div class="chart-block-head"><h3>返程价格趋势</h3><span class="leg-tag ret">返程单程价</span></div>
+        <span class="muted">返程可任选晚于去程的日期 · 组合价=去程+返程各自含税价</span>
+      </div>
+      <div id="trendReturn" class="trend"></div>
     </div>
     <div class="card">
       <div class="card-head"><h3>🚄 列车对比 (12306·全席位)</h3><span id="trainMeta" class="muted"></span></div>
@@ -81,6 +88,24 @@
     <div class="card">
       <div class="card-head"><h3>数据源开关</h3><span class="muted">规划中的源暂不可用</span></div>
       <div id="sourcesList"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>🌍 国际航班数据源 (Amadeus)</h3><span class="muted">免费测试环境即可用</span></div>
+      <div class="form-grid">
+        <label>环境
+          <select id="amaEnv">
+            <option value="test">test · 免费测试环境</option>
+            <option value="prod">prod · 生产环境</option>
+          </select>
+        </label>
+        <label>API Key (client_id)<input id="amaId" type="text" placeholder="developer.amadeus.com 创建应用获取"></label>
+        <label>API Secret (client_secret)<input id="amaSecret" type="password" placeholder="留空=保持已保存值"></label>
+      </div>
+      <div class="muted" style="margin-top:10px">
+        获取方式: developer.amadeus.com 免费注册 → Self-Service → 创建App → 复制Key/Secret ·
+        返回国际航线含税最低价(币种为出发地市场币种,可在config指定sources.amadeus.currency) ·
+        配好后在线路管理勾选「国际航线」并填IATA三字码, 未配置时国际线路自动跳过
+      </div>
     </div>
     <div class="card">
       <div class="card-head"><h3>税费与机建</h3><span class="muted">总价=裸价+机建+燃油</span></div>
@@ -137,13 +162,13 @@
   </section>
 
   <footer class="foot">
-    数据源: 去哪儿价格日历(挂牌价,不含OTA券后) + 12306 · 学生票估算: 动车二等75折/硬座5折/硬卧=卧铺-硬座半价 ·
+    数据源: 去哪儿价格日历(挂牌价,不含OTA券后) + 12306 + Amadeus国际线 · 学生票估算: 动车二等75折/硬座5折/硬卧=卧铺-硬座半价 ·
     购票请前往官方/平台页面,本工具仅做个人比价提醒 ·
     <a href="/report/hangzhou-chongqing/index.html" target="_blank">旧版报告</a>
   </footer>
 </main>
 
 <div id="toast" class="toast"></div>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=6"></script>
 </body>
 </html>

@@ -38,6 +38,10 @@ checks = {
     "航班时刻说明": "起降时刻" in h,
     "车次时刻列": "08:08" in h,
     "车次历时列": "11:31" in h,
+    "行程类型选择": "行程类型" in h,
+    "国际Amadeus配置卡": "amaSecret" in h,
+    "往返返程趋势容器": "trendReturn" in h,
+    "浅色主题版本": ">v0.6<" in h,
 }
 bad = 0
 for k, v in checks.items():

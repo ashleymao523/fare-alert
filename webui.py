@@ -43,6 +43,9 @@ def _mask(cfg):
     push = out.setdefault("push", {})
     for k in SECRET_KEYS:
         push[k] = MASK if (push.get(k) or "").strip() else ""
+    ama = out.setdefault("sources", {}).setdefault("amadeus", {})
+    if (ama.get("client_secret") or "").strip():
+        ama["client_secret"] = MASK
     return out
 
 
@@ -57,6 +60,17 @@ def _read_json(path, default):
             return json.load(f)
     except Exception:
         return default
+
+
+def _sources_meta(cfg):
+    """Registry copy with dynamic amadeus availability status."""
+    meta = _deep_copy(SOURCE_REGISTRY)
+    ama = (cfg.get("sources") or {}).get("amadeus") or {}
+    ready = bool((ama.get("client_id") or "").strip()
+                 and (ama.get("client_secret") or "").strip())
+    if "amadeus-intl" in meta:
+        meta["amadeus-intl"]["status"] = "可用" if ready else "需配置密钥"
+    return meta
 
 
 def _tail(path, n=300):
@@ -91,6 +105,15 @@ def _validate_config(body, current):
             if not v:
                 raise ValueError("出发/到达城市不能为空")
             r[k] = v
+        r["trip_type"] = "roundtrip" if r.get("trip_type") == "roundtrip" else "oneway"
+        r["intl"] = bool(r.get("intl", False))
+        for k in ("from_iata", "to_iata"):
+            v = str(r.get(k, "")).strip().upper()
+            if v and not re.fullmatch(r"[A-Z]{3}", v):
+                raise ValueError("IATA三字码格式为3个字母, 如 HGH/CKG")
+            r[k] = v
+        if r["intl"] and not (r["from_iata"] and r["to_iata"]):
+            raise ValueError("启用国际航线的线路必须填写出发/到达IATA三字码")
         wd = r.get("window_days", 60)
         if not isinstance(wd, int) or not (1 <= wd <= 365):
             raise ValueError("查询窗口必须是1-365的整数")
@@ -147,7 +170,18 @@ def _validate_config(body, current):
             clean_src[k] = bool(src[k])
         else:
             clean_src[k] = bool(cur_src.get(k, False))
-    cfg["sources"] = {"enabled": clean_src}
+    cur_ama = ((current.get("sources") or {}).get("amadeus")) or {}
+    ama = (cfg.get("sources") or {}).get("amadeus")
+    ama = ama if isinstance(ama, dict) else {}
+    env = "prod" if ama.get("env") == "prod" else "test"
+    cid = str(ama.get("client_id") or "").strip()
+    csec = str(ama.get("client_secret") or "").strip()
+    if csec == MASK:
+        csec = str(cur_ama.get("client_secret") or "").strip()
+    cfg["sources"] = {
+        "enabled": clean_src,
+        "amadeus": {"env": env, "client_id": cid, "client_secret": csec},
+    }
 
     push = cfg.get("push") or {}
     if not isinstance(push, dict):
@@ -228,7 +262,7 @@ def api_get_config():
     return jsonify({
         "config": _mask(cfg),
         "secrets_set": _secrets_set(cfg),
-        "sources": SOURCE_REGISTRY,
+        "sources": _sources_meta(cfg),
     })
 
 
@@ -248,7 +282,7 @@ def api_post_config():
         "ok": True,
         "config": _mask(cfg),
         "secrets_set": _secrets_set(cfg),
-        "sources": SOURCE_REGISTRY,
+        "sources": _sources_meta(cfg),
     })
 
 

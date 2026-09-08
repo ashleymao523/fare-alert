@@ -4,8 +4,8 @@
   "description": "机票/动车低价监控与出行最优对比",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0b1220",
-  "theme_color": "#0b1220",
+  "background_color": "#f6f7fb",
+  "theme_color": "#f6f7fb",
   "lang": "zh-CN",
   "icons": [
     {

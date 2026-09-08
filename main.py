@@ -11,10 +11,12 @@ import time
 
 import requests
 
-from core.alerts import build_message, evaluate, total_price
+from core.alerts import build_message, evaluate, tax_amount, total_price
 from core.config import load_config
 from core.crawl import CrawlRecorder
 from core.flights import airline_name, fetch_calendar
+from core.intl import fetch_intl_calendar
+from core.models import FlightDeal
 from core.notify import push_all
 from core.report import write_report
 from core.state import load_state, save_state
@@ -52,14 +54,20 @@ def _flight_dict(route, deal, cfg, alert_dates):
     bag = cfg.get("baggage_policy", {})
     code = deal.airline_code
     total = total_price(deal.bare_price, tax_cfg)
+    if deal.source == "amadeus-intl":
+        airline = "国际含税最低价(Amadeus)"
+        bag_default = "国际线托运额度以航司舱位为准"
+    else:
+        airline = airline_name(code)
+        bag_default = "以购票页为准"
     return {
         "date": deal.date,
         "bare_price": deal.bare_price,
         "total_price": total,
         "flight_no": deal.flight_no,
-        "airline": airline_name(code),
+        "airline": airline,
         "airline_code": code,
-        "baggage": bag.get(code, "以购票页为准"),
+        "baggage": bag.get(code, bag_default),
         "below": total < route.get("threshold_total", 500),
         "alert": deal.date in alert_dates,
         "url": deal.url,
@@ -67,6 +75,23 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "arr_time": deal.arr_time,
         "duration_text": deal.duration_text,
     }
+
+
+def _fetch_route_flights(session, net, route, date_from, date_to,
+                         cfg, ama_cfg, ama_ready, direction="out"):
+    """Fetch one leg's calendar. direction 'out'/'ret' swaps the cities."""
+    if direction == "ret":
+        fc, tc = route.get("to_city", ""), route.get("from_city", "")
+        fi, ti = route.get("to_iata", ""), route.get("from_iata", "")
+    else:
+        fc, tc = route.get("from_city", ""), route.get("to_city", "")
+        fi, ti = route.get("from_iata", ""), route.get("to_iata", "")
+    if route.get("intl"):
+        if not ama_ready:
+            raise RuntimeError("国际线路已启用但Amadeus密钥未配置")
+        return fetch_intl_calendar(session, net, ama_cfg, cfg.get("tax", {}),
+                                   fi, ti, date_from, date_to, DATA_DIR)
+    return fetch_calendar(session, net, fc, tc, date_from, date_to)
 
 
 def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
@@ -86,38 +111,64 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
     for route in cfg.get("routes", []):
         date_from = (today + dt.timedelta(days=1)).isoformat()
         date_to = (today + dt.timedelta(days=int(route.get("window_days", 60)))).isoformat()
+        trip_type = "roundtrip" if route.get("trip_type") == "roundtrip" else "oneway"
+        intl = bool(route.get("intl"))
+        flight_key = "amadeus-intl" if intl else "qunar-calendar"
+        ama_cfg = ((cfg.get("sources") or {}).get("amadeus")) or {}
+        ama_ready = bool((ama_cfg.get("client_id") or "").strip()
+                         and (ama_cfg.get("client_secret") or "").strip())
+        use_leg_flight = use_flight and (not intl or enabled.get("amadeus-intl", True))
         route_snap = {
             "id": route.get("id", "route"),
             "from_city": route.get("from_city", ""),
             "to_city": route.get("to_city", ""),
             "window_days": int(route.get("window_days", 60)),
             "threshold_total": route.get("threshold_total", 500),
+            "trip_type": trip_type,
+            "intl": intl,
             "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
             "window": [date_from, date_to],
             "deals": [],
+            "return_deals": [],
+            "combined": None,
+            "combined_by_date": {},
             "train": None,
             "days_below": 0,
             "cheapest_total": None,
             "flight_source_status": "ok",
         }
 
-        deals = []
-        if not use_flight:
+        deals, return_deals = [], []
+        if not use_leg_flight:
             route_snap["flight_source_status"] = "disabled"
-            rec.step("qunar-calendar", route_snap["id"], "fetch calendar", "disabled", 0)
+            rec.step(flight_key, route_snap["id"], "fetch calendar", "disabled", 0)
             log.info("[{}] flight source disabled, skip".format(route_snap["id"]))
         else:
             t0 = time.time()
             try:
-                deals = fetch_calendar(session, net, route["from_city"], route["to_city"],
-                                       date_from, date_to)
-                rec.step("qunar-calendar", route_snap["id"], "fetch calendar", "ok",
+                deals = _fetch_route_flights(session, net, route, date_from,
+                                             date_to, cfg, ama_cfg, ama_ready, "out")
+                rec.step(flight_key, route_snap["id"], "fetch calendar", "ok",
                          (time.time() - t0) * 1000, count=len(deals))
             except Exception as e:
-                rec.step("qunar-calendar", route_snap["id"], "fetch calendar", "error",
+                rec.step(flight_key, route_snap["id"], "fetch calendar", "error",
                          (time.time() - t0) * 1000, error=e)
                 route_snap["flight_source_status"] = "error: " + str(e)[:120]
                 log.error("flight fetch failed [{}]: {}".format(route_snap["id"], e))
+            if trip_type == "roundtrip" and deals:
+                t0r = time.time()
+                try:
+                    return_deals = _fetch_route_flights(session, net, route,
+                                                        date_from, date_to, cfg,
+                                                        ama_cfg, ama_ready, "ret")
+                    rec.step(flight_key, route_snap["id"], "fetch return calendar",
+                             "ok", (time.time() - t0r) * 1000, count=len(return_deals))
+                except Exception as e:
+                    rec.step(flight_key, route_snap["id"], "fetch return calendar",
+                             "error", (time.time() - t0r) * 1000, error=e)
+                    route_snap["flight_source_status"] = "error: 返程获取失败 " + str(e)[:90]
+                    log.error("return flight fetch failed [{}]: {}".format(route_snap["id"], e))
+                    return_deals = []
 
         train_info = None
         if use_train and (route.get("train_compare") or {}).get("enabled"):
@@ -138,10 +189,47 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
         else:
             rec.step("12306-train", route_snap["id"], "fetch trains", "disabled", 0)
 
+        alert_deals, combined_meta, combined_by_date = deals, None, {}
+        if trip_type == "roundtrip" and deals and return_deals:
+            tax_cfg = cfg.get("tax", {})
+            ret_sorted = sorted(return_deals, key=lambda x: (x.bare_price, x.date))
+            alert_deals = []
+            for d1 in deals:
+                pick = None
+                for d2 in ret_sorted:
+                    if d2.date > d1.date:
+                        pick = d2
+                        break
+                if not pick:
+                    continue
+                t1 = total_price(d1.bare_price, tax_cfg)
+                t2 = total_price(pick.bare_price, tax_cfg)
+                comb = t1 + t2
+                combined_by_date[d1.date] = {
+                    "ret_date": pick.date, "total": comb,
+                    "out_total": t1, "ret_total": t2,
+                    "ret_flight": pick.flight_no,
+                }
+                alert_deals.append(FlightDeal(
+                    date=d1.date,
+                    bare_price=round(comb - tax_amount(tax_cfg), 1),
+                    flight_no="去{}/返{}".format(d1.flight_no or "国际",
+                                                 pick.flight_no or "国际"),
+                    source=d1.source, url=d1.url))
+                if combined_meta is None or comb < combined_meta["total"]:
+                    combined_meta = {
+                        "out_date": d1.date, "ret_date": pick.date, "total": comb,
+                        "out_total": t1, "ret_total": t2,
+                        "out_flight": d1.flight_no, "ret_flight": pick.flight_no,
+                        "url": d1.url,
+                    }
+            route_snap["combined"] = combined_meta
+            route_snap["combined_by_date"] = combined_by_date
+
         to_alert, below = [], []
-        if deals:
+        if alert_deals:
             now_ts = time.time()
-            to_alert, below = evaluate(route, deals, state, cfg, now_ts,
+            to_alert, below = evaluate(route, alert_deals, state, cfg, now_ts,
                                        record=push_enabled)
             try:
                 write_report(
@@ -154,8 +242,16 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
 
         alert_dates = {d.date for _, d in to_alert}
         route_snap["deals"] = [_flight_dict(route, d, cfg, alert_dates) for d in deals]
+        route_snap["return_deals"] = [_flight_dict(route, d, cfg, set())
+                                      for d in return_deals]
         route_snap["days_below"] = len(below)
-        if deals:
+        if trip_type == "roundtrip" and combined_meta:
+            route_snap["cheapest_total"] = combined_meta["total"]
+            log.info("[{}] RT window {}~{} best {}+{} total ¥{} ({} days below threshold)".format(
+                route_snap["id"], date_from, date_to,
+                combined_meta["out_date"], combined_meta["ret_date"],
+                int(route_snap["cheapest_total"]), len(below)))
+        elif deals:
             route_snap["cheapest_total"] = total_price(deals[0].bare_price, cfg.get("tax", {}))
             log.info("[{}] window {}~{} cheapest {} {} total ¥{} ({} days below threshold)".format(
                 route_snap["id"], date_from, date_to,

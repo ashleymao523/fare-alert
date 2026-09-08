@@ -264,20 +264,28 @@
       return;
     }
     var f = cheapestFlight(route);
+    var isRT = !!(route.trip_type === "roundtrip" && route.combined);
     var tr = trainBest(route);
     var items = [];
     items.push({
-      label: "最低机票总价", value: fmtMoney(f.total_price),
-      sub: f.date + " " + weekday(f.date) + " · " + f.flight_no,
-      cls: f.total_price < route.threshold_total ? "good" : "",
-      url: f.url
+      label: isRT ? "往返合计最低" : "最低机票总价",
+      value: fmtMoney(isRT ? route.combined.total : f.total_price),
+      sub: isRT
+        ? ("去 " + fmtMD(route.combined.out_date) + " · 返 " + fmtMD(route.combined.ret_date) +
+           " · 最优组合(去+返)")
+        : (f.date + " " + weekday(f.date) + " · " + (f.flight_no || f.airline)),
+      cls: (isRT ? route.combined.total : f.total_price) < route.threshold_total ? "good" : "",
+      url: isRT ? (route.combined.url || f.url) : f.url
     });
     items.push({
       label: "低于心理价位", value: route.days_below + " 天",
       sub: "窗口 " + route.window[0] + " ~ " + route.window[1],
       cls: route.days_below > 0 ? "good" : "warn"
     });
-    items.push({ label: "心理价位(含税)", value: fmtMoney(route.threshold_total), sub: "低于即推送提醒" });
+    items.push({
+      label: isRT ? "心理价位(往返合计)" : "心理价位(含税)",
+      value: fmtMoney(route.threshold_total), sub: "低于即推送提醒"
+    });
     if (tr.second) {
       var ze = trainSeats(tr.second)["二等座"];
       items.push({
@@ -320,6 +328,8 @@
     box.textContent = "";
     if (!route || !route.deals || !route.deals.length) return;
     var f = cheapestFlight(route);
+    var isRT = !!(route.trip_type === "roundtrip" && route.combined);
+    var cb = route.combined;
     var tr = trainBest(route);
     var t = tr.second;
     var ze = t ? trainSeats(t)["二等座"] : null;
@@ -327,7 +337,8 @@
     var sl = tr.sleeper;
 
     var names = { flight: "✈️ 机票", train: "🚄 动车二等座", student: "🎓 学生动车", sleeper: "🛏️ 列车卧铺" };
-    var cands = [{ k: "flight", p: f.total_price }];
+    var flightPrice = isRT ? cb.total : f.total_price;
+    var cands = [{ k: "flight", p: flightPrice }];
     if (t) cands.push({ k: "train", p: ze });
     if (t) cands.push({ k: "student", p: s });
     if (sl) cands.push({ k: "sleeper", p: sl.price });
@@ -362,9 +373,16 @@
       return c;
     }
     cards.appendChild(vcard("flight", winner === "flight",
-      "✈️ 最低机票 (" + f.date + ")", fmtMoney(f.total_price),
-      esc(f.flight_no + " " + f.airline) + " · 裸价" + fmtMoney(f.bare_price) + "+税费<br>" +
-      "行李: " + esc(f.baggage) + "<br>起降时刻/飞行时长以下单页为准"), f.url);
+      isRT ? "✈️ 往返最低 (" + fmtMD(cb.out_date) + "→" + fmtMD(cb.ret_date) + ")"
+           : "✈️ 最低机票 (" + f.date + ")",
+      fmtMoney(flightPrice),
+      isRT
+        ? "去程 " + esc(cb.out_flight || f.airline) + " ¥" + Math.round(cb.out_total) +
+          " + 返程 " + esc(cb.ret_flight || f.airline) + " ¥" + Math.round(cb.ret_total) +
+          " = 合计<br>行李: " + esc(f.baggage) + "<br>两段分别下单, 起降时刻以订单页为准"
+        : esc((f.flight_no ? f.flight_no + " " : "") + f.airline) + " · 裸价" + fmtMoney(f.bare_price) + "+税费<br>" +
+          "行李: " + esc(f.baggage) + "<br>起降时刻/飞行时长以下单页为准"),
+      isRT ? (cb.url || f.url) : f.url);
     if (t) {
       cards.appendChild(vcard("train", winner === "train",
         "🚄 动车二等 (" + t.train_code + ")", fmtMoney(ze),
@@ -410,10 +428,25 @@
   function renderCalendar(route) {
     var box = $("calendar");
     box.textContent = "";
-    $("calMeta").textContent = route ? ("点击日期看详情 · 阈值 " + fmtMoney(route.threshold_total)) : "";
+    var isRT = !!(route && route.trip_type === "roundtrip" && route.combined_by_date);
+    $("calMeta").textContent = route
+      ? ((isRT ? "往返模式: 显示往返合计价" : "点击日期看详情") +
+         " · 阈值 " + fmtMoney(route.threshold_total))
+      : "";
     if (!route) return;
     var map = {};
-    (route.deals || []).forEach(function (d) { map[d.date] = d; });
+    (route.deals || []).forEach(function (d) {
+      var cd = isRT ? (route.combined_by_date || {})[d.date] : null;
+      if (!cd) { map[d.date] = d; return; }
+      var cp = {};
+      for (var k in d) cp[k] = d[k];
+      cp.total_price = cd.total;
+      cp.ret_date = cd.ret_date;
+      cp.out_total = cd.out_total;
+      cp.ret_total = cd.ret_total;
+      cp.ret_flight = cd.ret_flight;
+      map[d.date] = cp;
+    });
     dayList(route).forEach(function (ds) {
       var d = map[ds];
       var cls = "day " + (d ? heatClass(d.total_price, route.threshold_total) : "empty");
@@ -435,8 +468,20 @@
     var box = $("dayDetail");
     box.textContent = "";
     if (!route || !S.selDate) { box.classList.add("hidden"); return; }
+    var isRT = !!(route.trip_type === "roundtrip" && route.combined_by_date);
     var map = {};
-    (route.deals || []).forEach(function (d) { map[d.date] = d; });
+    (route.deals || []).forEach(function (d) {
+      var cd = isRT ? (route.combined_by_date || {})[d.date] : null;
+      if (!cd) { map[d.date] = d; return; }
+      var cp = {};
+      for (var k in d) cp[k] = d[k];
+      cp.total_price = cd.total;
+      cp.ret_date = cd.ret_date;
+      cp.out_total = cd.out_total;
+      cp.ret_total = cd.ret_total;
+      cp.ret_flight = cd.ret_flight;
+      map[d.date] = cp;
+    });
     var d = map[S.selDate];
     box.classList.remove("hidden");
     if (!d) {
@@ -453,15 +498,25 @@
 
     var warn = /不含|确认/.test(d.baggage) ? " ⚠️" : " 🧳";
     var line = el("div");
-    line.innerHTML = esc(d.flight_no + " " + d.airline) + " · 裸价 " + fmtMoney(d.bare_price) +
-      " + 机建燃油 = <b>" + fmtMoney(d.total_price) + "</b>" + warn + esc(d.baggage) +
-      (d.alert ? " · <span class=\"badge green\">已推送提醒</span>" : "");
+    if (isRT && d.ret_date) {
+      line.innerHTML = "去程 " + esc(d.flight_no || d.airline) + " ¥" + Math.round(d.out_total) +
+        " + 返程 " + fmtMD(d.ret_date) + " " + esc(d.ret_flight || d.airline) +
+        " ¥" + Math.round(d.ret_total) + " = <b>" + fmtMoney(d.total_price) + "</b>" +
+        warn + esc(d.baggage) +
+        (d.alert ? " · <span class=\"badge green\">已推送提醒</span>" : "");
+    } else {
+      line.innerHTML = esc((d.flight_no ? d.flight_no + " " : "") + d.airline) + " · 裸价 " + fmtMoney(d.bare_price) +
+        " + 机建燃油 = <b>" + fmtMoney(d.total_price) + "</b>" + warn + esc(d.baggage) +
+        (d.alert ? " · <span class=\"badge green\">已推送提醒</span>" : "");
+    }
     box.appendChild(line);
     var tr = trainBest(route);
     var ftNote = el("div", "muted");
-    ftNote.textContent = (d.dep_time && d.arr_time)
-      ? ("起飞 " + d.dep_time + " · 到达 " + d.arr_time + (d.duration_text ? " · " + d.duration_text : ""))
-      : "起降时刻/飞行时长以下单页为准(当前数据源仅提供每日最低价)";
+    ftNote.textContent = isRT
+      ? "往返合计=去程+返程各自含税总价之和, 两段需分别下单"
+      : ((d.dep_time && d.arr_time)
+        ? ("起飞 " + d.dep_time + " · 到达 " + d.arr_time + (d.duration_text ? " · " + d.duration_text : ""))
+        : "起降时刻/飞行时长以下单页为准(当前数据源仅提供每日最低价)");
     box.appendChild(ftNote);
     if (tr.second) {
       var t = tr.second;
@@ -485,10 +540,13 @@
     box.appendChild(link);
   }
 
-  function renderTrend(route) {
-    var box = $("trend");
-    if (!route || !route.deals || !route.deals.length) { box.textContent = "暂无数据"; return; }
-    var pts = (route.deals || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  var TREND_IDS_MAIN = { svg: "trendSvg", area: "areaGrad", line: "lineGrad", cross: "trendCross", dot: "trendDot" };
+  var TREND_IDS_RET = { svg: "trendRetSvg", area: "areaGradRet", line: "lineGradRet", cross: "trendRetCross", dot: "trendRetDot" };
+
+  function renderTrendInto(boxId, deals, route, ids, combined) {
+    var box = $(boxId);
+    if (!route || !deals || !deals.length) { box.textContent = "暂无数据"; return; }
+    var pts = deals.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
     var th = route.threshold_total;
     var W = 760, H = 270, L = 52, R = 18, T = 26, B = 36;
     var lo = th, hi = th;
@@ -519,13 +577,13 @@
     var areaPath = linePath + " L " + P[P.length - 1].x.toFixed(1) + " " + (H - B) + " L " + P[0].x.toFixed(1) + " " + (H - B) + " Z";
 
     var s = [];
-    s.push("<svg id=\"trendSvg\" viewBox=\"0 0 " + W + " " + H + "\" xmlns=\"http://www.w3.org/2000/svg\">");
-    s.push("<defs><linearGradient id=\"areaGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">" +
-           "<stop offset=\"0%\" stop-color=\"#4f8cff\" stop-opacity=\"0.30\"/>" +
-           "<stop offset=\"100%\" stop-color=\"#4f8cff\" stop-opacity=\"0\"/></linearGradient>" +
-           "<linearGradient id=\"lineGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">" +
-           "<stop offset=\"0%\" stop-color=\"#4f8cff\"/><stop offset=\"55%\" stop-color=\"#38bdf8\"/>" +
-           "<stop offset=\"100%\" stop-color=\"#22d3ee\"/></linearGradient></defs>");
+    s.push("<svg id=\"" + ids.svg + "\" viewBox=\"0 0 " + W + " " + H + "\" xmlns=\"http://www.w3.org/2000/svg\">");
+    s.push("<defs><linearGradient id=\"" + ids.area + "\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">" +
+           "<stop offset=\"0%\" stop-color=\"#2563eb\" stop-opacity=\"0.20\"/>" +
+           "<stop offset=\"100%\" stop-color=\"#2563eb\" stop-opacity=\"0\"/></linearGradient>" +
+           "<linearGradient id=\"" + ids.line + "\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">" +
+           "<stop offset=\"0%\" stop-color=\"#2563eb\"/><stop offset=\"55%\" stop-color=\"#0ea5e9\"/>" +
+           "<stop offset=\"100%\" stop-color=\"#06b6d4\"/></linearGradient></defs>");
 
     var stepX = pts.length > 1 ? (W - L - R) / (pts.length - 1) : 0;
     for (var w = 0; w < pts.length; w++) {
@@ -533,30 +591,30 @@
       if (wd === "周六" || wd === "周日") {
         var wx = w === 0 ? L : X(w) - stepX / 2;
         var ww = w === 0 ? (pts.length > 1 ? stepX / 2 : W - L - R) : (w === pts.length - 1 ? W - R - wx : stepX);
-        s.push("<rect x=\"" + wx.toFixed(1) + "\" y=\"" + T + "\" width=\"" + Math.max(0, ww).toFixed(1) + "\" height=\"" + (H - T - B) + "\" fill=\"rgba(148,163,184,0.05)\"/>");
+        s.push("<rect x=\"" + wx.toFixed(1) + "\" y=\"" + T + "\" width=\"" + Math.max(0, ww).toFixed(1) + "\" height=\"" + (H - T - B) + "\" fill=\"rgba(23,32,64,0.03)\"/>");
       }
     }
 
     for (var g = 0; g <= 4; g++) {
       var v = lo + (hi - lo) * g / 4;
       var y = Y(v);
-      s.push("<line x1=\"" + L + "\" y1=\"" + y.toFixed(1) + "\" x2=\"" + (W - R) + "\" y2=\"" + y.toFixed(1) + "\" stroke=\"rgba(148,163,184,0.14)\" stroke-width=\"1\"" + (g === 0 ? "" : " stroke-dasharray=\"2 5\"") + "/>");
-      s.push("<text x=\"" + (L - 8) + "\" y=\"" + (y + 4).toFixed(1) + "\" fill=\"#8b98b4\" font-size=\"11\" text-anchor=\"end\">¥" + Math.round(v) + "</text>");
+      s.push("<line x1=\"" + L + "\" y1=\"" + y.toFixed(1) + "\" x2=\"" + (W - R) + "\" y2=\"" + y.toFixed(1) + "\" stroke=\"rgba(23,32,64,0.08)\" stroke-width=\"1\"" + (g === 0 ? "" : " stroke-dasharray=\"2 5\"") + "/>");
+      s.push("<text x=\"" + (L - 8) + "\" y=\"" + (y + 4).toFixed(1) + "\" fill=\"#66708a\" font-size=\"11\" text-anchor=\"end\">¥" + Math.round(v) + "</text>");
     }
 
-    s.push("<rect x=\"" + L + "\" y=\"" + T + "\" width=\"" + (W - L - R) + "\" height=\"" + Math.max(0, Y(th) - T).toFixed(1) + "\" fill=\"rgba(239,68,68,0.05)\"/>");
+    s.push("<rect x=\"" + L + "\" y=\"" + T + "\" width=\"" + (W - L - R) + "\" height=\"" + Math.max(0, Y(th) - T).toFixed(1) + "\" fill=\"rgba(220,38,38,0.04)\"/>");
     s.push("<line x1=\"" + L + "\" y1=\"" + Y(th) + "\" x2=\"" + (W - R) + "\" y2=\"" + Y(th) +
-           "\" stroke=\"#ef4444\" stroke-width=\"1.5\" stroke-dasharray=\"6 4\"/>");
-    s.push("<g><rect x=\"" + (L + 8) + "\" y=\"" + (Y(th) - 21).toFixed(1) + "\" width=\"100\" height=\"17\" rx=\"8.5\" fill=\"rgba(239,68,68,0.16)\"/>" +
-           "<text x=\"" + (L + 58) + "\" y=\"" + (Y(th) - 8.5).toFixed(1) + "\" fill=\"#f87171\" font-size=\"10.5\" font-weight=\"600\" text-anchor=\"middle\">心理价位 ¥" + Math.round(th) + "</text></g>");
+           "\" stroke=\"#dc2626\" stroke-width=\"1.5\" stroke-dasharray=\"6 4\"/>");
+    s.push("<g><rect x=\"" + (L + 8) + "\" y=\"" + (Y(th) - 21).toFixed(1) + "\" width=\"100\" height=\"17\" rx=\"8.5\" fill=\"rgba(220,38,38,0.10)\"/>" +
+           "<text x=\"" + (L + 58) + "\" y=\"" + (Y(th) - 8.5).toFixed(1) + "\" fill=\"#dc2626\" font-size=\"10.5\" font-weight=\"600\" text-anchor=\"middle\">心理价位 ¥" + Math.round(th) + "</text></g>");
 
-    s.push("<path d=\"" + areaPath + "\" fill=\"url(#areaGrad)\"/>");
-    s.push("<path d=\"" + linePath + "\" fill=\"none\" stroke=\"url(#lineGrad)\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+    s.push("<path d=\"" + areaPath + "\" fill=\"url(#" + ids.area + ")\"/>");
+    s.push("<path d=\"" + linePath + "\" fill=\"none\" stroke=\"url(#" + ids.line + ")\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
 
     var lstep = Math.max(1, Math.ceil(pts.length / 8));
     for (var j = 0; j < pts.length; j++) {
       if (j % lstep === 0 || j === pts.length - 1) {
-        s.push("<text x=\"" + X(j).toFixed(1) + "\" y=\"" + (H - 12) + "\" fill=\"#8b98b4\" font-size=\"10\" text-anchor=\"middle\">" + fmtMD(pts[j].date) + "</text>");
+        s.push("<text x=\"" + X(j).toFixed(1) + "\" y=\"" + (H - 12) + "\" fill=\"#66708a\" font-size=\"10\" text-anchor=\"middle\">" + fmtMD(pts[j].date) + "</text>");
       }
     }
 
@@ -564,40 +622,40 @@
       if (k === minIdx) continue;
       var p = pts[k];
       var below = p.total_price < th;
-      if (below) s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) + "\" r=\"7\" fill=\"rgba(34,197,94,0.18)\"/>");
+      if (below) s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) + "\" r=\"7\" fill=\"rgba(22,163,74,0.16)\"/>");
       s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) +
-             "\" r=\"" + (below ? 4 : 2.5) + "\" fill=\"" + (below ? "#22c55e" : "#64748b") + "\" stroke=\"#0b1220\" stroke-width=\"1.5\"><title>" +
+             "\" r=\"" + (below ? 4 : 2.5) + "\" fill=\"" + (below ? "#16a34a" : "#98a2b3") + "\" stroke=\"#ffffff\" stroke-width=\"1.5\"><title>" +
              p.date + " " + weekday(p.date) + " " + fmtMoney(p.total_price) + " " + (p.flight_no || "") + "</title></circle>");
     }
 
     var mp = pts[minIdx];
     var mx = X(minIdx), my = Y(mp.total_price);
-    var mLabel = "最低 ¥" + Math.round(mp.total_price);
+    var mLabel = (combined ? "最低合计 ¥" : "最低 ¥") + Math.round(mp.total_price);
     var mW = mLabel.length * 7.5 + 18, mX = Math.min(Math.max(mx - mW / 2, L), W - R - mW);
     s.push("<g>" +
-           "<circle cx=\"" + mx.toFixed(1) + "\" cy=\"" + my.toFixed(1) + "\" r=\"8\" fill=\"rgba(34,197,94,0.25)\">" +
+           "<circle cx=\"" + mx.toFixed(1) + "\" cy=\"" + my.toFixed(1) + "\" r=\"8\" fill=\"rgba(22,163,74,0.22)\">" +
            "<animate attributeName=\"r\" values=\"7;12;7\" dur=\"2.4s\" repeatCount=\"indefinite\"/>" +
            "<animate attributeName=\"opacity\" values=\"0.8;0.1;0.8\" dur=\"2.4s\" repeatCount=\"indefinite\"/></circle>" +
-           "<circle cx=\"" + mx.toFixed(1) + "\" cy=\"" + my.toFixed(1) + "\" r=\"4.5\" fill=\"#22c55e\" stroke=\"#0b1220\" stroke-width=\"1.5\"/>" +
-           "<rect x=\"" + mX.toFixed(1) + "\" y=\"" + (my - 33).toFixed(1) + "\" width=\"" + mW.toFixed(1) + "\" height=\"21\" rx=\"10.5\" fill=\"#22c55e\"/>" +
-           "<text x=\"" + (mX + mW / 2).toFixed(1) + "\" y=\"" + (my - 18).toFixed(1) + "\" fill=\"#052e16\" font-size=\"11.5\" font-weight=\"700\" text-anchor=\"middle\">" + mLabel + "</text></g>");
+           "<circle cx=\"" + mx.toFixed(1) + "\" cy=\"" + my.toFixed(1) + "\" r=\"4.5\" fill=\"#16a34a\" stroke=\"#ffffff\" stroke-width=\"1.5\"/>" +
+           "<rect x=\"" + mX.toFixed(1) + "\" y=\"" + (my - 33).toFixed(1) + "\" width=\"" + mW.toFixed(1) + "\" height=\"21\" rx=\"10.5\" fill=\"#16a34a\"/>" +
+           "<text x=\"" + (mX + mW / 2).toFixed(1) + "\" y=\"" + (my - 18).toFixed(1) + "\" fill=\"#ffffff\" font-size=\"11.5\" font-weight=\"700\" text-anchor=\"middle\">" + mLabel + "</text></g>");
 
-    s.push("<line id=\"trendCross\" x1=\"0\" y1=\"" + T + "\" x2=\"0\" y2=\"" + (H - B) + "\" stroke=\"rgba(148,163,184,0.45)\" stroke-width=\"1\" stroke-dasharray=\"3 3\" visibility=\"hidden\"/>");
-    s.push("<circle id=\"trendDot\" r=\"5\" fill=\"#38bdf8\" stroke=\"#0b1220\" stroke-width=\"1.5\" visibility=\"hidden\"/>");
+    s.push("<line id=\"" + ids.cross + "\" x1=\"0\" y1=\"" + T + "\" x2=\"0\" y2=\"" + (H - B) + "\" stroke=\"rgba(23,32,64,0.35)\" stroke-width=\"1\" stroke-dasharray=\"3 3\" visibility=\"hidden\"/>");
+    s.push("<circle id=\"" + ids.dot + "\" r=\"5\" fill=\"#0ea5e9\" stroke=\"#ffffff\" stroke-width=\"1.5\" visibility=\"hidden\"/>");
     s.push("</svg>");
     box.innerHTML = s.join("");
 
     var tip = document.createElement("div");
     tip.className = "trend-tip";
     box.appendChild(tip);
-    var svg = box.querySelector("#trendSvg");
+    var svg = box.querySelector("#" + ids.svg);
     svg.addEventListener("mousemove", function (e) {
       var rect = svg.getBoundingClientRect();
       var vx = (e.clientX - rect.left) * (W / rect.width);
       var best = 0, bd = Infinity;
       for (var n = 0; n < P.length; n++) { var dd = Math.abs(P[n].x - vx); if (dd < bd) { bd = dd; best = n; } }
       var q = pts[best];
-      var cross = svg.querySelector("#trendCross"), dot = svg.querySelector("#trendDot");
+      var cross = svg.querySelector("#" + ids.cross), dot = svg.querySelector("#" + ids.dot);
       cross.setAttribute("x1", P[best].x.toFixed(1)); cross.setAttribute("x2", P[best].x.toFixed(1));
       cross.removeAttribute("visibility");
       dot.setAttribute("cx", P[best].x.toFixed(1)); dot.setAttribute("cy", P[best].y.toFixed(1));
@@ -605,19 +663,38 @@
       var below2 = q.total_price < th;
       tip.innerHTML = "<b>" + fmtMD(q.date) + " " + weekday(q.date) + "</b>" +
         "<span class=\"" + (below2 ? "good" : "warn") + "\">¥" + Math.round(q.total_price) + "</span>" +
-        "<i>" + (q.flight_no || "") + (q.dep_time ? " · " + q.dep_time : "") + "</i>";
+        "<i>" + (combined && q.ret_date
+          ? "返程 " + fmtMD(q.ret_date) + " · 往返合计"
+          : ((q.flight_no || "") + (q.dep_time ? " · " + q.dep_time : ""))) + "</i>";
       tip.style.display = "block";
       var bRect = box.getBoundingClientRect();
       tip.style.left = Math.min(Math.max(P[best].x / W * bRect.width - 70, 0), bRect.width - 156) + "px";
       tip.style.top = Math.max(P[best].y / H * bRect.height - 78, 0) + "px";
     });
     svg.addEventListener("mouseleave", function () {
-      svg.querySelector("#trendCross").setAttribute("visibility", "hidden");
-      svg.querySelector("#trendDot").setAttribute("visibility", "hidden");
+      svg.querySelector("#" + ids.cross).setAttribute("visibility", "hidden");
+      svg.querySelector("#" + ids.dot).setAttribute("visibility", "hidden");
       tip.style.display = "none";
     });
   }
 
+  function renderTrend(route) {
+    var isRT = !!(route && route.trip_type === "roundtrip" && route.combined_by_date);
+    var deals = (route && route.deals) || [];
+    if (isRT) {
+      deals = deals.map(function (d) {
+        var c = route.combined_by_date[d.date];
+        if (!c) return d;
+        var cp = {};
+        for (var k in d) cp[k] = d[k];
+        cp.total_price = c.total;
+        cp.ret_date = c.ret_date;
+        cp.ret_flight = c.ret_flight;
+        return cp;
+      });
+    }
+    renderTrendInto("trend", deals, route, TREND_IDS_MAIN, isRT);
+  }
   function renderTrains(route) {
     var box = $("trainBox");
     box.textContent = "";
@@ -698,6 +775,13 @@
     renderCalendar(route);
     renderDayDetail(route);
     renderTrend(route);
+    var isRT = !!(route && route.trip_type === "roundtrip");
+    $("returnTrendCard").classList.toggle("hidden", !isRT);
+    $("trendTitle").textContent = isRT ? "往返合计趋势 (按去程日期)" : "价格趋势";
+    $("trendHint").textContent = isRT
+      ? "每个点=该去程日期的最优往返组合价 · 绿点=合计低于心理价位 · 悬停看明细"
+      : "绿点=低于心理价位 · 悬停看每日明细";
+    if (isRT) renderTrendInto("trendReturn", (route && route.return_deals) || [], route, TREND_IDS_RET, false);
     renderTrains(route);
   }
 
@@ -707,7 +791,7 @@
     if (!S.snap || !S.snap.routes) return;
     S.snap.routes.forEach(function (r) {
       var b = el("button", r.id === (S.routeId || (S.snap.routes[0] && S.snap.routes[0].id)) ? "active" : "",
-        r.from_city + " → " + r.to_city);
+        r.from_city + (r.trip_type === "roundtrip" ? " ⇄ " : " → ") + r.to_city);
       b.addEventListener("click", function () {
         S.routeId = r.id;
         S.selDate = null;
@@ -746,6 +830,10 @@
           to_city: tp.to,
           window_days: 60,
           threshold_total: tp.th,
+          trip_type: "oneway",
+          intl: false,
+          from_iata: "",
+          to_iata: "",
           train_compare: { enabled: true, station_pairs: tp.pairs.map(function (p) { return p.slice(); }) }
         });
         renderRoutesEditor();
@@ -762,7 +850,8 @@
   function routeCard(r, idx) {
     var card = el("div", "route-card");
     var head = el("div", "rc-head");
-    var title = el("div", "rc-title", r.from_city + " → " + r.to_city);
+    var title = el("div", "rc-title",
+      r.from_city + (r.trip_type === "roundtrip" ? " ⇄ " : " → ") + r.to_city);
     title.style.fontSize = "15px";
     var del = el("button", "btn danger small", "删除");
     del.addEventListener("click", function () {
@@ -775,7 +864,9 @@
     head.appendChild(del);
     card.appendChild(head);
 
-    function refreshTitle() { title.textContent = r.from_city + " → " + r.to_city; }
+    function refreshTitle() {
+      title.textContent = r.from_city + (r.trip_type === "roundtrip" ? " ⇄ " : " → ") + r.to_city;
+    }
 
     var line = el("div", "city-line");
     var fromF = acField("出发城市", r.from_city, ensureCities,
@@ -799,6 +890,53 @@
     line.appendChild(toF.root);
     card.appendChild(line);
 
+    var optLine = el("div", "city-line");
+    var ttF = el("label", "field");
+    ttF.appendChild(el("span", "f-label", "行程类型"));
+    var ttSel = el("select");
+    [["oneway", "单程"], ["roundtrip", "往返(去+返合计比价)"]].forEach(function (o) {
+      var op = el("option", null, o[1]);
+      op.value = o[0];
+      ttSel.appendChild(op);
+    });
+    ttSel.value = r.trip_type === "roundtrip" ? "roundtrip" : "oneway";
+    ttSel.addEventListener("change", function () {
+      r.trip_type = ttSel.value;
+      refreshTitle();
+      refreshThLabel();
+    });
+    ttF.appendChild(ttSel);
+    optLine.appendChild(ttF);
+
+    var intlF = el("label", "field check");
+    var icb = el("input");
+    icb.type = "checkbox";
+    icb.checked = !!r.intl;
+    icb.addEventListener("change", function () { r.intl = icb.checked; });
+    intlF.appendChild(icb);
+    intlF.appendChild(el("span", "f-label", "国际航线(Amadeus)"));
+    optLine.appendChild(intlF);
+
+    function iataField(labelText, key, ph) {
+      var lf = el("label", "field");
+      lf.appendChild(el("span", "f-label", labelText));
+      var inp = el("input");
+      inp.type = "text";
+      inp.value = r[key] || "";
+      inp.maxLength = 3;
+      inp.placeholder = ph;
+      inp.style.textTransform = "uppercase";
+      inp.addEventListener("input", function () {
+        r[key] = inp.value.trim().toUpperCase();
+      });
+      lf.appendChild(inp);
+      return lf;
+    }
+    optLine.appendChild(iataField("出发IATA", "from_iata", "如 HGH"));
+    optLine.appendChild(iataField("到达IATA", "to_iata", "如 NRT"));
+    optLine.appendChild(el("span", "muted", "国际线走Amadeus含税价; 往返=去程+返程合计对比阈值"));
+    card.appendChild(optLine);
+
     var grid = el("div", "form-grid");
     var lb1 = el("label", null, "查询窗口(天)");
     var inWd = el("input");
@@ -811,7 +949,13 @@
     lb1.appendChild(inWd);
     grid.appendChild(lb1);
 
-    var lb2 = el("label", null, "心理价位·含税总价(元)");
+    var lb2 = el("label", null, "");
+    function refreshThLabel() {
+      lb2.textContent = r.trip_type === "roundtrip"
+        ? "心理价位·往返合计含税(元)"
+        : "心理价位·含税总价(元)";
+    }
+    refreshThLabel();
     var inTh = el("input");
     inTh.type = "number";
     inTh.value = r.threshold_total;
@@ -918,6 +1062,10 @@
     $("taxAirport").value = S.cfg.tax.airport_fee;
     $("taxFuel").value = S.cfg.tax.fuel_surcharge;
     $("taxIncluded").checked = !!S.cfg.tax.calendar_price_includes_tax;
+    var ama = (S.cfg.sources && S.cfg.sources.amadeus) || {};
+    $("amaEnv").value = ama.env === "prod" ? "prod" : "test";
+    $("amaId").value = ama.client_id || "";
+    $("amaSecret").value = ama.client_secret || "";
     $("schInterval").value = S.cfg.schedule.interval_minutes;
     $("schJitter").value = S.cfg.schedule.jitter_minutes;
     $("webHost").value = S.cfg.webui.host;
@@ -926,6 +1074,21 @@
     $("taxAirport").oninput = function () { S.cfg.tax.airport_fee = parseFloat(this.value) || 0; };
     $("taxFuel").oninput = function () { S.cfg.tax.fuel_surcharge = parseFloat(this.value) || 0; };
     $("taxIncluded").onchange = function () { S.cfg.tax.calendar_price_includes_tax = this.checked; };
+    $("amaEnv").onchange = function () {
+      S.cfg.sources = S.cfg.sources || {};
+      S.cfg.sources.amadeus = S.cfg.sources.amadeus || {};
+      S.cfg.sources.amadeus.env = this.value;
+    };
+    $("amaId").oninput = function () {
+      S.cfg.sources = S.cfg.sources || {};
+      S.cfg.sources.amadeus = S.cfg.sources.amadeus || {};
+      S.cfg.sources.amadeus.client_id = this.value.trim();
+    };
+    $("amaSecret").oninput = function () {
+      S.cfg.sources = S.cfg.sources || {};
+      S.cfg.sources.amadeus = S.cfg.sources.amadeus || {};
+      S.cfg.sources.amadeus.client_secret = this.value;
+    };
     $("schInterval").oninput = function () { S.cfg.schedule.interval_minutes = parseInt(this.value, 10) || 45; };
     $("schJitter").oninput = function () { S.cfg.schedule.jitter_minutes = parseInt(this.value, 10) || 0; };
     $("webHost").oninput = function () { S.cfg.webui.host = this.value.trim() || "127.0.0.1"; };
@@ -961,6 +1124,13 @@
       r.to_city = (r.to_city || "").trim();
       if (!r.from_city || !r.to_city) {
         throw new Error("线路 " + (i + 1) + " 的出发/到达城市未填写");
+      }
+      r.trip_type = r.trip_type === "roundtrip" ? "roundtrip" : "oneway";
+      r.intl = !!r.intl;
+      r.from_iata = (r.from_iata || "").trim().toUpperCase();
+      r.to_iata = (r.to_iata || "").trim().toUpperCase();
+      if (r.intl && !(r.from_iata && r.to_iata)) {
+        throw new Error("线路 " + (i + 1) + " 启用国际航线需填写出发/到达IATA三字码");
       }
       var tc = r.train_compare || {};
       tc.station_pairs = (tc.station_pairs || []).filter(function (p) {
@@ -1023,6 +1193,7 @@
   var SRC_NAMES = {
     "qunar-calendar": "去哪儿·低价日历",
     "12306-train": "12306·车票查询",
+    "amadeus-intl": "Amadeus·国际低价",
     "push": "提醒推送"
   };
 
@@ -1148,6 +1319,10 @@
         to_city: "",
         window_days: 60,
         threshold_total: 500,
+        trip_type: "oneway",
+        intl: false,
+        from_iata: "",
+        to_iata: "",
         train_compare: { enabled: true, station_pairs: [] }
       });
       renderRoutesEditor();

@@ -26,4 +26,10 @@ SOURCE_REGISTRY = {
         "status": "可用",
         "desc": "免登录低频查询,结果缓存24小时;学生票按公布价75折估算",
     },
+    "amadeus-intl": {
+        "kind": "flight",
+        "name": "Amadeus·国际低价日历",
+        "status": "需配置密钥",
+        "desc": "国际航线含税最低价日历,一次调用覆盖整个日期区间;需在下方填入免费Self-Service密钥",
+    },
 }
