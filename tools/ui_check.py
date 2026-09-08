@@ -13,7 +13,7 @@ checks = {
     "最优卡片机票": "最低机票 (" in h,
     "最优卡片动车": "动车二等 (" in h,
     "最优卡片学生": "学生动车" in h,
-    "趋势SVG折线": "polyline" in h,
+    "趋势SVG平滑曲线": ("<path" in h) and ("areaGrad" in h) and ("trend-tip" in h),
     "阈值虚线标签": "心理价位" in h,
     "列车对比表格": "二等座" in h,
     "硬卧席位chip": "硬卧" in h,

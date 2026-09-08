@@ -490,52 +490,132 @@
     if (!route || !route.deals || !route.deals.length) { box.textContent = "暂无数据"; return; }
     var pts = (route.deals || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
     var th = route.threshold_total;
-    var W = 760, H = 240, L = 48, R = 14, T = 16, B = 30;
+    var W = 760, H = 270, L = 52, R = 18, T = 26, B = 36;
     var lo = th, hi = th;
     pts.forEach(function (p) {
       if (p.total_price < lo) lo = p.total_price;
       if (p.total_price > hi) hi = p.total_price;
     });
-    lo = lo * 0.92; hi = hi * 1.06;
+    var pad = (hi - lo) * 0.16 || 60;
+    lo -= pad * 0.6; hi += pad;
     function X(i) { return L + (W - L - R) * (pts.length === 1 ? 0.5 : i / (pts.length - 1)); }
     function Y(v) { return T + (H - T - B) * (1 - (v - lo) / (hi - lo)); }
+    var P = pts.map(function (p, i) { return { x: X(i), y: Y(p.total_price) }; });
+    var minIdx = 0;
+    for (var m = 0; m < pts.length; m++) if (pts[m].total_price < pts[minIdx].total_price) minIdx = m;
+
+    function smooth(d) {
+      if (d.length < 3) return "M " + d[0].x.toFixed(1) + " " + d[0].y.toFixed(1) + " L " + d[d.length - 1].x.toFixed(1) + " " + d[d.length - 1].y.toFixed(1);
+      var path = "M " + d[0].x.toFixed(1) + " " + d[0].y.toFixed(1);
+      for (var i = 0; i < d.length - 1; i++) {
+        var p0 = d[Math.max(0, i - 1)], p1 = d[i], p2 = d[i + 1], p3 = d[Math.min(d.length - 1, i + 2)];
+        path += " C " + (p1.x + (p2.x - p0.x) / 6).toFixed(1) + " " + (p1.y + (p2.y - p0.y) / 6).toFixed(1) +
+             ", " + (p2.x - (p3.x - p1.x) / 6).toFixed(1) + " " + (p2.y - (p3.y - p1.y) / 6).toFixed(1) +
+             ", " + p2.x.toFixed(1) + " " + p2.y.toFixed(1);
+      }
+      return path;
+    }
+    var linePath = smooth(P);
+    var areaPath = linePath + " L " + P[P.length - 1].x.toFixed(1) + " " + (H - B) + " L " + P[0].x.toFixed(1) + " " + (H - B) + " Z";
 
     var s = [];
-    s.push("<svg viewBox=\"0 0 " + W + " " + H + "\" xmlns=\"http://www.w3.org/2000/svg\">");
+    s.push("<svg id=\"trendSvg\" viewBox=\"0 0 " + W + " " + H + "\" xmlns=\"http://www.w3.org/2000/svg\">");
+    s.push("<defs><linearGradient id=\"areaGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">" +
+           "<stop offset=\"0%\" stop-color=\"#4f8cff\" stop-opacity=\"0.30\"/>" +
+           "<stop offset=\"100%\" stop-color=\"#4f8cff\" stop-opacity=\"0\"/></linearGradient>" +
+           "<linearGradient id=\"lineGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">" +
+           "<stop offset=\"0%\" stop-color=\"#4f8cff\"/><stop offset=\"55%\" stop-color=\"#38bdf8\"/>" +
+           "<stop offset=\"100%\" stop-color=\"#22d3ee\"/></linearGradient></defs>");
+
+    var stepX = pts.length > 1 ? (W - L - R) / (pts.length - 1) : 0;
+    for (var w = 0; w < pts.length; w++) {
+      var wd = weekday(pts[w].date);
+      if (wd === "周六" || wd === "周日") {
+        var wx = w === 0 ? L : X(w) - stepX / 2;
+        var ww = w === 0 ? (pts.length > 1 ? stepX / 2 : W - L - R) : (w === pts.length - 1 ? W - R - wx : stepX);
+        s.push("<rect x=\"" + wx.toFixed(1) + "\" y=\"" + T + "\" width=\"" + Math.max(0, ww).toFixed(1) + "\" height=\"" + (H - T - B) + "\" fill=\"rgba(148,163,184,0.05)\"/>");
+      }
+    }
+
     for (var g = 0; g <= 4; g++) {
       var v = lo + (hi - lo) * g / 4;
       var y = Y(v);
-      s.push("<line x1=\"" + L + "\" y1=\"" + y + "\" x2=\"" + (W - R) + "\" y2=\"" + y +
-             "\" stroke=\"#26324d\" stroke-width=\"1\"/>");
-      s.push("<text x=\"" + (L - 6) + "\" y=\"" + (y + 4) + "\" fill=\"#8b98b4\" font-size=\"11\" text-anchor=\"end\">" + Math.round(v) + "</text>");
+      s.push("<line x1=\"" + L + "\" y1=\"" + y.toFixed(1) + "\" x2=\"" + (W - R) + "\" y2=\"" + y.toFixed(1) + "\" stroke=\"rgba(148,163,184,0.14)\" stroke-width=\"1\"" + (g === 0 ? "" : " stroke-dasharray=\"2 5\"") + "/>");
+      s.push("<text x=\"" + (L - 8) + "\" y=\"" + (y + 4).toFixed(1) + "\" fill=\"#8b98b4\" font-size=\"11\" text-anchor=\"end\">¥" + Math.round(v) + "</text>");
     }
+
+    s.push("<rect x=\"" + L + "\" y=\"" + T + "\" width=\"" + (W - L - R) + "\" height=\"" + Math.max(0, Y(th) - T).toFixed(1) + "\" fill=\"rgba(239,68,68,0.05)\"/>");
     s.push("<line x1=\"" + L + "\" y1=\"" + Y(th) + "\" x2=\"" + (W - R) + "\" y2=\"" + Y(th) +
            "\" stroke=\"#ef4444\" stroke-width=\"1.5\" stroke-dasharray=\"6 4\"/>");
-    s.push("<text x=\"" + (W - R) + "\" y=\"" + (Y(th) - 6) + "\" fill=\"#ef4444\" font-size=\"11\" text-anchor=\"end\">心理价位 " + fmtMoney(th) + "</text>");
-    var poly = [];
-    var minIdx = 0;
-    for (var i = 0; i < pts.length; i++) {
-      if (pts[i].total_price < pts[minIdx].total_price) minIdx = i;
-      poly.push(X(i).toFixed(1) + "," + Y(pts[i].total_price).toFixed(1));
-    }
-    s.push("<polyline points=\"" + poly.join(" ") + "\" fill=\"none\" stroke=\"#4f8cff\" stroke-width=\"2\"/>");
-    var step = Math.max(1, Math.ceil(pts.length / 8));
+    s.push("<g><rect x=\"" + (L + 8) + "\" y=\"" + (Y(th) - 21).toFixed(1) + "\" width=\"100\" height=\"17\" rx=\"8.5\" fill=\"rgba(239,68,68,0.16)\"/>" +
+           "<text x=\"" + (L + 58) + "\" y=\"" + (Y(th) - 8.5).toFixed(1) + "\" fill=\"#f87171\" font-size=\"10.5\" font-weight=\"600\" text-anchor=\"middle\">心理价位 ¥" + Math.round(th) + "</text></g>");
+
+    s.push("<path d=\"" + areaPath + "\" fill=\"url(#areaGrad)\"/>");
+    s.push("<path d=\"" + linePath + "\" fill=\"none\" stroke=\"url(#lineGrad)\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+
+    var lstep = Math.max(1, Math.ceil(pts.length / 8));
     for (var j = 0; j < pts.length; j++) {
-      var p = pts[j];
-      var color = p.total_price < th ? "#22c55e" : "#64748b";
-      var r = j === minIdx ? 5 : 3;
-      s.push("<circle cx=\"" + X(j).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) +
-             "\" r=\"" + r + "\" fill=\"" + color + "\"><title>" +
-             p.date + " " + weekday(p.date) + " " + fmtMoney(p.total_price) + " " + p.flight_no + "</title></circle>");
-      if (j % step === 0) {
-        s.push("<text x=\"" + X(j).toFixed(1) + "\" y=\"" + (H - 8) + "\" fill=\"#8b98b4\" font-size=\"10\" text-anchor=\"middle\">" + fmtMD(p.date) + "</text>");
+      if (j % lstep === 0 || j === pts.length - 1) {
+        s.push("<text x=\"" + X(j).toFixed(1) + "\" y=\"" + (H - 12) + "\" fill=\"#8b98b4\" font-size=\"10\" text-anchor=\"middle\">" + fmtMD(pts[j].date) + "</text>");
       }
     }
+
+    for (var k = 0; k < pts.length; k++) {
+      if (k === minIdx) continue;
+      var p = pts[k];
+      var below = p.total_price < th;
+      if (below) s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) + "\" r=\"7\" fill=\"rgba(34,197,94,0.18)\"/>");
+      s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) +
+             "\" r=\"" + (below ? 4 : 2.5) + "\" fill=\"" + (below ? "#22c55e" : "#64748b") + "\" stroke=\"#0b1220\" stroke-width=\"1.5\"><title>" +
+             p.date + " " + weekday(p.date) + " " + fmtMoney(p.total_price) + " " + (p.flight_no || "") + "</title></circle>");
+    }
+
     var mp = pts[minIdx];
-    s.push("<text x=\"" + X(minIdx).toFixed(1) + "\" y=\"" + (Y(mp.total_price) - 10) +
-           "\" fill=\"#22c55e\" font-size=\"12\" font-weight=\"bold\" text-anchor=\"middle\">" + fmtMoney(mp.total_price) + "</text>");
+    var mx = X(minIdx), my = Y(mp.total_price);
+    var mLabel = "最低 ¥" + Math.round(mp.total_price);
+    var mW = mLabel.length * 7.5 + 18, mX = Math.min(Math.max(mx - mW / 2, L), W - R - mW);
+    s.push("<g>" +
+           "<circle cx=\"" + mx.toFixed(1) + "\" cy=\"" + my.toFixed(1) + "\" r=\"8\" fill=\"rgba(34,197,94,0.25)\">" +
+           "<animate attributeName=\"r\" values=\"7;12;7\" dur=\"2.4s\" repeatCount=\"indefinite\"/>" +
+           "<animate attributeName=\"opacity\" values=\"0.8;0.1;0.8\" dur=\"2.4s\" repeatCount=\"indefinite\"/></circle>" +
+           "<circle cx=\"" + mx.toFixed(1) + "\" cy=\"" + my.toFixed(1) + "\" r=\"4.5\" fill=\"#22c55e\" stroke=\"#0b1220\" stroke-width=\"1.5\"/>" +
+           "<rect x=\"" + mX.toFixed(1) + "\" y=\"" + (my - 33).toFixed(1) + "\" width=\"" + mW.toFixed(1) + "\" height=\"21\" rx=\"10.5\" fill=\"#22c55e\"/>" +
+           "<text x=\"" + (mX + mW / 2).toFixed(1) + "\" y=\"" + (my - 18).toFixed(1) + "\" fill=\"#052e16\" font-size=\"11.5\" font-weight=\"700\" text-anchor=\"middle\">" + mLabel + "</text></g>");
+
+    s.push("<line id=\"trendCross\" x1=\"0\" y1=\"" + T + "\" x2=\"0\" y2=\"" + (H - B) + "\" stroke=\"rgba(148,163,184,0.45)\" stroke-width=\"1\" stroke-dasharray=\"3 3\" visibility=\"hidden\"/>");
+    s.push("<circle id=\"trendDot\" r=\"5\" fill=\"#38bdf8\" stroke=\"#0b1220\" stroke-width=\"1.5\" visibility=\"hidden\"/>");
     s.push("</svg>");
     box.innerHTML = s.join("");
+
+    var tip = document.createElement("div");
+    tip.className = "trend-tip";
+    box.appendChild(tip);
+    var svg = box.querySelector("#trendSvg");
+    svg.addEventListener("mousemove", function (e) {
+      var rect = svg.getBoundingClientRect();
+      var vx = (e.clientX - rect.left) * (W / rect.width);
+      var best = 0, bd = Infinity;
+      for (var n = 0; n < P.length; n++) { var dd = Math.abs(P[n].x - vx); if (dd < bd) { bd = dd; best = n; } }
+      var q = pts[best];
+      var cross = svg.querySelector("#trendCross"), dot = svg.querySelector("#trendDot");
+      cross.setAttribute("x1", P[best].x.toFixed(1)); cross.setAttribute("x2", P[best].x.toFixed(1));
+      cross.removeAttribute("visibility");
+      dot.setAttribute("cx", P[best].x.toFixed(1)); dot.setAttribute("cy", P[best].y.toFixed(1));
+      dot.removeAttribute("visibility");
+      var below2 = q.total_price < th;
+      tip.innerHTML = "<b>" + fmtMD(q.date) + " " + weekday(q.date) + "</b>" +
+        "<span class=\"" + (below2 ? "good" : "warn") + "\">¥" + Math.round(q.total_price) + "</span>" +
+        "<i>" + (q.flight_no || "") + (q.dep_time ? " · " + q.dep_time : "") + "</i>";
+      tip.style.display = "block";
+      var bRect = box.getBoundingClientRect();
+      tip.style.left = Math.min(Math.max(P[best].x / W * bRect.width - 70, 0), bRect.width - 156) + "px";
+      tip.style.top = Math.max(P[best].y / H * bRect.height - 78, 0) + "px";
+    });
+    svg.addEventListener("mouseleave", function () {
+      svg.querySelector("#trendCross").setAttribute("visibility", "hidden");
+      svg.querySelector("#trendDot").setAttribute("visibility", "hidden");
+      tip.style.display = "none";
+    });
   }
 
   function renderTrains(route) {
