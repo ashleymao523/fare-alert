@@ -32,4 +32,10 @@ SOURCE_REGISTRY = {
         "status": "需配置密钥",
         "desc": "国际航线含税最低价日历,一次调用覆盖整个日期区间;需在下方填入免费Self-Service密钥",
     },
+    "amadeus-fill": {
+        "kind": "flight",
+        "name": "Amadeus·缺价补全",
+        "status": "需配置密钥",
+        "desc": "去哪儿日历缺价日期自动用Amadeus含税最低价补洞,UI打'补'徽标;结果缓存24小时保护免费额度",
+    },
 }

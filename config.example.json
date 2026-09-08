@@ -54,7 +54,8 @@
     "enabled": {
       "qunar-calendar": true,
       "12306-train": true,
-      "amadeus-intl": false
+      "amadeus-intl": false,
+      "amadeus-fill": true
     },
     "amadeus": {
       "env": "test",

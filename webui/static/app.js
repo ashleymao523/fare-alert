@@ -273,7 +273,8 @@
       sub: isRT
         ? ("去 " + fmtMD(route.combined.out_date) + " · 返 " + fmtMD(route.combined.ret_date) +
            " · 最优组合(去+返)")
-        : (f.date + " " + weekday(f.date) + " · " + (f.flight_no || f.airline)),
+        : (f.date + " " + weekday(f.date) + " · " + (f.flight_no || f.airline) +
+           (f.source === "amadeus-fill" ? " · Amadeus补" : "")),
       cls: (isRT ? route.combined.total : f.total_price) < route.threshold_total ? "good" : "",
       url: isRT ? (route.combined.url || f.url) : f.url
     });
@@ -380,7 +381,8 @@
         ? "去程 " + esc(cb.out_flight || f.airline) + " ¥" + Math.round(cb.out_total) +
           " + 返程 " + esc(cb.ret_flight || f.airline) + " ¥" + Math.round(cb.ret_total) +
           " = 合计<br>行李: " + esc(f.baggage) + "<br>两段分别下单, 起降时刻以订单页为准"
-        : esc((f.flight_no ? f.flight_no + " " : "") + f.airline) + " · 裸价" + fmtMoney(f.bare_price) + "+税费<br>" +
+        : esc((f.flight_no ? f.flight_no + " " : "") + f.airline) + " · 裸价" + fmtMoney(f.bare_price) + "+税费" +
+          (f.source === "amadeus-fill" ? ' <span class="badge amber">Amadeus补</span><br>' : "<br>") +
           "行李: " + esc(f.baggage) + "<br>起降时刻/飞行时长以下单页为准"),
       isRT ? (cb.url || f.url) : f.url);
     if (t) {
@@ -497,16 +499,17 @@
     box.appendChild(title);
 
     var warn = /不含|确认/.test(d.baggage) ? " ⚠️" : " 🧳";
+    var fillTag = d.source === "amadeus-fill" ? ' · <span class="badge amber">Amadeus补</span>' : "";
     var line = el("div");
     if (isRT && d.ret_date) {
       line.innerHTML = "去程 " + esc(d.flight_no || d.airline) + " ¥" + Math.round(d.out_total) +
         " + 返程 " + fmtMD(d.ret_date) + " " + esc(d.ret_flight || d.airline) +
         " ¥" + Math.round(d.ret_total) + " = <b>" + fmtMoney(d.total_price) + "</b>" +
-        warn + esc(d.baggage) +
+        warn + esc(d.baggage) + fillTag +
         (d.alert ? " · <span class=\"badge green\">已推送提醒</span>" : "");
     } else {
       line.innerHTML = esc((d.flight_no ? d.flight_no + " " : "") + d.airline) + " · 裸价 " + fmtMoney(d.bare_price) +
-        " + 机建燃油 = <b>" + fmtMoney(d.total_price) + "</b>" + warn + esc(d.baggage) +
+        " + 机建燃油 = <b>" + fmtMoney(d.total_price) + "</b>" + warn + esc(d.baggage) + fillTag +
         (d.alert ? " · <span class=\"badge green\">已推送提醒</span>" : "");
     }
     box.appendChild(line);
@@ -665,7 +668,8 @@
         "<span class=\"" + (below2 ? "good" : "warn") + "\">¥" + Math.round(q.total_price) + "</span>" +
         "<i>" + (combined && q.ret_date
           ? "返程 " + fmtMD(q.ret_date) + " · 往返合计"
-          : ((q.flight_no || "") + (q.dep_time ? " · " + q.dep_time : ""))) + "</i>";
+          : ((q.flight_no || "") + (q.dep_time ? " · " + q.dep_time : "") +
+             (q.source === "amadeus-fill" ? " · Amadeus补" : ""))) + "</i>";
       tip.style.display = "block";
       var bRect = box.getBoundingClientRect();
       tip.style.left = Math.min(Math.max(P[best].x / W * bRect.width - 70, 0), bRect.width - 156) + "px";
@@ -1194,6 +1198,7 @@
     "qunar-calendar": "去哪儿·低价日历",
     "12306-train": "12306·车票查询",
     "amadeus-intl": "Amadeus·国际低价",
+    "amadeus-fill": "Amadeus·缺价补全",
     "push": "提醒推送"
   };
 

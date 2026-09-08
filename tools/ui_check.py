@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 """Verify Web UI DOM (dumped via headless Edge) contains rendered elements."""
+import os
 import re
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 h = open("data/ui_dom.html", encoding="utf-8").read()
+appjs = open(os.path.join("webui", "static", "app.js"), encoding="utf-8").read()
 checks = {
     "KPI最低机票": "最低机票总价" in h,
     "KPI低价天数": "低于心理价位" in h,
@@ -41,7 +43,10 @@ checks = {
     "行程类型选择": "行程类型" in h,
     "国际Amadeus配置卡": "amaSecret" in h,
     "往返返程趋势容器": "trendReturn" in h,
-    "浅色主题版本": ">v0.6<" in h,
+"浅色主题版本": ">v0.6" in h,
+"缺价补全徽标(详情卡)": ('d.source === "amadeus-fill"' in appjs) and ("badge amber" in appjs),
+"缺价补全徽标(最优卡)": appjs.count("amadeus-fill") >= 5,
+"补全数据源名": '"amadeus-fill": "Amadeus' in appjs,
 }
 bad = 0
 for k, v in checks.items():

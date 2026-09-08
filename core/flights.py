@@ -75,3 +75,35 @@ def fetch_calendar(session, net_cfg, from_city, to_city, date_from, date_to):
         ))
     deals.sort(key=lambda x: (x.bare_price, x.date))
     return deals
+
+
+def window_dates(date_from, date_to):
+    """All ISO dates in [date_from, date_to]."""
+    import datetime
+    out, cur = [], datetime.date.fromisoformat(date_from)
+    end = datetime.date.fromisoformat(date_to)
+    while cur <= end:
+        out.append(cur.isoformat())
+        cur += datetime.timedelta(days=1)
+    return out
+
+
+def merge_fill_deals(qunar_deals, ama_deals, booking_url_fn):
+    """Fill calendar gaps using Amadeus fallback deals.
+
+    Only dates missing from the qunar calendar are taken from ama_deals
+    (source tagged 'amadeus-fill'); the purchase url is rewritten to the
+    domestic OTA page so the click-through stays useful for CN users.
+    Returns the merged, price-sorted list.
+    """
+    have = {d.date for d in qunar_deals}
+    filled = []
+    for d in ama_deals:
+        if d.date in have:
+            continue
+        d.source = "amadeus-fill"
+        d.url = booking_url_fn(d.date)
+        filled.append(d)
+    merged = list(qunar_deals) + filled
+    merged.sort(key=lambda x: (x.bare_price, x.date))
+    return merged, len(filled)

@@ -14,8 +14,8 @@ import requests
 from core.alerts import build_message, evaluate, tax_amount, total_price
 from core.config import load_config
 from core.crawl import CrawlRecorder
-from core.flights import airline_name, fetch_calendar
-from core.intl import fetch_intl_calendar
+from core.flights import airline_name, booking_url, fetch_calendar, merge_fill_deals, window_dates
+from core.intl import city_iata, fetch_intl_calendar
 from core.models import FlightDeal
 from core.notify import push_all
 from core.report import write_report
@@ -25,6 +25,9 @@ from core.trains import refresh_train_info
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+
+FILL_CACHE_FILE = "amadeus_fill_cache.json"
+FILL_CACHE_TTL = 86400  # gap-fill needs daily freshness, not per-poll
 
 
 def setup_logging():
@@ -57,6 +60,9 @@ def _flight_dict(route, deal, cfg, alert_dates):
     if deal.source == "amadeus-intl":
         airline = "国际含税最低价(Amadeus)"
         bag_default = "国际线托运额度以航司舱位为准"
+    elif deal.source == "amadeus-fill":
+        airline = "Amadeus缺价补全(含税)"
+        bag_default = "以购票页为准"
     else:
         airline = airline_name(code)
         bag_default = "以购票页为准"
@@ -74,11 +80,44 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "dep_time": deal.dep_time,
         "arr_time": deal.arr_time,
         "duration_text": deal.duration_text,
+        "source": deal.source,
     }
 
 
+FILL_ENABLED_DFT = True
+
+
+def _cached_amadeus_fill(session, net, cfg, ama_cfg, fi, ti,
+                         date_from, date_to, data_dir):
+    """Amadeus cheapest-calendar with a 24h file cache to protect quota."""
+    key = "{}-{}-{}-{}".format(fi, ti, date_from, date_to)
+    path = os.path.join(data_dir, FILL_CACHE_FILE)
+    now = time.time()
+    cache = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            cache = json.load(f)
+        ent = cache.get(key)
+        if ent and now - float(ent.get("ts", 0)) < FILL_CACHE_TTL:
+            return [FlightDeal(date=d[0], bare_price=d[1], flight_no="",
+                               source="amadeus-fill") for d in ent.get("deals", [])]
+    except Exception:
+        cache = {}
+    deals = fetch_intl_calendar(session, net, ama_cfg, cfg.get("tax", {}),
+                                fi, ti, date_from, date_to, data_dir)
+    try:
+        cache[key] = {"ts": now, "deals": [[d.date, d.bare_price] for d in deals]}
+        os.makedirs(data_dir, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+    except Exception:
+        pass
+    return deals
+
+
 def _fetch_route_flights(session, net, route, date_from, date_to,
-                         cfg, ama_cfg, ama_ready, direction="out"):
+                         cfg, ama_cfg, ama_ready, direction="out",
+                         rec=None, route_id=""):
     """Fetch one leg's calendar. direction 'out'/'ret' swaps the cities."""
     if direction == "ret":
         fc, tc = route.get("to_city", ""), route.get("from_city", "")
@@ -91,7 +130,41 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
             raise RuntimeError("国际线路已启用但Amadeus密钥未配置")
         return fetch_intl_calendar(session, net, ama_cfg, cfg.get("tax", {}),
                                    fi, ti, date_from, date_to, DATA_DIR)
-    return fetch_calendar(session, net, fc, tc, date_from, date_to)
+    deals = fetch_calendar(session, net, fc, tc, date_from, date_to)
+
+    # ---- gap-fill: qunar calendar holes via Amadeus cheapest-dates ----
+    covered = {d.date for d in deals}
+    gaps = [d for d in window_dates(date_from, date_to) if d not in covered]
+    if not gaps:
+        return deals
+    enabled = ((cfg.get("sources") or {}).get("enabled") or {})
+    if not ama_ready or not enabled.get("amadeus-fill", FILL_ENABLED_DFT):
+        if rec:
+            rec.step("amadeus-fill", route_id, "fill gaps", "skip", 0,
+                     error="缺{}天·未配Amadeus密钥".format(len(gaps)))
+        return deals
+    fi2 = (fi or "").strip().upper() or city_iata(fc)
+    ti2 = (ti or "").strip().upper() or city_iata(tc)
+    t0f = time.time()
+    if not (fi2 and ti2):
+        if rec:
+            rec.step("amadeus-fill", route_id, "fill gaps", "skip",
+                     (time.time() - t0f) * 1000,
+                     error="缺{}天·无IATA映射".format(len(gaps)))
+        return deals
+    try:
+        ama_deals = _cached_amadeus_fill(session, net, cfg, ama_cfg,
+                                         fi2, ti2, date_from, date_to, DATA_DIR)
+        deals, nfill = merge_fill_deals(
+            deals, ama_deals, lambda d: booking_url(fc, tc, d))
+        if rec:
+            rec.step("amadeus-fill", route_id, "fill gaps", "ok",
+                     (time.time() - t0f) * 1000, count=nfill)
+    except Exception as e:
+        if rec:
+            rec.step("amadeus-fill", route_id, "fill gaps", "error",
+                     (time.time() - t0f) * 1000, error=e)
+    return deals
 
 
 def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
@@ -147,7 +220,8 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
             t0 = time.time()
             try:
                 deals = _fetch_route_flights(session, net, route, date_from,
-                                             date_to, cfg, ama_cfg, ama_ready, "out")
+                                             date_to, cfg, ama_cfg, ama_ready, "out",
+                                             rec, route_snap["id"])
                 rec.step(flight_key, route_snap["id"], "fetch calendar", "ok",
                          (time.time() - t0) * 1000, count=len(deals))
             except Exception as e:
@@ -160,7 +234,8 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 try:
                     return_deals = _fetch_route_flights(session, net, route,
                                                         date_from, date_to, cfg,
-                                                        ama_cfg, ama_ready, "ret")
+                                                        ama_cfg, ama_ready, "ret",
+                                                        rec, route_snap["id"])
                     rec.step(flight_key, route_snap["id"], "fetch return calendar",
                              "ok", (time.time() - t0r) * 1000, count=len(return_deals))
                 except Exception as e:

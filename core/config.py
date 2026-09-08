@@ -52,7 +52,8 @@ DEFAULT_CONFIG = {
         "enabled": {
             "qunar-calendar": True,
             "12306-train": True,
-            "amadeus-intl": False
+            "amadeus-intl": False,
+            "amadeus-fill": True
         },
         "amadeus": {
             "env": "test",

@@ -18,7 +18,7 @@
   <div class="brand">
     <span class="logo">✈️</span>
     <span class="brand-name">FareAlert</span>
-    <span class="ver">v0.6</span>
+<span class="ver">v0.6.1</span>
   </div>
   <nav id="routeTabs" class="route-tabs"></nav>
   <div class="top-actions">
@@ -104,7 +104,8 @@
       <div class="muted" style="margin-top:10px">
         获取方式: developer.amadeus.com 免费注册 → Self-Service → 创建App → 复制Key/Secret ·
         返回国际航线含税最低价(币种为出发地市场币种,可在config指定sources.amadeus.currency) ·
-        配好后在线路管理勾选「国际航线」并填IATA三字码, 未配置时国际线路自动跳过
+        配好后在线路管理勾选「国际航线」并填IATA三字码, 未配置时国际线路自动跳过 ·
+        同一密钥也用于「缺价补全」: 去哪儿日历缺价的日期自动用Amadeus含税价补洞(缓存24h, 打「Amadeus补」徽标)
       </div>
     </div>
     <div class="card">

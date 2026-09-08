@@ -113,3 +113,28 @@ def fetch_intl_calendar(session, net_cfg, ama_cfg, tax_cfg,
     deals.sort(key=lambda x: (x.bare_price, x.date))
     return deals
 
+
+# Major CN city -> IATA (city code where possible) for domestic gap-filling.
+CITY_IATA = {
+    "北京": "BJS", "上海": "SHA", "广州": "CAN", "深圳": "SZX",
+    "成都": "CTU", "重庆": "CKG", "杭州": "HGH", "西安": "SIA",
+    "昆明": "KMG", "厦门": "XMN", "长沙": "CSX", "武汉": "WUH",
+    "南京": "NKG", "青岛": "TAO", "天津": "TSN", "海口": "HAK",
+    "三亚": "SYX", "郑州": "CGO", "济南": "TNA", "福州": "FOC",
+    "贵阳": "KWE", "南宁": "NNG", "桂林": "KWL", "兰州": "LHW",
+    "乌鲁木齐": "URC", "哈尔滨": "HRB", "沈阳": "SHE", "大连": "DLC",
+    "长春": "CGQ", "太原": "TYN", "石家庄": "SJW", "合肥": "HFE",
+    "南昌": "KHN", "温州": "WNZ", "宁波": "NGB", "无锡": "WUX",
+    "泉州": "JJN", "珠海": "ZUH", "汕头": "SWA", "呼和浩特": "HET",
+    "银川": "INC", "西宁": "XNN", "拉萨": "LXA", "烟台": "YNT",
+    "威海": "WEH", "徐州": "XUZ", "常州": "CZX", "扬州": "YTY",
+    "舟山": "HSN", "义乌": "YIW", "丽江": "LJG", "大理": "DLU",
+    "西双版纳": "JHG", "敦煌": "DNH", "张家界": "DYX", "绵阳": "MIG",
+    "宜昌": "YIH", "襄阳": "XFN", "湛江": "ZHA", "中山": "ZGN",
+}
+
+
+def city_iata(city):
+    """Resolve a CN city name to an IATA city/airport code, or None."""
+    c = (city or "").strip().replace("市", "")
+    return CITY_IATA.get(c)

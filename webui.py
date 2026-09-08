@@ -70,6 +70,8 @@ def _sources_meta(cfg):
                  and (ama.get("client_secret") or "").strip())
     if "amadeus-intl" in meta:
         meta["amadeus-intl"]["status"] = "可用" if ready else "需配置密钥"
+    if "amadeus-fill" in meta:
+        meta["amadeus-fill"]["status"] = "可用" if ready else "需配置密钥"
     return meta
 
 
