@@ -1,0 +1,107 @@
+# -*- coding: utf-8 -*-
+"""Config loading with default template."""
+import copy
+import json
+import os
+
+
+DEFAULT_CONFIG = {
+    "routes": [
+        {
+            "id": "hangzhou-chongqing",
+            "from_city": "杭州",
+            "to_city": "重庆",
+            "window_days": 60,
+            "threshold_total": 500,
+            "train_compare": {
+                "enabled": True,
+                "station_pairs": [
+                    ["杭州东", "重庆北"],
+                    ["杭州西", "重庆北"],
+                    ["杭州东", "重庆西"]
+                ]
+            }
+        }
+    ],
+    "tax": {
+        "airport_fee": 50,
+        "fuel_surcharge": 70,
+        "calendar_price_includes_tax": False,
+        "note": "calendar价默认视为裸价,总价=裸价+机建+燃油;若发现日历价已含税,把calendar_price_includes_tax改为true"
+    },
+    "push": {
+        "bark_key": "",
+        "serverchan_sendkey": "",
+        "group": "机票低价提醒",
+        "sound": "calm"
+    },
+    "alert": {
+        "top_n": 5,
+        "realert_drop": 5,
+        "cooldown_hours": 6
+    },
+    "schedule": {
+        "interval_minutes": 45,
+        "jitter_minutes": 10
+    },
+    "sources": {
+        "enabled": {
+            "qunar-calendar": True,
+            "12306-train": True
+        }
+    },
+    "webui": {
+        "host": "127.0.0.1",
+        "port": 8765
+    },
+    "network": {
+        "timeout_seconds": 25,
+        "trust_env": False,
+        "user_agent_mobile": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+        "user_agent_desktop": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    },
+    "baggage_policy": {
+        "3U": "经济舱一般含20kg托运",
+        "CA": "含20kg托运",
+        "MU": "含20kg托运",
+        "CZ": "含20kg托运",
+        "MF": "含20kg托运",
+        "HO": "一般含20kg托运,部分特惠舱除外",
+        "ZH": "含20kg托运",
+        "FM": "含20kg托运",
+        "SC": "含20kg托运",
+        "EU": "一般含20kg托运",
+        "G5": "含20kg托运",
+        "DZ": "含20kg托运",
+        "TV": "含20kg托运",
+        "PN": "廉价模式:特价票常不含免费托运,下单前确认",
+        "GJ": "廉价模式:特价票常不含免费托运,下单前确认",
+        "GS": "部分特价舱不含免费托运,下单前确认",
+        "8L": "廉价模式:特价票常不含免费托运",
+        "KN": "廉价模式:特价票常不含免费托运",
+        "9C": "春秋:票价通常不含托运",
+        "AQ": "九元:票价通常不含托运"
+    }
+}
+
+
+def load_config(path):
+    if not os.path.exists(path):
+        cfg = copy.deepcopy(DEFAULT_CONFIG)
+        save_config(path, cfg)
+        return cfg
+    with open(path, encoding="utf-8") as f:
+        cfg = json.load(f)
+    changed = False
+    for k, v in DEFAULT_CONFIG.items():
+        if k not in cfg:
+            cfg[k] = copy.deepcopy(v)
+            changed = True
+    if changed:
+        save_config(path, cfg)
+    return cfg
+
+
+def save_config(path, cfg):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)

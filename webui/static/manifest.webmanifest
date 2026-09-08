@@ -1,0 +1,18 @@
+{
+  "name": "FareAlert 低价出行提醒",
+  "short_name": "FareAlert",
+  "description": "机票/动车低价监控与出行最优对比",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

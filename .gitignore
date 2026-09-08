@@ -1,0 +1,17 @@
+# local secrets & runtime data
+config.json
+data/
+tools/cache/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+

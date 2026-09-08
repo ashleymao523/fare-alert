@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FareAlert">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon.svg">
+<title>FareAlert · 低价出行提醒</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">✈️</span>
+    <span class="brand-name">FareAlert</span>
+    <span class="ver">v0.2</span>
+  </div>
+  <nav id="routeTabs" class="route-tabs"></nav>
+  <div class="top-actions">
+    <button id="btnRun" class="btn primary">立即查询</button>
+    <span id="updatedAt" class="updated"></span>
+  </div>
+</header>
+
+<main class="wrap">
+  <nav class="tabs" id="mainTabs">
+    <button data-tab="dash" class="active">📊 仪表盘</button>
+    <button data-tab="routes">🛫 线路管理</button>
+    <button data-tab="sources">🔌 数据源</button>
+    <button data-tab="push">🔔 提醒推送</button>
+    <button data-tab="logs">📜 日志</button>
+  </nav>
+
+  <section id="tab-dash" class="tab-panel active">
+    <div id="kpis" class="kpis"></div>
+    <div id="verdict" class="verdict"></div>
+    <div class="card">
+      <div class="card-head"><h3>价格日历</h3><span id="calMeta" class="muted"></span></div>
+      <div id="calendar" class="calendar"></div>
+      <div id="dayDetail" class="day-detail hidden"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>价格趋势</h3><span class="muted">绿点=低于心理价位</span></div>
+      <div id="trend" class="trend"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>🚄 动车对比 (12306)</h3><span id="trainMeta" class="muted"></span></div>
+      <div id="trainBox"></div>
+    </div>
+  </section>
+
+  <section id="tab-routes" class="tab-panel">
+    <div class="card">
+      <div class="card-head"><h3>监控线路</h3><span class="muted">改动后需保存,下次查询生效</span></div>
+      <div id="routesEditor"></div>
+      <div class="row-btns">
+        <button id="btnAddRoute" class="btn">+ 添加线路</button>
+        <button id="btnSaveRoutes" class="btn primary">保存线路</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-sources" class="tab-panel">
+    <div class="card">
+      <div class="card-head"><h3>数据源开关</h3><span class="muted">规划中的源暂不可用</span></div>
+      <div id="sourcesList"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>税费与机建</h3><span class="muted">总价=裸价+机建+燃油</span></div>
+      <div class="form-grid">
+        <label>机建 (元)<input id="taxAirport" type="number" min="0" step="1"></label>
+        <label>燃油 (元)<input id="taxFuel" type="number" min="0" step="1"></label>
+        <label class="check"><input id="taxIncluded" type="checkbox"> 日历价已含税(勾选后不再加税)</label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>查询计划</h3><span class="muted">计划任务按此间隔轮询</span></div>
+      <div class="form-grid">
+        <label>间隔 (分钟)<input id="schInterval" type="number" min="5" step="1"></label>
+        <label>抖动 (分钟)<input id="schJitter" type="number" min="0" step="1"></label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Web UI 监听</h3><span class="muted">0.0.0.0=局域网可访问(手机/其他设备)</span></div>
+      <div class="form-grid">
+        <label>Host<input id="webHost" type="text"></label>
+        <label>Port<input id="webPort" type="number" min="1" max="65535"></label>
+      </div>
+    </div>
+    <div class="row-btns">
+      <button id="btnSaveSources" class="btn primary">保存设置</button>
+    </div>
+  </section>
+
+  <section id="tab-push" class="tab-panel">
+    <div class="card">
+      <div class="card-head"><h3>推送通道</h3><span class="muted">Bark=iPhone通知,ServerChan=微信</span></div>
+      <div class="form-grid">
+        <label>Bark Key<input id="barkKey" type="text" placeholder="App内复制的Key,留空禁用"></label>
+        <label>ServerChan SendKey<input id="scKey" type="text" placeholder="sct开头,留空禁用"></label>
+        <label>通知分组<input id="pushGroup" type="text"></label>
+        <label>提示音 (Bark)<input id="pushSound" type="text" placeholder="calm"></label>
+      </div>
+      <div class="row-btns">
+        <button id="btnSavePush" class="btn primary">保存推送设置</button>
+        <button id="btnTestPush" class="btn">发送测试推送</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>提醒历史</h3><span class="muted">最近50条</span></div>
+      <div id="alertsList"></div>
+    </div>
+  </section>
+
+  <section id="tab-logs" class="tab-panel">
+    <div class="card">
+      <div class="card-head"><h3>运行日志</h3><button id="btnRefreshLog" class="btn small">刷新</button></div>
+      <pre id="logBox" class="logbox"></pre>
+    </div>
+  </section>
+
+  <footer class="foot">
+    数据源: 去哪儿价格日历(挂牌价,不含OTA券后) + 12306 · 学生票为公布价75折估算 ·
+    购票请前往官方/平台页面,本工具仅做个人比价提醒 ·
+    <a href="/report/hangzhou-chongqing/index.html" target="_blank">旧版报告</a>
+  </footer>
+</main>
+
+<div id="toast" class="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
+
