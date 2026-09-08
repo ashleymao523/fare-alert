@@ -9,6 +9,8 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 
 import main as runner
 from core.config import load_config, save_config
+from core.cities import CITIES
+from core.trains import get_stations
 from core.notify import push_all
 from core.sources import SOURCE_REGISTRY
 
@@ -191,6 +193,27 @@ def api_snapshot():
     return jsonify({"snapshot": _read_json(SNAPSHOT_PATH, None)})
 
 
+@app.get("/api/cities")
+def api_cities():
+    """Flight city list for autocomplete (curated, offline)."""
+    return jsonify({"cities": CITIES})
+
+
+@app.get("/api/stations")
+def api_stations():
+    """12306 station list for autocomplete (cached 7d in data/stations.json)."""
+    try:
+        cfg = load_config(CONFIG_PATH)
+        session = runner.make_session(cfg)
+        stations = get_stations(session, cfg.get("network", {}),
+                                os.path.join(DATA_DIR, "stations.json"))
+        out = [{"name": n, "pinyin": v.get("pinyin", ""), "py": v.get("py", "")}
+               for n, v in stations.items()]
+        return jsonify({"stations": out})
+    except Exception as e:
+        return jsonify({"ok": False, "error": "车站库获取失败: " + str(e)}), 503
+
+
 @app.get("/api/config")
 def api_get_config():
     cfg = load_config(CONFIG_PATH)
@@ -275,4 +298,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

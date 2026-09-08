@@ -18,7 +18,7 @@
   <div class="brand">
     <span class="logo">✈️</span>
     <span class="brand-name">FareAlert</span>
-    <span class="ver">v0.2</span>
+    <span class="ver">v0.3</span>
   </div>
   <nav id="routeTabs" class="route-tabs"></nav>
   <div class="top-actions">
@@ -49,14 +49,14 @@
       <div id="trend" class="trend"></div>
     </div>
     <div class="card">
-      <div class="card-head"><h3>🚄 动车对比 (12306)</h3><span id="trainMeta" class="muted"></span></div>
+      <div class="card-head"><h3>🚄 列车对比 (12306·全席位)</h3><span id="trainMeta" class="muted"></span></div>
       <div id="trainBox"></div>
     </div>
   </section>
 
   <section id="tab-routes" class="tab-panel">
     <div class="card">
-      <div class="card-head"><h3>监控线路</h3><span class="muted">改动后需保存,下次查询生效</span></div>
+      <div class="card-head"><h3>监控线路</h3><span class="muted">改动后需保存 · 城市/车站支持拼音联想,从库中选择即精确匹配</span></div>
       <div id="routesEditor"></div>
       <div class="row-btns">
         <button id="btnAddRoute" class="btn">+ 添加线路</button>
@@ -125,7 +125,7 @@
   </section>
 
   <footer class="foot">
-    数据源: 去哪儿价格日历(挂牌价,不含OTA券后) + 12306 · 学生票为公布价75折估算 ·
+    数据源: 去哪儿价格日历(挂牌价,不含OTA券后) + 12306 · 学生票估算: 动车二等75折/硬座5折/硬卧=卧铺-硬座半价 ·
     购票请前往官方/平台页面,本工具仅做个人比价提醒 ·
     <a href="/report/hangzhou-chongqing/index.html" target="_blank">旧版报告</a>
   </footer>
@@ -135,4 +135,3 @@
 <script src="/static/app.js"></script>
 </body>
 </html>
-

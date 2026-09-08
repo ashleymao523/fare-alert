@@ -40,28 +40,51 @@ def write_report(cfg, route_cfg, deals, train_info, state, out_dir, alert_dates=
 
     train_html = []
     if train_info and train_info.get("pairs"):
-        train_html.append("<h3>🚄 动车对比(次日参考, 查询于 {})</h3>".format(
+        train_html.append("<h3>🚄 列车对比·全席位 (次日参考, 查询于 {})</h3>".format(
             html.escape(str(train_info.get("updated_at", "")))))
-        train_html.append("<table><tr><th>车次</th><th>区间</th><th>时刻</th><th>历时</th><th>二等座</th><th>学生票≈</th></tr>")
+        train_html.append("<table><tr><th>车次</th><th>区间</th><th>时刻</th><th>历时</th><th>席位票价</th><th>学生票≈</th></tr>")
         all_fares = []
         for pair, items in train_info["pairs"].items():
             if isinstance(items, dict):
                 continue
             for it in items:
-                all_fares.append((pair, it))
-        all_fares.sort(key=lambda x: (x[1].get("second_class") or 9e9))
+                if isinstance(it, dict):
+                    all_fares.append((pair, it))
+
+        def seats_of(it):
+            if it.get("seats"):
+                return it["seats"]
+            if it.get("second_class"):
+                return {"二等座": it["second_class"]}
+            return {}
+
+        def student_est(seats):
+            if seats.get("二等座"):
+                return seats["二等座"] * 0.75
+            if seats.get("硬座") and seats.get("硬卧"):
+                return seats["硬卧"] - seats["硬座"] * 0.5
+            if seats.get("硬座"):
+                return seats["硬座"] * 0.5
+            return None
+
+        all_fares.sort(key=lambda x: min(seats_of(x[1]).values() or [9e9]))
         for pair, it in all_fares[:20]:
-            sc = it.get("second_class")
+            seats = seats_of(it)
+            chips = "".join(
+                "<span class='seat{}'>{} ¥{}</span>".format(
+                    " sleep" if "卧" in lab else "", html.escape(lab), int(pr))
+                for lab, pr in sorted(seats.items(), key=lambda kv: kv[1]))
+            stu = student_est(seats)
             train_html.append("<tr><td>{}</td><td>{}→{}</td><td>{}-{} [{}]</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
                 html.escape(it["train_code"]),
                 html.escape(it["from_station"]), html.escape(it["to_station"]),
                 html.escape(it["dep_time"]), html.escape(it["arr_time"]),
                 html.escape(pair),
                 html.escape(it["duration_text"]),
-                "¥" + str(int(sc)) if sc else "--",
-                "¥" + str(int(sc * 0.75)) if sc else "--",
+                chips or "--",
+                "¥" + str(int(stu)) if stu else "--",
             ))
-        train_html.append("</table><p>学生票=二等座公布价75折;上表按执行价估算偏低,以12306下单页为准。</p>")
+        train_html.append("</table><p>席位票价来自12306票价查询(含卧铺/普速);学生票: 动车组二等座75折/硬座5折/硬卧=硬卧-硬座半价,均为估算,以12306下单页为准。</p>")
 
     n_below = sum(1 for d in deals if total_price(d.bare_price, tax_cfg) < threshold)
     doc = """<!doctype html><html lang=zh><head><meta charset=utf-8>
@@ -75,6 +98,8 @@ th{{background:#eef1f4;position:sticky;top:0}}
 tr.low td{{background:#e8f8ee}} tr.low td:nth-child(6){{color:#0a7d32;font-weight:700}}
 a{{color:#2563eb;text-decoration:none}}
 .meta{{color:#888;font-size:12px;margin-top:8px}}
+.seat{{display:inline-block;font-size:12px;border:1px solid #d7dde5;border-radius:10px;padding:1px 8px;margin:1px 3px 1px 0;white-space:nowrap}}
+.seat.sleep{{border-color:#c08a3e;color:#9a6b1f;background:#fdf6ea}}
 </style></head><body>
 <h2>✈️ {}→{} 未来{}天最低票价</h2>
 <div class=sub>总价=裸价+机建+燃油(¥{}) | 低于阈值¥{}共 <b>{}</b> 天 | 含免费托运情况见表格,廉航特价票下单前务必确认 | 生成于 {}</div>

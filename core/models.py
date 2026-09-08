@@ -25,7 +25,32 @@ class TrainFare:
     dep_time: str
     arr_time: str
     duration_text: str
-    second_class: float | None = None
+    seats: dict = field(default_factory=dict)
+
+    @property
+    def train_type(self):
+        return self.train_code[0] if self.train_code else ""
+
+    @property
+    def second_class(self):
+        return self.seats.get("二等座")
+
+    @property
+    def student_second_class_est(self):
+        ze = self.seats.get("二等座")
+        return round(ze * 0.75, 1) if ze else None
+
+    def min_seat(self):
+        if not self.seats:
+            return None
+        label, price = min(self.seats.items(), key=lambda kv: kv[1])
+        return label, price
+
+    def min_sleeper(self):
+        sleepers = [(l, p) for l, p in self.seats.items() if "卧" in l]
+        if not sleepers:
+            return None
+        return min(sleepers, key=lambda kv: kv[1])
 
     @property
     def duration_minutes(self):
@@ -33,11 +58,5 @@ class TrainFare:
             h, m = self.duration_text.split(":")
             return int(h) * 60 + int(m)
         except Exception:
-            return 10**6
+            return 10 ** 6
 
-    @property
-    def student_second_class_est(self):
-        """动车组学生票=二等座公布票价x75%.此处用当前执行价估算,为偏低参考值,以12306下单页为准."""
-        if self.second_class:
-            return round(self.second_class * 0.75, 1)
-        return None

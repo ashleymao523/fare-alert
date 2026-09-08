@@ -2,7 +2,9 @@
 (function () {
   var S = {
     cfg: null, secrets: null, sources: null,
-    snap: null, routeId: null, selDate: null
+    snap: null, routeId: null, selDate: null,
+    cities: null, stations: null,
+    _citiesReq: null, _stationsReq: null
   };
   var WEEK = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
@@ -59,6 +61,134 @@
     return list[0];
   }
 
+  /* ---------- 联想数据源 ---------- */
+
+  function ensureCities() {
+    if (S.cities || S._citiesReq) return S._citiesReq;
+    S._citiesReq = api("/api/cities").then(function (r) {
+      S.cities = r.cities || [];
+      return S.cities;
+    });
+    return S._citiesReq;
+  }
+
+  function ensureStations() {
+    if (S.stations || S._stationsReq) return S._stationsReq;
+    S._stationsReq = api("/api/stations").then(function (r) {
+      S.stations = r.stations || [];
+      return S.stations;
+    }).catch(function (e) {
+      S._stationsReq = null;
+      throw e;
+    });
+    return S._stationsReq;
+  }
+
+  function filterAC(list, q, limit) {
+    q = (q || "").trim().toLowerCase();
+    var out = [];
+    for (var i = 0; i < list.length && out.length < (limit || 8); i++) {
+      var c = list[i];
+      var name = c.name || "";
+      if (!q || name.indexOf(q) >= 0 ||
+          (c.pinyin || "").indexOf(q) >= 0 || (c.py || "").indexOf(q) >= 0) {
+        out.push(c);
+      }
+    }
+    return out;
+  }
+
+  function attachAC(input, opts) {
+    var wrap = input.parentNode;
+    if (!wrap || !wrap.classList || !wrap.classList.contains("ac-wrap")) return;
+    var list = el("div", "ac-list hidden");
+    wrap.appendChild(list);
+    var items = [], active = -1;
+
+    function close() { list.classList.add("hidden"); items = []; active = -1; }
+    function draw() {
+      list.textContent = "";
+      if (!items.length) {
+        list.appendChild(el("div", "ac-item", opts.emptyText || "无匹配(可直接输入中文全称)"));
+        return;
+      }
+      items.forEach(function (it, i) {
+        var d = el("div", "ac-item" + (i === active ? " active" : ""));
+        d.appendChild(el("span", "ac-label", it.name));
+        if (it.sub) d.appendChild(el("span", "ac-sub", it.sub));
+        d.addEventListener("mousedown", function (ev) {
+          ev.preventDefault();
+          pick(i);
+        });
+        list.appendChild(d);
+      });
+    }
+    function pick(i) {
+      var it = items[i];
+      if (!it) return;
+      input.value = it.name;
+      if (opts.onPick) opts.onPick(it);
+      close();
+    }
+    function refresh() {
+      var src = opts.source();
+      if (src == null) {
+        list.classList.remove("hidden");
+        list.textContent = "";
+        list.appendChild(el("div", "ac-item", "加载中…"));
+        return;
+      }
+      items = filterAC(src, input.value);
+      active = items.length ? 0 : -1;
+      list.classList.remove("hidden");
+      draw();
+    }
+    input.addEventListener("focus", function () {
+      if (opts.source() == null) opts.load();
+      refresh();
+    });
+    input.addEventListener("input", function () {
+      if (opts.source() == null) opts.load();
+      refresh();
+      if (opts.onInput) opts.onInput();
+    });
+    input.addEventListener("keydown", function (ev) {
+      if (list.classList.contains("hidden")) return;
+      if (ev.key === "ArrowDown") {
+        ev.preventDefault();
+        if (items.length) { active = (active + 1) % items.length; draw(); }
+      } else if (ev.key === "ArrowUp") {
+        ev.preventDefault();
+        if (items.length) { active = (active - 1 + items.length) % items.length; draw(); }
+      } else if (ev.key === "Enter") {
+        ev.preventDefault();
+        if (active >= 0) pick(active);
+      } else if (ev.key === "Escape") {
+        close();
+      }
+    });
+    input.addEventListener("blur", function () { setTimeout(close, 150); });
+  }
+
+  function acField(labelText, value, load, source, onChange, placeholder) {
+    var root = el("label", "field grow");
+    var cap = el("span", "f-label", labelText);
+    var acw = el("div", "ac-wrap");
+    var input = el("input");
+    input.type = "text";
+    input.value = value || "";
+    input.placeholder = placeholder || "输入中文或拼音";
+    acw.appendChild(input);
+    attachAC(input, {
+      load: load, source: source,
+      onPick: function (it) { onChange(it.name); },
+      onInput: function () { onChange(input.value); }
+    });
+    root.appendChild(cap);
+    root.appendChild(acw);
+    return { root: root, input: input };
+  }
+
   /* ---------- 仪表盘 ---------- */
 
   function collectTrains(route) {
@@ -71,9 +201,28 @@
         if (items && items.error) errors.push(pair + ": " + items.error);
         return;
       }
-      items.forEach(function (it) { it.pair = pair; out.push(it); });
+      items.forEach(function (it) { it.pair = it.pair || pair; out.push(it); });
     });
     return { fares: out, errors: errors };
+  }
+
+  function trainSeats(t) {
+    if (t.seats && Object.keys(t.seats).length) return t.seats;
+    if (t.second_class) return { "二等座": t.second_class };
+    return {};
+  }
+
+  function studentEst(seats) {
+    if (seats["二等座"]) return seats["二等座"] * 0.75;
+    if (seats["硬卧"] && seats["硬座"]) return seats["硬卧"] - seats["硬座"] * 0.5;
+    if (seats["硬座"]) return seats["硬座"] * 0.5;
+    return null;
+  }
+
+  function trainMinPrice(t) {
+    var s = trainSeats(t);
+    var vs = Object.keys(s).map(function (k) { return s[k]; });
+    return vs.length ? Math.min.apply(null, vs) : null;
   }
 
   function cheapestFlight(route) {
@@ -84,13 +233,24 @@
     return best;
   }
 
-  function cheapestTrain(route) {
+  function trainBest(route) {
     var t = collectTrains(route);
-    var best = null;
+    var second = null, sleeper = null;
     t.fares.forEach(function (f) {
-      if (f.second_class && (!best || f.second_class < best.second_class)) best = f;
+      var seats = trainSeats(f);
+      var ze = seats["二等座"];
+      if (ze && (!second || ze < trainSeats(second)["二等座"])) second = f;
+      var sl = null;
+      Object.keys(seats).forEach(function (lab) {
+        if (lab.indexOf("卧") < 0) return;
+        if (!sl || seats[lab] < seats[sl]) sl = lab;
+      });
+      if (sl) {
+        var price = seats[sl];
+        if (!sleeper || price < sleeper.price) sleeper = { train: f, label: sl, price: price };
+      }
     });
-    return { best: best, all: t.fares, errors: t.errors };
+    return { second: second, sleeper: sleeper, all: t.fares, errors: t.errors };
   }
 
   function renderKpis(route) {
@@ -104,7 +264,7 @@
       return;
     }
     var f = cheapestFlight(route);
-    var tr = cheapestTrain(route);
+    var tr = trainBest(route);
     var items = [];
     items.push({
       label: "最低机票总价", value: fmtMoney(f.total_price),
@@ -117,14 +277,22 @@
       cls: route.days_below > 0 ? "good" : "warn"
     });
     items.push({ label: "心理价位(含税)", value: fmtMoney(route.threshold_total), sub: "低于即推送提醒" });
-    if (tr.best) {
+    if (tr.second) {
+      var ze = trainSeats(tr.second)["二等座"];
       items.push({
-        label: "动车二等最低", value: fmtMoney(tr.best.second_class),
-        sub: tr.best.train_code + " · 历时" + tr.best.duration_text
+        label: "列车二等最低", value: fmtMoney(ze),
+        sub: tr.second.train_code + " · 历时" + tr.second.duration_text
       });
       items.push({
-        label: "学生动车 ≈", value: fmtMoney(tr.best.second_class * 0.75),
+        label: "学生动车 ≈", value: fmtMoney(ze * 0.75),
         sub: "二等座公布价75折估算", cls: "good"
+      });
+    }
+    if (tr.sleeper) {
+      items.push({
+        label: "最低卧铺", value: fmtMoney(tr.sleeper.price),
+        sub: tr.sleeper.train.train_code + " " + tr.sleeper.label + " · 历时" + tr.sleeper.train.duration_text,
+        cls: "good"
       });
     }
     items.forEach(function (it) {
@@ -141,23 +309,26 @@
     box.textContent = "";
     if (!route || !route.deals || !route.deals.length) return;
     var f = cheapestFlight(route);
-    var tr = cheapestTrain(route);
-    var t = tr.best;
-    var s = t ? t.second_class * 0.75 : null;
+    var tr = trainBest(route);
+    var t = tr.second;
+    var ze = t ? trainSeats(t)["二等座"] : null;
+    var s = t ? ze * 0.75 : null;
+    var sl = tr.sleeper;
 
-    var winner, save = null;
-    if (s && s <= f.total_price) { winner = "student"; save = f.total_price - s; }
-    else if (t && t.second_class <= f.total_price) { winner = "train"; save = f.total_price - t.second_class; }
-    else if (t) { winner = "flight"; save = t.second_class - f.total_price; }
-    else { winner = "flight"; }
+    var names = { flight: "✈️ 机票", train: "🚄 动车二等座", student: "🎓 学生动车", sleeper: "🛏️ 列车卧铺" };
+    var cands = [{ k: "flight", p: f.total_price }];
+    if (t) cands.push({ k: "train", p: ze });
+    if (t) cands.push({ k: "student", p: s });
+    if (sl) cands.push({ k: "sleeper", p: sl.price });
+    cands.sort(function (a, b) { return a.p - b.p; });
+    var winner = cands[0].k;
+    var save = cands.length > 1 ? cands[1].p - cands[0].p : null;
 
-    var names = { student: "学生动车", train: "动车二等座", flight: "机票" };
     var banner = el("div", "verdict-banner");
-    var b = el("b", null, "当前最优: " + names[winner]);
-    banner.appendChild(b);
+    banner.appendChild(el("b", null, "当前最优: " + names[winner]));
     banner.appendChild(document.createTextNode(
-      (save != null ? " , 比次优方案最多可省约 " + fmtMoney(save) : "") +
-      "。时间成本参考: 飞机航程约2.5小时(含提前值机全程约4-5小时), 动车历时8-15小时; 夕发朝至动车可在车上过夜, 省一晚住宿。"));
+      (save != null ? ", 比次优方案省约 " + fmtMoney(save) : "") +
+      "。时间成本参考: 飞机含提前值机约4-5小时; 动车历时8-15小时, 夕发朝至可车上过夜省一晚住宿。"));
     box.appendChild(banner);
 
     var cards = el("div", "verdict-cards");
@@ -177,12 +348,20 @@
       "行李: " + esc(f.baggage) + " · <a href=\"" + esc(f.url) + "\" target=\"_blank\">去下单</a>"));
     if (t) {
       cards.appendChild(vcard("train", winner === "train",
-        "🚄 动车二等 (" + t.train_code + ")", fmtMoney(t.second_class),
+        "🚄 动车二等 (" + t.train_code + ")", fmtMoney(ze),
         esc(t.pair.replace("-", " → ")) + " · " + esc(t.dep_time) + "-" + esc(t.arr_time) +
         " 历时" + esc(t.duration_text)));
       cards.appendChild(vcard("student", winner === "student",
         "🎓 学生动车 ≈", fmtMoney(s),
         "二等座公布票价75折估算<br>资格/优惠区间以12306下单页为准"));
+    }
+    if (sl) {
+      var slStu = studentEst(trainSeats(sl.train));
+      cards.appendChild(vcard("sleeper", winner === "sleeper",
+        "🛏️ 卧铺 (" + sl.train.train_code + " " + sl.label + ")", fmtMoney(sl.price),
+        esc(sl.train.pair.replace("-", " → ")) + " · " + esc(sl.train.dep_time) + "-" + esc(sl.train.arr_time) +
+        " 历时" + esc(sl.train.duration_text) +
+        (slStu ? "<br>学生卧铺≈" + fmtMoney(slStu) : "")));
     }
     box.appendChild(cards);
   }
@@ -259,13 +438,21 @@
       " + 机建燃油 = <b>" + fmtMoney(d.total_price) + "</b>" + warn + esc(d.baggage) +
       (d.alert ? " · <span class=\"badge green\">已推送提醒</span>" : "");
     box.appendChild(line);
-    var tr = cheapestTrain(route);
-    if (tr.best) {
+    var tr = trainBest(route);
+    if (tr.second) {
+      var t = tr.second;
+      var ze = trainSeats(t)["二等座"];
       var ref = el("div", "muted");
-      ref.textContent = "参考: " + tr.best.train_code + " 动车二等 " + fmtMoney(tr.best.second_class) +
-        " / 学生动车≈" + fmtMoney(tr.best.second_class * 0.75) +
-        " (" + tr.best.pair.replace("-", "→") + " " + tr.best.dep_time + "出发)";
+      ref.textContent = "参考: " + t.train_code + " 二等 " + fmtMoney(ze) +
+        " / 学生≈" + fmtMoney(ze * 0.75) +
+        " (" + t.pair.replace("-", "→") + " " + t.dep_time + "出发)";
       box.appendChild(ref);
+    }
+    if (tr.sleeper) {
+      var ref2 = el("div", "muted");
+      ref2.textContent = "参考: " + tr.sleeper.train.train_code + " " + tr.sleeper.label + " " +
+        fmtMoney(tr.sleeper.price) + " (夕发朝至可选)";
+      box.appendChild(ref2);
     }
     var link = el("a", "btn small book-link");
     link.href = d.url;
@@ -332,11 +519,11 @@
     box.textContent = "";
     $("trainMeta").textContent = "";
     if (!route || !route.train || !route.train.pairs) {
-      box.appendChild(el("div", "muted", "未启用动车对比或暂无数据(可在数据源/线路管理中开启)"));
+      box.appendChild(el("div", "muted", "未启用列车对比或暂无数据(可在线路管理中开启)"));
       return;
     }
     $("trainMeta").textContent = "查询日 " + route.train.query_date + " · 更新于 " + String(route.train.updated_at || "").replace("T", " ");
-    var tr = cheapestTrain(route);
+    var tr = trainBest(route);
     tr.errors.forEach(function (e) {
       box.appendChild(el("div", "err-line", "⚠️ " + e));
     });
@@ -344,20 +531,33 @@
       box.appendChild(el("div", "muted", "未查到车次"));
       return;
     }
-    var sorted = tr.all.slice().sort(function (a, b) { return (a.second_class || 9e9) - (b.second_class || 9e9); });
+    var sorted = tr.all.slice().sort(function (a, b) {
+      return (trainMinPrice(a) || 9e9) - (trainMinPrice(b) || 9e9);
+    });
     var wrap = el("div", "tbl-scroll");
     var tb = el("table", "tbl");
-    tb.innerHTML = "<tr><th>车次</th><th>区间</th><th>时刻</th><th>历时</th><th>二等座</th><th>学生≈</th></tr>";
-    var minP = tr.best ? tr.best.second_class : null;
+    tb.innerHTML = "<tr><th>车次</th><th>区间</th><th>时刻</th><th>历时</th><th>席位票价(12306查到即列)</th><th>学生≈</th></tr>";
+    var minP = trainMinPrice(sorted[0]);
     sorted.slice(0, 20).forEach(function (t) {
-      var row = el("tr", (t.second_class && t.second_class === minP) ? "low" : "");
+      var row = el("tr", (trainMinPrice(t) != null && trainMinPrice(t) === minP) ? "low" : "");
       function td(v) { var d = el("td"); d.textContent = v == null ? "--" : v; return d; }
       row.appendChild(td(t.train_code));
       row.appendChild(td(t.pair.replace("-", " → ")));
       row.appendChild(td(t.dep_time + " - " + t.arr_time));
       row.appendChild(td(t.duration_text));
-      row.appendChild(t.second_class ? td(fmtMoney(t.second_class)) : td("--"));
-      row.appendChild(t.second_class ? td(fmtMoney(t.second_class * 0.75)) : td("--"));
+      var seats = trainSeats(t);
+      var keys = Object.keys(seats).sort(function (a, b) { return seats[a] - seats[b]; });
+      var cell = el("td");
+      var cellWrap = el("div", "seat-cell");
+      keys.forEach(function (lab) {
+        cellWrap.appendChild(el("span", "seat-chip" + (lab.indexOf("卧") >= 0 ? " sleep" : ""),
+          lab + " " + fmtMoney(seats[lab])));
+      });
+      if (!keys.length) cellWrap.appendChild(el("span", "muted", "--"));
+      cell.appendChild(cellWrap);
+      row.appendChild(cell);
+      var stu = studentEst(seats);
+      row.appendChild(stu ? td(fmtMoney(stu)) : td("--"));
       tb.appendChild(row);
     });
     wrap.appendChild(tb);
@@ -368,7 +568,8 @@
       var h = parseInt(t.dep_time.slice(0, 2), 10);
       return !isNaN(h) && h >= 18;
     });
-    note.textContent = "学生票=动车组二等座公布票价×75%(估算值,以12306下单页为准)" +
+    note.textContent = "含高铁/动车/直达/特快/快速列车, 12306查到什么席位就列什么(含卧铺) · " +
+      "学生票估算: 动车组二等座75折/普速硬座5折/硬卧=硬卧-硬座半价, 以12306下单页为准" +
       (hasOvernight ? " · 有晚间出发车次(夕发朝至,车上过夜省一晚住宿)" : "") +
       " · 12306数据缓存24小时";
     box.appendChild(note);
@@ -404,71 +605,177 @@
 
   /* ---------- 线路管理 ---------- */
 
+  var ROUTE_TPLS = [
+    { from: "杭州", to: "重庆", th: 500, pairs: [["杭州东", "重庆北"]] },
+    { from: "重庆", to: "杭州", th: 500, pairs: [["重庆北", "杭州东"]] },
+    { from: "杭州", to: "成都", th: 450, pairs: [["杭州东", "成都东"]] },
+    { from: "成都", to: "杭州", th: 450, pairs: [["成都东", "杭州东"]] },
+    { from: "杭州", to: "西安", th: 500, pairs: [["杭州东", "西安北"]] },
+    { from: "杭州", to: "北京", th: 600, pairs: [["杭州东", "北京南"]] }
+  ];
+
   function renderRoutesEditor() {
     var box = $("routesEditor");
     box.textContent = "";
     if (!S.cfg) return;
-    S.cfg.routes.forEach(function (r, idx) {
-      var card = el("div", "route-card");
-      var head = el("div", "rc-head");
-      var title = el("div", "rc-title", r.from_city + " → " + r.to_city);
-      title.style.fontSize = "15px";
-      var del = el("button", "btn danger small", "删除");
-      del.addEventListener("click", function () {
-        if (!confirm("确定删除线路 " + r.from_city + "→" + r.to_city + " ?")) return;
-        S.cfg.routes.splice(idx, 1);
+    ensureCities().catch(function () {});
+
+    var tplRow = el("div", "tpl-row");
+    tplRow.appendChild(el("span", "tpl-label", "快捷添加:"));
+    ROUTE_TPLS.forEach(function (tp) {
+      var b = el("button", "chip-btn", tp.from + " ✈ " + tp.to);
+      b.addEventListener("click", function () {
+        S.cfg.routes.push({
+          id: "r" + Date.now().toString(36),
+          from_city: tp.from,
+          to_city: tp.to,
+          window_days: 60,
+          threshold_total: tp.th,
+          train_compare: { enabled: true, station_pairs: tp.pairs.map(function (p) { return p.slice(); }) }
+        });
         renderRoutesEditor();
       });
-      head.appendChild(title);
-      head.appendChild(el("span", "muted", r.id));
-      head.appendChild(del);
-      card.appendChild(head);
-
-      var grid = el("div", "form-grid");
-      function fld(labelText, value, type, field) {
-        var lb = el("label", null, labelText);
-        var input = el("input");
-        input.type = type;
-        input.value = value;
-        input.addEventListener("input", function () {
-          var v = type === "number" ? parseFloat(input.value) : input.value;
-          if (type === "number" && isNaN(v)) return;
-          r[field] = v;
-          if (field === "from_city" || field === "to_city") title.textContent = r.from_city + " → " + r.to_city;
-        });
-        lb.appendChild(input);
-        return lb;
-      }
-      grid.appendChild(fld("出发城市(中文)", r.from_city, "text", "from_city"));
-      grid.appendChild(fld("到达城市(中文)", r.to_city, "text", "to_city"));
-      grid.appendChild(fld("查询窗口(天)", r.window_days, "number", "window_days"));
-      grid.appendChild(fld("心理价位·总价(元)", r.threshold_total, "number", "threshold_total"));
-      card.appendChild(grid);
-
-      var tc = r.train_compare || { enabled: true, station_pairs: [] };
-      r.train_compare = tc;
-      var pe = el("div", "pair-edit");
-      var lbl = el("label", null, "动车对比车站对 (每行: 出发站|到达站, 如 杭州东|重庆北)");
-      var ta = el("textarea");
-      ta.value = (tc.station_pairs || []).map(function (p) { return p.join("|"); }).join("\n");
-      ta.addEventListener("input", function () {
-        tc.station_pairs = ta.value.split(/\r?\n/).map(function (line) {
-          return line.split("|").map(function (x) { return x.trim(); }).filter(Boolean);
-        }).filter(function (p) { return p.length === 2; });
-      });
-      lbl.appendChild(ta);
-      pe.appendChild(lbl);
-      var ck = el("label", "check");
-      var cb = el("input");
-      cb.type = "checkbox";
-      cb.checked = tc.enabled !== false;
-      cb.addEventListener("change", function () { tc.enabled = cb.checked; });
-      ck.appendChild(cb);
-      ck.appendChild(document.createTextNode(" 启用12306动车对比"));
-      pe.appendChild(ck);
-      card.appendChild(pe);
-      box.appendChild(card);
+      tplRow.appendChild(b);
     });
+    box.appendChild(tplRow);
+
+    S.cfg.routes.forEach(function (r, idx) {
+      box.appendChild(routeCard(r, idx));
+    });
+  }
+
+  function routeCard(r, idx) {
+    var card = el("div", "route-card");
+    var head = el("div", "rc-head");
+    var title = el("div", "rc-title", r.from_city + " → " + r.to_city);
+    title.style.fontSize = "15px";
+    var del = el("button", "btn danger small", "删除");
+    del.addEventListener("click", function () {
+      if (!confirm("确定删除线路 " + r.from_city + "→" + r.to_city + " ?")) return;
+      S.cfg.routes.splice(idx, 1);
+      renderRoutesEditor();
+    });
+    head.appendChild(title);
+    head.appendChild(el("span", "muted", r.id));
+    head.appendChild(del);
+    card.appendChild(head);
+
+    function refreshTitle() { title.textContent = r.from_city + " → " + r.to_city; }
+
+    var line = el("div", "city-line");
+    var fromF = acField("出发城市", r.from_city, ensureCities,
+      function () { return S.cities; },
+      function (v) { r.from_city = v; refreshTitle(); });
+    var toF = acField("到达城市", r.to_city, ensureCities,
+      function () { return S.cities; },
+      function (v) { r.to_city = v; refreshTitle(); });
+    var swap = el("button", "swap-btn", "⇄");
+    swap.title = "互换出发/到达";
+    swap.addEventListener("click", function () {
+      var tmp = r.from_city;
+      r.from_city = r.to_city;
+      r.to_city = tmp;
+      fromF.input.value = r.from_city;
+      toF.input.value = r.to_city;
+      refreshTitle();
+    });
+    line.appendChild(fromF.root);
+    line.appendChild(swap);
+    line.appendChild(toF.root);
+    card.appendChild(line);
+
+    var grid = el("div", "form-grid");
+    var lb1 = el("label", null, "查询窗口(天)");
+    var inWd = el("input");
+    inWd.type = "number";
+    inWd.value = r.window_days;
+    inWd.addEventListener("input", function () {
+      var v = parseInt(inWd.value, 10);
+      if (!isNaN(v)) r.window_days = v;
+    });
+    lb1.appendChild(inWd);
+    grid.appendChild(lb1);
+
+    var lb2 = el("label", null, "心理价位·含税总价(元)");
+    var inTh = el("input");
+    inTh.type = "number";
+    inTh.value = r.threshold_total;
+    inTh.addEventListener("input", function () {
+      var v = parseFloat(inTh.value);
+      if (!isNaN(v)) r.threshold_total = v;
+    });
+    lb2.appendChild(inTh);
+    var chips = el("div", "quick-chips");
+    [300, 400, 500, 600].forEach(function (v) {
+      var c = el("button", "chip-btn", "¥" + v);
+      c.type = "button";
+      c.addEventListener("click", function () {
+        r.threshold_total = v;
+        inTh.value = v;
+      });
+      chips.appendChild(c);
+    });
+    lb2.appendChild(chips);
+    grid.appendChild(lb2);
+    card.appendChild(grid);
+
+    var tc = r.train_compare || { enabled: true, station_pairs: [] };
+    r.train_compare = tc;
+    if (!tc.station_pairs) tc.station_pairs = [];
+
+    var sec = el("div", "pair-section");
+    var phead = el("div", "pair-head");
+    phead.appendChild(el("span", null, "🚄 列车对比 (12306·全席位)"));
+    var ck = el("label", "check");
+    var cb = el("input");
+    cb.type = "checkbox";
+    cb.checked = tc.enabled !== false;
+    cb.addEventListener("change", function () { tc.enabled = cb.checked; });
+    ck.appendChild(cb);
+    ck.appendChild(document.createTextNode("启用"));
+    phead.appendChild(ck);
+    sec.appendChild(phead);
+    sec.appendChild(el("div", "muted pair-hint",
+      "车站从12306车站库联想选择(中文/拼音均可, 如 hzd→杭州东); 选择即精确匹配, 不会因手输偏差走模糊搜索"));
+
+    var pairsBox = el("div");
+    sec.appendChild(pairsBox);
+
+    function renderPairs() {
+      pairsBox.textContent = "";
+      ensureStations().catch(function () {});
+      (tc.station_pairs || []).forEach(function (pair, pi) {
+        var row = el("div", "pair-row");
+        var f1 = acField("出发站", pair[0], ensureStations,
+          function () { return S.stations; },
+          function (v) { pair[0] = v; }, "如 杭州东 / hzd");
+        var f2 = acField("到达站", pair[1], ensureStations,
+          function () { return S.stations; },
+          function (v) { pair[1] = v; }, "如 重庆北 / cqb");
+        var rm = el("button", "btn danger small", "×");
+        rm.type = "button";
+        rm.title = "删除该车站对";
+        rm.addEventListener("click", function () {
+          tc.station_pairs.splice(pi, 1);
+          renderPairs();
+        });
+        row.appendChild(f1.root);
+        row.appendChild(el("span", "pair-arrow", "→"));
+        row.appendChild(f2.root);
+        row.appendChild(rm);
+        pairsBox.appendChild(row);
+      });
+      var add = el("button", "btn small", "+ 添加车站对");
+      add.type = "button";
+      add.addEventListener("click", function () {
+        tc.station_pairs.push(["", ""]);
+        renderPairs();
+      });
+      pairsBox.appendChild(add);
+    }
+    renderPairs();
+    card.appendChild(sec);
+    return card;
   }
 
   /* ---------- 数据源 / 设置 ---------- */
@@ -531,8 +838,33 @@
     renderPush();
   }
 
+  function cleanCfgForSave() {
+    var c = JSON.parse(JSON.stringify(S.cfg));
+    for (var i = 0; i < c.routes.length; i++) {
+      var r = c.routes[i];
+      r.from_city = (r.from_city || "").trim();
+      r.to_city = (r.to_city || "").trim();
+      if (!r.from_city || !r.to_city) {
+        throw new Error("线路 " + (i + 1) + " 的出发/到达城市未填写");
+      }
+      var tc = r.train_compare || {};
+      tc.station_pairs = (tc.station_pairs || []).filter(function (p) {
+        return (p[0] || "").trim() && (p[1] || "").trim();
+      });
+      r.train_compare = tc;
+    }
+    return c;
+  }
+
   function saveConfig() {
-    return post("/api/config", S.cfg).then(function (resp) {
+    var payload;
+    try {
+      payload = cleanCfgForSave();
+    } catch (e) {
+      toast("保存失败: " + e.message);
+      return;
+    }
+    post("/api/config", payload).then(function (resp) {
       applyConfigResp(resp);
       toast("已保存 ✓ (查询类设置下次查询生效)");
     }).catch(function (e) { toast("保存失败: " + e.message); });
@@ -613,7 +945,7 @@
         to_city: "",
         window_days: 60,
         threshold_total: 500,
-        train_compare: { enabled: true, station_pairs: [["杭州东", "重庆北"]] }
+        train_compare: { enabled: true, station_pairs: [] }
       });
       renderRoutesEditor();
     });
@@ -649,4 +981,3 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 })();
-

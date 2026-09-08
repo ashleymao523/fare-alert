@@ -2,7 +2,6 @@
 """Threshold evaluation, dedupe rules and message composition."""
 
 from .flights import airline_name
-from .models import TrainFare
 
 WEEKDAY_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
@@ -66,28 +65,55 @@ def _fmt_date(date_str):
 
 def _train_lines(train_info):
     if not train_info or not train_info.get("pairs"):
-        return ["🚄动车: 暂无数据"]
-    fares = []
-    for pair, items in train_info["pairs"].items():
-        if isinstance(items, dict):
+        return ["🚄列车: 暂无数据"]
+    items = []
+    for pair, its in train_info["pairs"].items():
+        if isinstance(its, dict):
             continue
-        for it in items:
-            if it.get("second_class"):
-                fares.append(TrainFare(**{**it, "pair": pair}))
-    if not fares:
-        return ["🚄动车: 未查到二等座票价"]
-    cheapest = min(fares, key=lambda f: f.second_class)
-    fastest = min(fares, key=lambda f: f.duration_minutes)
+        items.extend(x for x in its if isinstance(x, dict) and x.get("seats"))
+    if not items:
+        return ["🚄列车: 未查到席位票价"]
     lines = [
-        "🚄动车对比(次日参考):",
-        "最低 {} {} {}→{} 二等¥{} 学生≈¥{}".format(
-            cheapest.train_code, cheapest.pair.replace("-", "→"),
-            cheapest.dep_time, cheapest.arr_time,
-            int(cheapest.second_class), int(cheapest.student_second_class_est or 0)),
-        "最快 {} 历时{} 二等¥{}".format(
-            fastest.train_code, fastest.duration_text, int(fastest.second_class)),
-        "(学生票=二等座公布价75折,按执行价估算偏低,以12306下单页为准)",
+        "🚄列车对比(次日参考, 全席位):",
     ]
+    ze = [it for it in items if it["seats"].get("二等座")]
+    if ze:
+        c = min(ze, key=lambda it: it["seats"]["二等座"])
+        lines.append("最低二等 {} {} {}→{} 二等¥{} 学生≈¥{}".format(
+            c["train_code"], c["pair"].replace("-", "→"),
+            c["dep_time"], c["arr_time"],
+            int(c["seats"]["二等座"]), int(c["seats"]["二等座"] * 0.75)))
+    sleepers = []
+    for it in items:
+        sl = [(l, p) for l, p in it["seats"].items() if "卧" in l]
+        if sl:
+            lab, pr = min(sl, key=lambda kv: kv[1])
+            sleepers.append((pr, lab, it))
+    if sleepers:
+        sleepers.sort(key=lambda x: x[0])
+        pr, lab, it = sleepers[0]
+        yz = it["seats"].get("硬座")
+        stu = " 学生≈¥{}".format(int(pr - yz * 0.5)) if yz else ""
+        lines.append("最低卧铺 {} {} {}→{} {}¥{}{}".format(
+            it["train_code"], it["pair"].replace("-", "→"),
+            it["dep_time"], it["arr_time"], lab, int(pr), stu))
+
+    def dur_min(it):
+        try:
+            h, m = it.get("duration_text", "").split(":")
+            return int(h) * 60 + int(m)
+        except Exception:
+            return 10 ** 6
+
+    fastest = min(items, key=dur_min)
+    if fastest.get("duration_text"):
+        ms, lab = None, None
+        if fastest["seats"]:
+            lab, ms = min(fastest["seats"].items(), key=lambda kv: kv[1])
+        lines.append("最快 {} 历时{} {}¥{}".format(
+            fastest["train_code"], fastest["duration_text"],
+            lab or "", int(ms) if ms else ""))
+    lines.append("(学生票: 动车组二等座公布价75折/硬座5折/硬卧=硬卧-硬座半价,均为估算,以12306下单页为准)")
     return lines
 
 
