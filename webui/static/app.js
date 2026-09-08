@@ -1017,6 +1017,15 @@
 
   /* ---------- 事件绑定 ---------- */
 
+  function refreshTab(name) {
+    if (name === "dash") renderDash();
+    if (name === "crawl") loadCrawl();
+    if (name === "routes") renderRoutesEditor();
+    if (name === "sources") renderSources();
+    if (name === "push") { renderPush(); loadAlerts(); }
+    if (name === "logs") loadLog();
+  }
+
   function bindTabs() {
     var btns = document.querySelectorAll("#mainTabs button");
     btns.forEach(function (b) {
@@ -1025,9 +1034,7 @@
         b.classList.add("active");
         document.querySelectorAll(".tab-panel").forEach(function (p) { p.classList.remove("active"); });
         $("tab-" + b.dataset.tab).classList.add("active");
-        if (b.dataset.tab === "push") loadAlerts();
-        if (b.dataset.tab === "logs") loadLog();
-        if (b.dataset.tab === "crawl") loadCrawl();
+        refreshTab(b.dataset.tab);
       });
     });
   }

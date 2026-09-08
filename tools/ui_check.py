@@ -47,4 +47,21 @@ days = len(re.findall("class=.day ", h))
 print("day cells:", days)
 m = re.findall("当前最优[^。<]{0,20}", h)
 print("verdict:", m[0] if m else "MISSING")
+# --- structural: every data-tab button maps to exactly one panel; ids unique ---
+import collections
+tabs = set(re.findall(r'data-tab=[\'"]([a-z]+)[\'"]', h))
+struct_bad = []
+for t in sorted(tabs):
+    n = len(re.findall(r'id=[\'"]tab-%s[\'"]' % t, h))
+    if n != 1:
+        struct_bad.append("tab '%s' -> %d panels" % (t, n))
+id_counts = collections.Counter(re.findall(r'id=[\'"]([A-Za-z][A-Za-z0-9_-]*)[\'"]', h))
+dups = sorted(i for i, c in id_counts.items() if c > 1)
+if dups:
+    struct_bad.append("duplicate ids: " + ", ".join(dups))
+for s in struct_bad:
+    print("FAIL STRUCT " + s)
+    bad += 1
+if not struct_bad:
+    print("PASS STRUCT %d tabs 1:1 panels, ids unique" % len(tabs))
 sys.exit(1 if (bad or days < 30) else 0)
