@@ -11,6 +11,7 @@ import json
 import os
 import re
 import time
+import urllib.parse
 from dataclasses import asdict
 
 import requests
@@ -30,7 +31,7 @@ SEAT_LABELS = {
 }
 TRAIN_TYPE_KEEP = "GDCZTK"
 STATION_CACHE_VERSION = 2
-TRAIN_CACHE_VERSION = 2
+TRAIN_CACHE_VERSION = 3  # v3: TrainFare 增加 url 字段(12306 预填查询直达链接)
 
 
 def _headers(net_cfg):
@@ -109,10 +110,16 @@ def parse_seats(dto):
 def query_pair(session, net_cfg, date, from_name, to_name, stations):
     if from_name not in stations or to_name not in stations:
         raise KeyError("station not found: " + from_name + "/" + to_name)
+    from_code = _station_code(stations[from_name])
+    to_code = _station_code(stations[to_name])
+    ticket_url = ("https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs="
+                  + urllib.parse.quote(from_name) + "," + from_code
+                  + "&ts=" + urllib.parse.quote(to_name) + "," + to_code
+                  + "&date=" + date + "&flag=N,N,Y")
     params = {
         "leftTicketDTO.train_date": date,
-        "leftTicketDTO.from_station": _station_code(stations[from_name]),
-        "leftTicketDTO.to_station": _station_code(stations[to_name]),
+        "leftTicketDTO.from_station": from_code,
+        "leftTicketDTO.to_station": to_code,
         "purpose_codes": "ADULT",
     }
     r = session.get(PRICE_QUERY, params=params, headers=_headers(net_cfg),
@@ -139,6 +146,7 @@ def query_pair(session, net_cfg, date, from_name, to_name, stations):
             arr_time=d.get("arrive_time", ""),
             duration_text=d.get("lishi", ""),
             seats=parse_seats(d),
+            url=ticket_url,
         ))
     return fares
 
@@ -154,6 +162,7 @@ def refresh_train_info(session, net_cfg, route_cfg, data_dir):
             ok_age = age.total_seconds() < 24 * 3600
             ok_ver = cached.get("v") == TRAIN_CACHE_VERSION
             if ok_age and ok_ver and cached.get("route_id") == route_cfg["id"]:
+                cached["from_cache"] = True
                 return cached
         except Exception:
             pass
@@ -161,6 +170,7 @@ def refresh_train_info(session, net_cfg, route_cfg, data_dir):
     query_date = (dt.date.today() + dt.timedelta(days=1)).isoformat()
     result = {
         "v": TRAIN_CACHE_VERSION,
+        "from_cache": False,
         "route_id": route_cfg["id"],
         "updated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "query_date": query_date,

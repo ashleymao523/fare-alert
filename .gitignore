@@ -2,6 +2,7 @@
 config.json
 data/
 tools/cache/
+cache/
 
 # python
 __pycache__/
@@ -14,4 +15,3 @@ venv/
 Thumbs.db
 .idea/
 .vscode/
-

@@ -13,6 +13,7 @@ import requests
 
 from core.alerts import build_message, evaluate, total_price
 from core.config import load_config
+from core.crawl import CrawlRecorder
 from core.flights import airline_name, fetch_calendar
 from core.notify import push_all
 from core.report import write_report
@@ -62,11 +63,16 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "below": total < route.get("threshold_total", 500),
         "alert": deal.date in alert_dates,
         "url": deal.url,
+        "dep_time": deal.dep_time,
+        "arr_time": deal.arr_time,
+        "duration_text": deal.duration_text,
     }
 
 
-def run_once(cfg, log, push_enabled=True, verbose=False):
+def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
     """One full cycle. Returns snapshot dict (also written to data/snapshot.json)."""
+    rec = CrawlRecorder(DATA_DIR)
+    rec.begin(trigger=trigger)
     session = make_session(cfg)
     net = cfg.get("network", {})
     state = load_state(os.path.join(DATA_DIR, "state.json"))
@@ -98,21 +104,39 @@ def run_once(cfg, log, push_enabled=True, verbose=False):
         deals = []
         if not use_flight:
             route_snap["flight_source_status"] = "disabled"
+            rec.step("qunar-calendar", route_snap["id"], "fetch calendar", "disabled", 0)
             log.info("[{}] flight source disabled, skip".format(route_snap["id"]))
         else:
+            t0 = time.time()
             try:
                 deals = fetch_calendar(session, net, route["from_city"], route["to_city"],
                                        date_from, date_to)
+                rec.step("qunar-calendar", route_snap["id"], "fetch calendar", "ok",
+                         (time.time() - t0) * 1000, count=len(deals))
             except Exception as e:
+                rec.step("qunar-calendar", route_snap["id"], "fetch calendar", "error",
+                         (time.time() - t0) * 1000, error=e)
                 route_snap["flight_source_status"] = "error: " + str(e)[:120]
                 log.error("flight fetch failed [{}]: {}".format(route_snap["id"], e))
 
         train_info = None
         if use_train and (route.get("train_compare") or {}).get("enabled"):
+            t1 = time.time()
             try:
                 train_info = refresh_train_info(session, net, route, DATA_DIR)
+                n_trains = 0
+                for v in (train_info.get("pairs") or {}).values():
+                    if isinstance(v, list):
+                        n_trains += len(v)
+                rec.step("12306-train", route_snap["id"], "fetch trains", "ok",
+                         (time.time() - t1) * 1000, count=n_trains,
+                         cached=bool(train_info.get("from_cache")))
             except Exception as e:
+                rec.step("12306-train", route_snap["id"], "fetch trains", "error",
+                         (time.time() - t1) * 1000, error=e)
                 log.warning("train fetch failed [{}]: {}".format(route_snap["id"], e))
+        else:
+            rec.step("12306-train", route_snap["id"], "fetch trains", "disabled", 0)
 
         to_alert, below = [], []
         if deals:
@@ -155,6 +179,7 @@ def run_once(cfg, log, push_enabled=True, verbose=False):
     with open(os.path.join(DATA_DIR, "snapshot.json"), "w", encoding="utf-8") as f:
         json.dump(snapshot, f, ensure_ascii=False, indent=1)
 
+    pushed = 0
     if push_enabled:
         save_state(os.path.join(DATA_DIR, "state.json"), state)
         for route, to_alert, below, train_info in pending_push:
@@ -162,6 +187,15 @@ def run_once(cfg, log, push_enabled=True, verbose=False):
             log.info("ALERT >> " + title)
             push_all(cfg, log, title, body,
                      url=to_alert[0][1].url, route_id=route.get("id"))
+            pushed += len(to_alert)
+        if pending_push:
+            rec.step("push", "all", "send alerts", "ok", 0, count=pushed)
+    rec.finish({
+        "routes": len(snapshot_routes),
+        "deals": sum(len(r["deals"]) for r in snapshot_routes),
+        "days_below": sum(r["days_below"] for r in snapshot_routes),
+        "pushed": pushed,
+    })
     return snapshot
 
 

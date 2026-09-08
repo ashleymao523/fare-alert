@@ -237,3 +237,23 @@ textarea { min-height: 84px; resize: vertical; }
   .day .d-price { font-size: 13px; }
   .kpi .k-value { font-size: 18px; }
 }
+
+/* ---------- v0.4 爬虫监控 ---------- */
+.crawl-run { border: 1px solid var(--line); background: var(--card2); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+.crawl-run.run-now { border-color: var(--accent); }
+.crawl-head { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.crawl-steps { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.crawl-step { display: flex; align-items: center; gap: 10px; font-size: 12px; border: 1px solid var(--line); padding: 6px 10px; background: var(--card); border-radius: 8px; flex-wrap: wrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--green); }
+.dot.error { background: var(--red); }
+.dot.disabled { background: var(--muted); }
+.crawl-src { font-weight: 600; min-width: 110px; }
+.crawl-ms { margin-left: auto; color: var(--muted); }
+.crawl-err { color: var(--red); font-size: 11px; }
+.chip.err { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s infinite; margin-left: auto; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+a.kpi { color: inherit; }
+a.kpi:hover { border-color: var(--accent); cursor: pointer; text-decoration: none; }
+.v-link { display: inline-block; margin-top: 8px; font-size: 12px; }

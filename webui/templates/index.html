@@ -18,7 +18,7 @@
   <div class="brand">
     <span class="logo">✈️</span>
     <span class="brand-name">FareAlert</span>
-    <span class="ver">v0.3</span>
+    <span class="ver">v0.4</span>
   </div>
   <nav id="routeTabs" class="route-tabs"></nav>
   <div class="top-actions">
@@ -30,6 +30,7 @@
 <main class="wrap">
   <nav class="tabs" id="mainTabs">
     <button data-tab="dash" class="active">📊 仪表盘</button>
+    <button data-tab="crawl">🕸 爬虫监控</button>
     <button data-tab="routes">🛫 线路管理</button>
     <button data-tab="sources">🔌 数据源</button>
     <button data-tab="push">🔔 提醒推送</button>
@@ -51,6 +52,18 @@
     <div class="card">
       <div class="card-head"><h3>🚄 列车对比 (12306·全席位)</h3><span id="trainMeta" class="muted"></span></div>
       <div id="trainBox"></div>
+    </div>
+  </section>
+
+  <section id="tab-routes" class="tab-panel">
+  <section id="tab-crawl" class="tab-panel">
+    <div class="card">
+      <div class="card-head">
+        <h3>🕸 爬虫监控</h3>
+        <span class="muted">每次查询的数据源耗时/结果/错误 · 点「立即查询」时这里实时刷新</span>
+        <button id="btnRefreshCrawl" class="btn small">刷新</button>
+      </div>
+      <div id="crawlPanel"></div>
     </div>
   </section>
 

@@ -269,7 +269,8 @@
     items.push({
       label: "最低机票总价", value: fmtMoney(f.total_price),
       sub: f.date + " " + weekday(f.date) + " · " + f.flight_no,
-      cls: f.total_price < route.threshold_total ? "good" : ""
+      cls: f.total_price < route.threshold_total ? "good" : "",
+      url: f.url
     });
     items.push({
       label: "低于心理价位", value: route.days_below + " 天",
@@ -281,22 +282,32 @@
       var ze = trainSeats(tr.second)["二等座"];
       items.push({
         label: "列车二等最低", value: fmtMoney(ze),
-        sub: tr.second.train_code + " · 历时" + tr.second.duration_text
+        sub: tr.second.train_code + " " + tr.second.dep_time + "开 · 历时" + tr.second.duration_text,
+        url: tr.second.url
       });
       items.push({
         label: "学生动车 ≈", value: fmtMoney(ze * 0.75),
-        sub: "二等座公布价75折估算", cls: "good"
+        sub: "二等座公布价75折估算 · 点击直达12306", cls: "good",
+        url: tr.second.url
       });
     }
     if (tr.sleeper) {
       items.push({
         label: "最低卧铺", value: fmtMoney(tr.sleeper.price),
         sub: tr.sleeper.train.train_code + " " + tr.sleeper.label + " · 历时" + tr.sleeper.train.duration_text,
-        cls: "good"
+        cls: "good",
+        url: tr.sleeper.train.url
       });
     }
     items.forEach(function (it) {
-      var k = el("div", "kpi" + (it.cls ? " " + it.cls : ""));
+      var k = it.url ? el("a", "kpi" + (it.cls ? " " + it.cls : ""))
+                      : el("div", "kpi" + (it.cls ? " " + it.cls : ""));
+      if (it.url) {
+        k.href = it.url;
+        k.target = "_blank";
+        k.rel = "noopener";
+        k.title = "点击直达购票/查票页";
+      }
       k.appendChild(el("div", "k-label", it.label));
       k.appendChild(el("div", "k-value", it.value));
       k.appendChild(el("div", "k-sub", it.sub));
@@ -332,7 +343,7 @@
     box.appendChild(banner);
 
     var cards = el("div", "verdict-cards");
-    function vcard(kind, isBest, title, price, sub) {
+    function vcard(kind, isBest, title, price, sub, url) {
       var c = el("div", "vcard" + (isBest ? " best" : ""));
       if (isBest) c.appendChild(el("div", "v-tag", "最优"));
       c.appendChild(el("div", "v-title", title));
@@ -340,20 +351,28 @@
       var sd = el("div", "v-sub");
       sd.innerHTML = sub;
       c.appendChild(sd);
+      if (url) {
+        var a = el("a", "v-link");
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.textContent = "去查票/下单 →";
+        c.appendChild(a);
+      }
       return c;
     }
     cards.appendChild(vcard("flight", winner === "flight",
       "✈️ 最低机票 (" + f.date + ")", fmtMoney(f.total_price),
       esc(f.flight_no + " " + f.airline) + " · 裸价" + fmtMoney(f.bare_price) + "+税费<br>" +
-      "行李: " + esc(f.baggage) + " · <a href=\"" + esc(f.url) + "\" target=\"_blank\">去下单</a>"));
+      "行李: " + esc(f.baggage) + "<br>起降时刻/飞行时长以下单页为准"), f.url);
     if (t) {
       cards.appendChild(vcard("train", winner === "train",
         "🚄 动车二等 (" + t.train_code + ")", fmtMoney(ze),
         esc(t.pair.replace("-", " → ")) + " · " + esc(t.dep_time) + "-" + esc(t.arr_time) +
-        " 历时" + esc(t.duration_text)));
+        " 历时" + esc(t.duration_text), t.url));
       cards.appendChild(vcard("student", winner === "student",
         "🎓 学生动车 ≈", fmtMoney(s),
-        "二等座公布票价75折估算<br>资格/优惠区间以12306下单页为准"));
+        "二等座公布票价75折估算<br>资格/优惠区间以12306下单页为准", t.url));
     }
     if (sl) {
       var slStu = studentEst(trainSeats(sl.train));
@@ -361,7 +380,7 @@
         "🛏️ 卧铺 (" + sl.train.train_code + " " + sl.label + ")", fmtMoney(sl.price),
         esc(sl.train.pair.replace("-", " → ")) + " · " + esc(sl.train.dep_time) + "-" + esc(sl.train.arr_time) +
         " 历时" + esc(sl.train.duration_text) +
-        (slStu ? "<br>学生卧铺≈" + fmtMoney(slStu) : "")));
+        (slStu ? "<br>学生卧铺≈" + fmtMoney(slStu) : ""), sl.train.url));
     }
     box.appendChild(cards);
   }
@@ -439,6 +458,11 @@
       (d.alert ? " · <span class=\"badge green\">已推送提醒</span>" : "");
     box.appendChild(line);
     var tr = trainBest(route);
+    var ftNote = el("div", "muted");
+    ftNote.textContent = (d.dep_time && d.arr_time)
+      ? ("起飞 " + d.dep_time + " · 到达 " + d.arr_time + (d.duration_text ? " · " + d.duration_text : ""))
+      : "起降时刻/飞行时长以下单页为准(当前数据源仅提供每日最低价)";
+    box.appendChild(ftNote);
     if (tr.second) {
       var t = tr.second;
       var ze = trainSeats(t)["二等座"];
@@ -536,7 +560,7 @@
     });
     var wrap = el("div", "tbl-scroll");
     var tb = el("table", "tbl");
-    tb.innerHTML = "<tr><th>车次</th><th>区间</th><th>时刻</th><th>历时</th><th>席位票价(12306查到即列)</th><th>学生≈</th></tr>";
+    tb.innerHTML = "<tr><th>车次</th><th>区间</th><th>时刻</th><th>历时</th><th>席位票价(12306查到即列)</th><th>学生≈</th><th>购票</th></tr>";
     var minP = trainMinPrice(sorted[0]);
     sorted.slice(0, 20).forEach(function (t) {
       var row = el("tr", (trainMinPrice(t) != null && trainMinPrice(t) === minP) ? "low" : "");
@@ -558,6 +582,17 @@
       row.appendChild(cell);
       var stu = studentEst(seats);
       row.appendChild(stu ? td(fmtMoney(stu)) : td("--"));
+      var buy = el("td");
+      if (t.url) {
+        var bl = el("a", "btn small buy-link", "下单");
+        bl.href = t.url;
+        bl.target = "_blank";
+        bl.rel = "noopener";
+        buy.appendChild(bl);
+      } else {
+        buy.textContent = "--";
+      }
+      row.appendChild(buy);
       tb.appendChild(row);
     });
     wrap.appendChild(tb);
@@ -903,6 +938,83 @@
     }).catch(function () {});
   }
 
+  /* ---------- 爬虫监控 ---------- */
+
+  var SRC_NAMES = {
+    "qunar-calendar": "去哪儿·低价日历",
+    "12306-train": "12306·车票查询",
+    "push": "提醒推送"
+  };
+
+  function fmtMs(ms) {
+    if (ms == null) return "--";
+    return ms < 1000 ? ms + "ms" : (ms / 1000).toFixed(1) + "s";
+  }
+
+  function crawlStepRow(st) {
+    var row = el("div", "crawl-step");
+    row.appendChild(el("span", "dot " + (st.status || "ok")));
+    row.appendChild(el("span", "crawl-src", SRC_NAMES[st.source] || st.source));
+    row.appendChild(el("span", null, st.action || st.label || ""));
+    if (st.label && st.action) row.appendChild(el("span", "muted", st.label));
+    if (st.cached) row.appendChild(el("span", "chip plan", "缓存命中"));
+    if (st.count) row.appendChild(el("span", null, st.count + " 条"));
+    if (st.error) row.appendChild(el("span", "crawl-err", st.error));
+    row.appendChild(el("span", "crawl-ms", fmtMs(st.ms)));
+    return row;
+  }
+
+  function crawlRunCard(run, live) {
+    var running = !run.finished_at;
+    var card = el("div", "crawl-run" + (running ? " run-now" : ""));
+    var head = el("div", "crawl-head");
+    head.appendChild(el("span", "chip " + (running ? "plan" : (run.ok ? "ok" : "err")),
+      running ? "抓取中…" : (run.ok ? "完成" : "有错误")));
+    head.appendChild(el("span", "muted", String(run.started_at || "").replace("T", " ")));
+    head.appendChild(el("span", "chip plan", run.trigger === "manual" ? "手动" : "计划"));
+    var s = run.summary || {};
+    var bits = [];
+    if (s.routes != null) bits.push("线路 " + s.routes);
+    if (s.deals != null) bits.push("报价 " + s.deals + " 条");
+    if (s.days_below != null) bits.push("低于价位 " + s.days_below + " 天");
+    if (s.pushed) bits.push("已推送");
+    if (bits.length) head.appendChild(el("span", "muted", bits.join(" · ")));
+    if (!running && run.duration_ms != null) head.appendChild(el("span", "muted", "耗时 " + fmtMs(run.duration_ms)));
+    if (running) head.appendChild(el("span", "live-dot"));
+    card.appendChild(head);
+    var steps = el("div", "crawl-steps");
+    (run.steps || []).forEach(function (st) { steps.appendChild(crawlStepRow(st)); });
+    if (!(run.steps || []).length) steps.appendChild(el("div", "muted", "暂无步骤记录"));
+    card.appendChild(steps);
+    return card;
+  }
+
+  function renderCrawl(doc) {
+    var box = $("crawlPanel");
+    box.textContent = "";
+    var runs = [];
+    if (doc && doc.current) runs.push(doc.current);
+    if (doc && doc.history) runs = runs.concat(doc.history);
+    if (!runs.length) {
+      box.appendChild(el("div", "muted", "暂无抓取记录: 点击「立即查询」跑一次, 或等计划任务触发后刷新"));
+      return;
+    }
+    runs.forEach(function (run, i) { box.appendChild(crawlRunCard(run, i === 0)); });
+  }
+
+  function loadCrawl() {
+    api("/api/crawl-status").then(renderCrawl).catch(function () {});
+  }
+
+  var crawlTimer = null;
+  function startCrawlPolling() {
+    stopCrawlPolling();
+    crawlTimer = setInterval(loadCrawl, 2000);
+  }
+  function stopCrawlPolling() {
+    if (crawlTimer) { clearInterval(crawlTimer); crawlTimer = null; }
+  }
+
   /* ---------- 事件绑定 ---------- */
 
   function bindTabs() {
@@ -915,6 +1027,7 @@
         $("tab-" + b.dataset.tab).classList.add("active");
         if (b.dataset.tab === "push") loadAlerts();
         if (b.dataset.tab === "logs") loadLog();
+        if (b.dataset.tab === "crawl") loadCrawl();
       });
     });
   }
@@ -924,6 +1037,7 @@
       var btn = $("btnRun");
       btn.disabled = true;
       btn.textContent = "查询中(5-20秒)…";
+      startCrawlPolling();
       post("/api/run", { push: true }).then(function (resp) {
         S.snap = resp.snapshot;
         S.routeId = S.snap.routes && S.snap.routes.length ? (curRoute() || S.snap.routes[0]).id : null;
@@ -933,6 +1047,8 @@
       }).catch(function (e) {
         toast("查询失败: " + e.message);
       }).finally(function () {
+        stopCrawlPolling();
+        loadCrawl();
         btn.disabled = false;
         btn.textContent = "立即查询";
       });
@@ -962,6 +1078,7 @@
       }).finally(function () { btn.disabled = false; });
     });
     $("btnRefreshLog").addEventListener("click", loadLog);
+    $("btnRefreshCrawl").addEventListener("click", loadCrawl);
   }
 
   function init() {

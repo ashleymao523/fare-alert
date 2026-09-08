@@ -21,6 +21,7 @@ SNAPSHOT_PATH = os.path.join(DATA_DIR, "snapshot.json")
 ALERTS_PATH = os.path.join(DATA_DIR, "alerts.json")
 LOG_PATH = os.path.join(DATA_DIR, "run.log")
 REPORT_DIR = os.path.join(DATA_DIR, "report")
+CRAWL_PATH = os.path.join(DATA_DIR, "crawl_status.json")
 
 MASK = "***"
 SECRET_KEYS = ("bark_key", "serverchan_sendkey")
@@ -193,6 +194,13 @@ def api_snapshot():
     return jsonify({"snapshot": _read_json(SNAPSHOT_PATH, None)})
 
 
+@app.get("/api/crawl-status")
+def api_crawl_status():
+    """Crawl run telemetry for the visual crawler monitor tab."""
+    return jsonify(_read_json(CRAWL_PATH,
+                               {"running": False, "current": None, "history": []}))
+
+
 @app.get("/api/cities")
 def api_cities():
     """Flight city list for autocomplete (curated, offline)."""
@@ -251,7 +259,7 @@ def api_run():
     with _lock:
         cfg = load_config(CONFIG_PATH)
         try:
-            snapshot = runner.run_once(cfg, _log, push_enabled=push)
+            snapshot = runner.run_once(cfg, _log, push_enabled=push, trigger="manual")
         except Exception as e:
             _log.error("manual run failed: %s", e)
             return jsonify({"ok": False, "error": str(e)}), 500

@@ -10,6 +10,9 @@ class FlightDeal:
     flight_no: str
     source: str = "qunar-calendar"
     url: str = ""
+    dep_time: str = ""        # 起飞时刻(当前源未提供, 留给后续数据源)
+    arr_time: str = ""        # 到达时刻
+    duration_text: str = ""   # 飞行时长
 
     @property
     def airline_code(self):
@@ -26,6 +29,7 @@ class TrainFare:
     arr_time: str
     duration_text: str
     seats: dict = field(default_factory=dict)
+    url: str = ""             # 12306 预填查询链接
 
     @property
     def train_type(self):
@@ -59,4 +63,3 @@ class TrainFare:
             return int(h) * 60 + int(m)
         except Exception:
             return 10 ** 6
-

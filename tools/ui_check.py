@@ -3,6 +3,8 @@
 import re
 import sys
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 h = open("data/ui_dom.html", encoding="utf-8").read()
 checks = {
     "KPI最低机票": "最低机票总价" in h,
@@ -26,6 +28,16 @@ checks = {
     "阈值快捷chips": "quick-chips" in h,
     "页脚声明": "数据源: 去哪儿" in h,
     "路由标签": "杭州 → 重庆" in h,
+    "爬虫监控tab": "data-tab=\"crawl\"" in h,
+    "爬虫面板容器": "crawlPanel" in h,
+    "刷新爬虫状态按钮": "btnRefreshCrawl" in h,
+    "KPI可点击达": "<a class=\"kpi" in h,
+    "对比卡直达链接": "v-link" in h,
+    "车次表下单按钮": ("buy-link" in h) and ("下单" in h),
+    "购票列表头": "<th>购票</th>" in h,
+    "航班时刻说明": "起降时刻" in h,
+    "车次时刻列": "08:08" in h,
+    "车次历时列": "11:31" in h,
 }
 bad = 0
 for k, v in checks.items():
