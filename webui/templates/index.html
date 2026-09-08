@@ -11,14 +11,14 @@
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon.svg">
 <title>FareAlert · 低价出行提醒</title>
-<link rel="stylesheet" href="/static/style.css?v=6">
+<link rel="stylesheet" href="/static/style.css?v=7">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
     <span class="logo">✈️</span>
     <span class="brand-name">FareAlert</span>
-<span class="ver">v0.6.1</span>
+<span class="ver">v0.7</span>
   </div>
   <nav id="routeTabs" class="route-tabs"></nav>
   <div class="top-actions">
@@ -90,7 +90,7 @@
       <div id="sourcesList"></div>
     </div>
     <div class="card">
-      <div class="card-head"><h3>🌍 国际航班数据源 (Amadeus)</h3><span class="muted">免费测试环境即可用</span></div>
+      <div class="card-head"><h3>🌍 国际航班数据源 (Amadeus)</h3><span class="muted">免费 · 2分钟注册 · 配置后解锁国际全日历+真实起降时刻</span></div>
       <div class="form-grid">
         <label>环境
           <select id="amaEnv">
@@ -101,11 +101,21 @@
         <label>API Key (client_id)<input id="amaId" type="text" placeholder="developer.amadeus.com 创建应用获取"></label>
         <label>API Secret (client_secret)<input id="amaSecret" type="password" placeholder="留空=保持已保存值"></label>
       </div>
-      <div class="muted" style="margin-top:10px">
-        获取方式: developer.amadeus.com 免费注册 → Self-Service → 创建App → 复制Key/Secret ·
-        返回国际航线含税最低价(币种为出发地市场币种,可在config指定sources.amadeus.currency) ·
-        配好后在线路管理勾选「国际航线」并填IATA三字码, 未配置时国际线路自动跳过 ·
-        同一密钥也用于「缺价补全」: 去哪儿日历缺价的日期自动用Amadeus含税价补洞(缓存24h, 打「Amadeus补」徽标)
+      <div class="ama-guide" style="margin-top:12px">
+        <b>配置步骤</b>
+        <ol>
+          <li>打开 <a href="https://developer.amadeus.com/register" target="_blank">developer.amadeus.com</a> 免费注册(邮箱验证, 无需信用卡)</li>
+          <li>进入 Self-Service → <a href="https://developer.amadeus.com/my-apps" target="_blank">My Apps</a> → Create new app</li>
+          <li>复制 API Key / API Secret 填到上方输入框 → 点「测试连接」验证</li>
+        </ol>
+        <span class="muted">
+          配置后解锁: 国际航线全日期含税日历(Amadeus) · 真实起降时刻/飞行时长(时刻增强) · 国内缺价日补全(缓存24h保护额度) ·<br>
+          未配置时: 国内线照常可用; 国际线自动降级为「去哪儿国际特价日历」(免Key, 稀疏但真实)
+        </span>
+        <div class="row-btns">
+          <button id="btnAmaTest" class="btn">测试连接</button>
+          <span id="amaTestResult" class="muted"></span>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -170,6 +180,6 @@
 </main>
 
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=6"></script>
+<script src="/static/app.js?v=7"></script>
 </body>
 </html>

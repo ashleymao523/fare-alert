@@ -8,6 +8,12 @@ SOURCE_REGISTRY = {
         "status": "可用",
         "desc": "免登录免签名的公开接口,一次返回365天每日最低价+最低价航班号(挂牌价,不含券后)",
     },
+    "qunar-intl": {
+        "kind": "flight",
+        "name": "去哪儿·国际特价日历",
+        "status": "可用",
+        "desc": "免Key国际线促销底价(稀疏但真实,含税RMB);配置Amadeus密钥后自动升级为全日期日历+真实起降时刻",
+    },
     "ctrip-h5": {
         "kind": "flight",
         "name": "携程H5(规划中)",

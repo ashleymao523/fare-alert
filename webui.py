@@ -10,6 +10,7 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 import main as runner
 from core.config import load_config, save_config
 from core.cities import CITIES
+from core.intl import get_token as amadeus_get_token
 from core.trains import get_stations
 from core.notify import push_all
 from core.sources import SOURCE_REGISTRY
@@ -308,6 +309,23 @@ def api_test_push():
     results = push_all(cfg, _log, "✈️ FareAlert 测试推送",
                        "推送通道配置成功!这是一条测试消息。", url="")
     return jsonify({"ok": True, "results": results})
+
+
+@app.post("/api/amadeus-test")
+def api_amadeus_test():
+    """Validate Amadeus key by fetching an OAuth token (helps first-run setup)."""
+    cfg = load_config(CONFIG_PATH)
+    ama = ((cfg.get("sources") or {}).get("amadeus")) or {}
+    if not ((ama.get("client_id") or "").strip()
+            and (ama.get("client_secret") or "").strip()):
+        return jsonify({"ok": False,
+                        "error": "请先填写 client_id 和 client_secret 再测试"}), 400
+    try:
+        session = runner.make_session(cfg)
+        amadeus_get_token(session, cfg.get("network", {}), ama, DATA_DIR)
+        return jsonify({"ok": True, "message": "密钥有效, Amadeus 已就绪"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]}), 400
 
 
 @app.get("/api/alerts")

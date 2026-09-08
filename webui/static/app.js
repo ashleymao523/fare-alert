@@ -455,7 +455,10 @@
       if (ds === S.selDate) cls += " selected";
       var c = el("div", cls);
       c.appendChild(el("div", "d-date", fmtMD(ds)));
-      c.appendChild(el("div", "d-week", weekday(ds)));
+      var wk = el("div", "d-week", weekday(ds));
+      var wd = parseDate(ds).getDay();
+      if (wd === 0 || wd === 6) wk.classList.add("wk");
+      c.appendChild(wk);
       c.appendChild(el("div", "d-price", d ? fmtMoney(d.total_price) : "—"));
       if (d) c.addEventListener("click", function () {
         S.selDate = (S.selDate === ds) ? null : ds;
@@ -492,35 +495,69 @@
     }
     var below = d.total_price < route.threshold_total;
     var title = el("div", "dd-title");
-    title.appendChild(document.createTextNode(d.date + " " + weekday(d.date) + " " + fmtMoney(d.total_price)));
+    title.appendChild(document.createTextNode(d.date + " " + weekday(d.date)));
+    var priceSpan = el("span");
+    priceSpan.innerHTML = "含税 <b style=\"font-variant-numeric:tabular-nums\">" + fmtMoney(d.total_price) + "</b>";
+    title.appendChild(priceSpan);
     var badge = el("span", "badge " + (below ? "green" : "gray"),
       below ? "低于心理价位" : "高于心理价位");
     title.appendChild(badge);
+    if (d.source === "qunar-intl") {
+      title.appendChild(el("span", "badge sky", "国际特价"));
+    } else if (d.source === "amadeus-intl") {
+      title.appendChild(el("span", "badge sky", "Amadeus"));
+    } else if (d.source === "amadeus-fill") {
+      title.appendChild(el("span", "badge amber", "Amadeus补"));
+    }
     box.appendChild(title);
 
+    // ---- flight timeline: dep &arr times, duration ----
+    var hasTime = !!(d.dep_time && d.arr_time);
+    var connecting = (d.flight_no || "").indexOf("/") >= 0;
+    var tl = el("div", "ft-line");
+    var depEnd = el("div", "ft-endpoint");
+    depEnd.appendChild(el("div", "ft-time" + (hasTime ? "" : " unknown"), hasTime ? d.dep_time : "--:--"));
+    depEnd.appendChild(el("div", "ft-code", route.from_iata || route.from_city || "出发"));
+    var mid = el("div", "ft-mid");
+    var durBox = el("div");
+    durBox.appendChild(el("span", "ft-dur", connecting ? "中转 · " + (d.duration_text || "全程时刻待查") : (d.duration_text || "飞行时长待查")));
+    mid.appendChild(durBox);
+    var path = el("div", "ft-path");
+    path.appendChild(el("span", "ft-plane", "\u2708"));
+    mid.appendChild(path);
+    var arrEnd = el("div", "ft-endpoint");
+    arrEnd.appendChild(el("div", "ft-time" + (hasTime ? "" : " unknown"), hasTime ? d.arr_time : "--:--"));
+    arrEnd.appendChild(el("div", "ft-code", route.to_iata || route.to_city || "到达"));
+    tl.appendChild(depEnd); tl.appendChild(mid); tl.appendChild(arrEnd);
+    box.appendChild(tl);
+
     var warn = /不含|确认/.test(d.baggage) ? " ⚠️" : " 🧳";
-    var fillTag = d.source === "amadeus-fill" ? ' · <span class="badge amber">Amadeus补</span>' : "";
     var line = el("div");
     if (isRT && d.ret_date) {
       line.innerHTML = "去程 " + esc(d.flight_no || d.airline) + " ¥" + Math.round(d.out_total) +
         " + 返程 " + fmtMD(d.ret_date) + " " + esc(d.ret_flight || d.airline) +
         " ¥" + Math.round(d.ret_total) + " = <b>" + fmtMoney(d.total_price) + "</b>" +
-        warn + esc(d.baggage) + fillTag +
+        warn + esc(d.baggage) +
         (d.alert ? " · <span class=\"badge green\">已推送提醒</span>" : "");
     } else {
       line.innerHTML = esc((d.flight_no ? d.flight_no + " " : "") + d.airline) + " · 裸价 " + fmtMoney(d.bare_price) +
-        " + 机建燃油 = <b>" + fmtMoney(d.total_price) + "</b>" + warn + esc(d.baggage) + fillTag +
+        " + 机建燃油 = <b>" + fmtMoney(d.total_price) + "</b>" + warn + esc(d.baggage) +
         (d.alert ? " · <span class=\"badge green\">已推送提醒</span>" : "");
     }
+    line.className = "dd-meta";
     box.appendChild(line);
     var tr = trainBest(route);
-    var ftNote = el("div", "muted");
-    ftNote.textContent = isRT
-      ? "往返合计=去程+返程各自含税总价之和, 两段需分别下单"
-      : ((d.dep_time && d.arr_time)
-        ? ("起飞 " + d.dep_time + " · 到达 " + d.arr_time + (d.duration_text ? " · " + d.duration_text : ""))
-        : "起降时刻/飞行时长以下单页为准(当前数据源仅提供每日最低价)");
-    box.appendChild(ftNote);
+    var note = el("div", "dd-meta");
+    if (!hasTime) {
+      var hint = el("span", "dd-hint");
+      hint.textContent = "起降时刻以下单页为准 · 配置Amadeus密钥后国际线自动显示真实时刻";
+      note.appendChild(hint);
+      if (!isRT) note.appendChild(document.createTextNode(" "));
+    }
+    if (isRT) {
+      note.appendChild(document.createTextNode("往返合计=去程+返程各自含税总价之和, 两段需分别下单"));
+    }
+    if (note.childNodes.length) box.appendChild(note);
     if (tr.second) {
       var t = tr.second;
       var ze = trainSeats(t)["二等座"];
@@ -669,7 +706,9 @@
         "<i>" + (combined && q.ret_date
           ? "返程 " + fmtMD(q.ret_date) + " · 往返合计"
           : ((q.flight_no || "") + (q.dep_time ? " · " + q.dep_time : "") +
-             (q.source === "amadeus-fill" ? " · Amadeus补" : ""))) + "</i>";
+             (q.duration_text ? " · " + q.duration_text : "") +
+             (q.source === "amadeus-fill" ? " · Amadeus补" : "") +
+             (q.source === "qunar-intl" ? " · 国际特价" : ""))) + "</i>";
       tip.style.display = "block";
       var bRect = box.getBoundingClientRect();
       tip.style.left = Math.min(Math.max(P[best].x / W * bRect.width - 70, 0), bRect.width - 156) + "px";
@@ -1196,9 +1235,11 @@
 
   var SRC_NAMES = {
     "qunar-calendar": "去哪儿·低价日历",
+    "qunar-intl": "去哪儿·国际特价",
     "12306-train": "12306·车票查询",
     "amadeus-intl": "Amadeus·国际低价",
     "amadeus-fill": "Amadeus·缺价补全",
+    "amadeus-times": "Amadeus·时刻增强",
     "push": "提醒推送"
   };
 
@@ -1342,6 +1383,24 @@
         toast("已发送: " + resp.results.join(", "));
       }).catch(function (e) {
         toast("发送失败: " + e.message);
+      }).finally(function () { btn.disabled = false; });
+    });
+    $("btnAmaTest").addEventListener("click", function () {
+      var btn = $("btnAmaTest");
+      var out = $("amaTestResult");
+      btn.disabled = true;
+      out.className = "muted";
+      out.textContent = "验证中…";
+      post("/api/config", cleanCfgForSave()).then(function () {
+        return post("/api/amadeus-test");
+      }).then(function (resp) {
+        out.className = "ok-note";
+        out.textContent = "✓ " + (resp.message || "密钥有效");
+        toast("Amadeus 连接成功");
+      }).catch(function (e) {
+        out.className = "err-note";
+        out.textContent = "✗ " + e.message;
+        toast("Amadeus 验证失败: " + e.message);
       }).finally(function () { btn.disabled = false; });
     });
     $("btnRefreshLog").addEventListener("click", loadLog);

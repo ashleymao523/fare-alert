@@ -138,3 +138,84 @@ def city_iata(city):
     """Resolve a CN city name to an IATA city/airport code, or None."""
     c = (city or "").strip().replace("市", "")
     return CITY_IATA.get(c)
+
+
+SCHEDULE_CACHE = "amadeus_schedule_cache.json"
+SCHEDULE_TTL = 86400
+
+
+def fetch_schedule_times(session, net_cfg, ama_cfg, from_iata, to_iata,
+                         date_from, date_to, data_dir):
+    """Dep/arr times for a route via Amadeus ONB schedule search.
+
+    One call per month covers every day of that month (quota-friendly).
+    Returns a flat list of schedule rows [{n, dep, arr, dur}, ...];
+    matching by flight number is done by the caller. Best-effort:
+    silently returns [] on any error.
+    """
+    token = get_token(session, net_cfg, ama_cfg, data_dir)
+    import datetime as _dt
+    import hashlib
+    d0 = _dt.date.fromisoformat(date_from)
+    d1 = _dt.date.fromisoformat(date_to)
+    months = []
+    cur = _dt.date(d0.year, d0.month, 1)
+    while cur <= d1:
+        months.append(cur.strftime("%Y-%m"))
+        cur = _dt.date(cur.year + (cur.month == 12), cur.month % 12 + 1, 1)
+    path = os.path.join(data_dir, SCHEDULE_CACHE)
+    now = time.time()
+    cache = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            cache = json.load(f)
+    except Exception:
+        pass
+    out = []
+    for month in months:
+        key = "{}-{}-{}".format(from_iata.upper(), to_iata.upper(), month)
+        ent = cache.get(key)
+        if not (ent and now - float(ent.get("ts", 0)) < SCHEDULE_TTL):
+            try:
+                r = session.get(
+                    _base_url(ama_cfg) + "/v1/schedules",
+                    params={"origin": from_iata.upper(),
+                            "destination": to_iata.upper(),
+                            "month": month},
+                    headers={"Authorization": "Bearer " + token,
+                             "Accept": "application/json"},
+                    timeout=net_cfg.get("timeout_seconds", 25),
+                )
+                r.raise_for_status()
+                j = r.json()
+                if "errors" in j:
+                    raise RuntimeError(j["errors"][0].get("detail", "")[:120])
+                rows = []
+                for it in j.get("data") or []:
+                    sch = it.get("flight") or {}
+                    dep = sch.get("departure") or {}
+                    arr = sch.get("arrival") or {}
+                    if not (dep.get("airport") and arr.get("airport")):
+                        continue
+                    rows.append({
+                        "n": ((sch.get("carrierCode") or "")
+                              + (sch.get("number") or "")).strip(),
+                        "dep": dep.get("scheduledTime", "")[11:16],
+                        "arr": arr.get("scheduledTime", "")[11:16],
+                        "dur": (sch.get("duration") or "").replace("PT", "")
+                               .replace("H", "h").replace("M", "m"),
+                        "from_ap": dep.get("airport"),
+                        "to_ap": arr.get("airport"),
+                    })
+                cache[key] = {"ts": now, "rows": rows}
+                ent = cache[key]
+                try:
+                    os.makedirs(data_dir, exist_ok=True)
+                    with open(path, "w", encoding="utf-8") as f:
+                        json.dump(cache, f, ensure_ascii=False)
+                except Exception:
+                    pass
+            except Exception:
+                continue
+        out.extend(ent.get("rows", []))
+    return out

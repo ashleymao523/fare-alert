@@ -14,8 +14,10 @@ import requests
 from core.alerts import build_message, evaluate, tax_amount, total_price
 from core.config import load_config
 from core.crawl import CrawlRecorder
-from core.flights import airline_name, booking_url, fetch_calendar, merge_fill_deals, window_dates
-from core.intl import city_iata, fetch_intl_calendar
+from core.flights import (airline_name, booking_url, estimate_duration_text,
+                          fetch_calendar, fetch_intl_promo_calendar,
+                          merge_fill_deals, window_dates)
+from core.intl import city_iata, fetch_intl_calendar, fetch_schedule_times
 from core.models import FlightDeal
 from core.notify import push_all
 from core.report import write_report
@@ -59,6 +61,9 @@ def _flight_dict(route, deal, cfg, alert_dates):
     total = total_price(deal.bare_price, tax_cfg)
     if deal.source == "amadeus-intl":
         airline = "国际含税最低价(Amadeus)"
+        bag_default = "国际线托运额度以航司舱位为准"
+    elif deal.source == "qunar-intl":
+        airline = "国际特价(去哪儿日历)"
         bag_default = "国际线托运额度以航司舱位为准"
     elif deal.source == "amadeus-fill":
         airline = "Amadeus缺价补全(含税)"
@@ -126,10 +131,38 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
         fc, tc = route.get("from_city", ""), route.get("to_city", "")
         fi, ti = route.get("from_iata", ""), route.get("to_iata", "")
     if route.get("intl"):
-        if not ama_ready:
-            raise RuntimeError("国际线路已启用但Amadeus密钥未配置")
-        return fetch_intl_calendar(session, net, ama_cfg, cfg.get("tax", {}),
-                                   fi, ti, date_from, date_to, DATA_DIR)
+        # 1) Amadeus full calendar when key ready (richer coverage)
+        deals = []
+        enabled = ((cfg.get("sources") or {}).get("enabled") or {})
+        if ama_ready and enabled.get("amadeus-intl", True):
+            try:
+                deals = fetch_intl_calendar(session, net, ama_cfg,
+                                            cfg.get("tax", {}),
+                                            fi, ti, date_from, date_to, DATA_DIR)
+            except Exception as e:
+                if rec:
+                    rec.step("amadeus-intl", route_id, "fetch calendar",
+                             "error", 0, error=e)
+        # 2) keyless qunar intl promo floor prices (sparse, always merged)
+        t0p = time.time()
+        try:
+            promo = fetch_intl_promo_calendar(session, net, fc, tc,
+                                              date_from, date_to,
+                                              cfg.get("tax", {}))
+            have = {d.date for d in deals}
+            keep = [d for d in promo if d.date not in have]
+            deals.extend(keep)
+            deals.sort(key=lambda x: (x.bare_price, x.date))
+            if rec:
+                rec.step("qunar-intl", route_id, "intl promo calendar", "ok",
+                         (time.time() - t0p) * 1000, count=len(promo))
+        except Exception as e:
+            if rec:
+                rec.step("qunar-intl", route_id, "intl promo calendar", "error",
+                         (time.time() - t0p) * 1000, error=e)
+            if not deals:
+                raise
+        return deals
     deals = fetch_calendar(session, net, fc, tc, date_from, date_to)
 
     # ---- gap-fill: qunar calendar holes via Amadeus cheapest-dates ----
@@ -167,6 +200,47 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
     return deals
 
 
+def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
+                         ama_ready, date_from, date_to,
+                         rec=None, route_id=""):
+    """Fill duration estimates (great-circle, labeled) + real dep/arr times
+    via Amadeus schedules (best-effort, 24h cached, only when key present)."""
+    if not deals:
+        return deals
+    fc, tc = route.get("from_city", ""), route.get("to_city", "")
+    fi = (route.get("from_iata") or "").strip().upper() or city_iata(fc)
+    ti = (route.get("to_iata") or "").strip().upper() or city_iata(tc)
+    by_no = {}
+    if ama_ready and fi and ti and any(d.flight_no for d in deals):
+        t0 = time.time()
+        try:
+            rows = fetch_schedule_times(session, net, ama_cfg, fi, ti,
+                                        date_from, date_to, DATA_DIR)
+            by_no = {r["n"].upper(): r for r in rows if r.get("n")}
+            if rec:
+                rec.step("amadeus-times", route_id, "schedule lookup", "ok",
+                         (time.time() - t0) * 1000, count=len(rows),
+                         cached=bool(rows))
+        except Exception as e:
+            if rec:
+                rec.step("amadeus-times", route_id, "schedule lookup", "skip",
+                         (time.time() - t0) * 1000, error=e)
+    for d in deals:
+        no = (d.flight_no or "").strip()
+        if "/" in no:  # connecting itinerary: estimate with layover
+            if not d.duration_text:
+                d.duration_text = estimate_duration_text(fi, ti, connecting=True)
+            continue
+        row = by_no.get(no.upper())
+        if row:
+            d.dep_time = row.get("dep") or d.dep_time
+            d.arr_time = row.get("arr") or d.arr_time
+            d.duration_text = row.get("dur") or d.duration_text
+        if not d.duration_text:
+            d.duration_text = estimate_duration_text(fi, ti)
+    return deals
+
+
 def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
     """One full cycle. Returns snapshot dict (also written to data/snapshot.json)."""
     rec = CrawlRecorder(DATA_DIR)
@@ -186,15 +260,20 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
         date_to = (today + dt.timedelta(days=int(route.get("window_days", 60)))).isoformat()
         trip_type = "roundtrip" if route.get("trip_type") == "roundtrip" else "oneway"
         intl = bool(route.get("intl"))
-        flight_key = "amadeus-intl" if intl else "qunar-calendar"
         ama_cfg = ((cfg.get("sources") or {}).get("amadeus")) or {}
         ama_ready = bool((ama_cfg.get("client_id") or "").strip()
                          and (ama_cfg.get("client_secret") or "").strip())
-        use_leg_flight = use_flight and (not intl or enabled.get("amadeus-intl", True))
+        flight_key = (("amadeus-intl" if ama_ready else "qunar-intl")
+                      if intl else "qunar-calendar")
+        use_leg_flight = use_flight and (
+            not intl or enabled.get("amadeus-intl", True)
+            or enabled.get("qunar-intl", True))
         route_snap = {
             "id": route.get("id", "route"),
             "from_city": route.get("from_city", ""),
             "to_city": route.get("to_city", ""),
+            "from_iata": (route.get("from_iata") or "").strip().upper(),
+            "to_iata": (route.get("to_iata") or "").strip().upper(),
             "window_days": int(route.get("window_days", 60)),
             "threshold_total": route.get("threshold_total", 500),
             "trip_type": trip_type,
@@ -222,6 +301,9 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 deals = _fetch_route_flights(session, net, route, date_from,
                                              date_to, cfg, ama_cfg, ama_ready, "out",
                                              rec, route_snap["id"])
+                deals = _enrich_flight_times(session, net, route, deals, cfg,
+                                             ama_cfg, ama_ready, date_from, date_to,
+                                             rec, route_snap["id"])
                 rec.step(flight_key, route_snap["id"], "fetch calendar", "ok",
                          (time.time() - t0) * 1000, count=len(deals))
             except Exception as e:
@@ -236,6 +318,9 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                                                         date_from, date_to, cfg,
                                                         ama_cfg, ama_ready, "ret",
                                                         rec, route_snap["id"])
+                    return_deals = _enrich_flight_times(
+                        session, net, route, return_deals, cfg, ama_cfg,
+                        ama_ready, date_from, date_to, rec, route_snap["id"])
                     rec.step(flight_key, route_snap["id"], "fetch return calendar",
                              "ok", (time.time() - t0r) * 1000, count=len(return_deals))
                 except Exception as e:
