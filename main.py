@@ -68,6 +68,9 @@ def _flight_dict(route, deal, cfg, alert_dates):
     elif deal.source == "amadeus-fill":
         airline = "Amadeus缺价补全(含税)"
         bag_default = "以购票页为准"
+    elif deal.source == "nearby-ref":
+        airline = "临近日参考价"
+        bag_default = "以购票页为准"
     else:
         airline = airline_name(code)
         bag_default = "以购票页为准"
@@ -86,10 +89,51 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "arr_time": deal.arr_time,
         "duration_text": deal.duration_text,
         "source": deal.source,
+        "ref_offset": deal.ref_offset if deal.source == "nearby-ref" else 0,
     }
 
 
 FILL_ENABLED_DFT = True
+
+
+def _fill_reference_deals(deals, date_from, date_to, fc, tc,
+                          max_days=7, max_days_far=45):
+    """Attach nearest-priced-date reference deals for gap dates.
+
+    The qunar calendar cache leaves some dates unpriced ("查价"); those need a
+    per-date search that requires a session, which we do not bypass. Instead we
+    mirror the nearest priced date as a clearly-badged display-only reference
+    so the calendar has no blank cells: tight refs within max_days, extended
+    refs within max_days_far when the source has no price at all in the tail
+    (e.g. inventory not loaded yet). ref_offset carries the distance so the UI
+    can label staleness. Reference deals never trigger alerts and never win
+    cheapest/KPI computations.
+    """
+    real = [d for d in deals if d.source != "nearby-ref"]
+    if not real:
+        return deals
+    have = {d.date for d in deals}
+    gaps = [x for x in window_dates(date_from, date_to) if x not in have]
+    if not gaps:
+        return deals
+    by_date = {d.date: d for d in real}
+    dates_sorted = sorted(by_date)
+    refs = []
+    for g in gaps:
+        gd = dt.date.fromisoformat(g)
+        best_d, best_delta = None, None
+        for rd in dates_sorted:
+            delta = abs((dt.date.fromisoformat(rd) - gd).days)
+            if best_delta is None or delta < best_delta:
+                best_d, best_delta = rd, delta
+        if best_d is None or best_delta > max_days_far:
+            continue
+        src = by_date[best_d]
+        refs.append(FlightDeal(
+            date=g, bare_price=src.bare_price, flight_no="",
+            source="nearby-ref", url=booking_url(fc, tc, g),
+            ref_offset=best_delta))
+    return deals + refs
 
 
 def _cached_amadeus_fill(session, net, cfg, ama_cfg, fi, ti,
@@ -304,6 +348,9 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 deals = _enrich_flight_times(session, net, route, deals, cfg,
                                              ama_cfg, ama_ready, date_from, date_to,
                                              rec, route_snap["id"])
+                deals = _fill_reference_deals(
+                    deals, date_from, date_to,
+                    route.get("from_city", ""), route.get("to_city", ""))
                 rec.step(flight_key, route_snap["id"], "fetch calendar", "ok",
                          (time.time() - t0) * 1000, count=len(deals))
             except Exception as e:
@@ -321,6 +368,9 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                     return_deals = _enrich_flight_times(
                         session, net, route, return_deals, cfg, ama_cfg,
                         ama_ready, date_from, date_to, rec, route_snap["id"])
+                    return_deals = _fill_reference_deals(
+                        return_deals, date_from, date_to,
+                        route.get("to_city", ""), route.get("from_city", ""))
                     rec.step(flight_key, route_snap["id"], "fetch return calendar",
                              "ok", (time.time() - t0r) * 1000, count=len(return_deals))
                 except Exception as e:
@@ -349,12 +399,15 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
         else:
             rec.step("12306-train", route_snap["id"], "fetch trains", "disabled", 0)
 
-        alert_deals, combined_meta, combined_by_date = deals, None, {}
+        real_deals = [d for d in deals if d.source != "nearby-ref"]
+        alert_deals, combined_meta, combined_by_date = real_deals, None, {}
         if trip_type == "roundtrip" and deals and return_deals:
             tax_cfg = cfg.get("tax", {})
-            ret_sorted = sorted(return_deals, key=lambda x: (x.bare_price, x.date))
+            ret_sorted = sorted(
+                [d for d in return_deals if d.source != "nearby-ref"],
+                key=lambda x: (x.bare_price, x.date))
             alert_deals = []
-            for d1 in deals:
+            for d1 in real_deals:
                 pick = None
                 for d2 in ret_sorted:
                     if d2.date > d1.date:
@@ -411,8 +464,8 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 route_snap["id"], date_from, date_to,
                 combined_meta["out_date"], combined_meta["ret_date"],
                 int(route_snap["cheapest_total"]), len(below)))
-        elif deals:
-            route_snap["cheapest_total"] = total_price(deals[0].bare_price, cfg.get("tax", {}))
+        elif real_deals:
+            route_snap["cheapest_total"] = total_price(real_deals[0].bare_price, cfg.get("tax", {}))
             log.info("[{}] window {}~{} cheapest {} {} total ¥{} ({} days below threshold)".format(
                 route_snap["id"], date_from, date_to,
                 deals[0].date, deals[0].flight_no,

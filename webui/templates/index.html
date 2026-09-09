@@ -11,18 +11,19 @@
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon.svg">
 <title>FareAlert · 低价出行提醒</title>
-<link rel="stylesheet" href="/static/style.css?v=7">
+<link rel="stylesheet" href="/static/style.css?v=8">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
     <span class="logo">✈️</span>
     <span class="brand-name">FareAlert</span>
-<span class="ver">v0.7</span>
+<span class="ver">v0.8</span>
   </div>
   <nav id="routeTabs" class="route-tabs"></nav>
   <div class="top-actions">
     <button id="btnRun" class="btn primary">立即查询</button>
+    <button id="btnNotify" class="btn" title="开启系统通知，低于心理价位弹提醒">🔔 通知</button>
     <span id="updatedAt" class="updated"></span>
   </div>
 </header>
@@ -38,11 +39,20 @@
   </nav>
 
   <section id="tab-dash" class="tab-panel active">
+    <div id="heroBox" class="hidden"></div>
     <div id="kpis" class="kpis"></div>
     <div id="verdict" class="verdict"></div>
     <div class="card">
-      <div class="card-head"><h3>价格日历</h3><span id="calMeta" class="muted"></span></div>
+      <div class="card-head">
+        <h3>价格日历</h3>
+        <div class="seg">
+          <button id="btnViewCal" class="active">日历</button>
+          <button id="btnViewBars">低价柱状</button>
+        </div>
+        <span id="calMeta" class="muted"></span>
+      </div>
       <div id="calendar" class="calendar"></div>
+      <div id="barsBox" class="bars hidden"></div>
       <div id="dayDetail" class="day-detail hidden"></div>
     </div>
     <div class="card">
@@ -179,7 +189,9 @@
   </footer>
 </main>
 
+<div id="alertFloat" class="alert-float"></div>
+
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=7"></script>
+<script src="/static/app.js?v=8"></script>
 </body>
 </html>

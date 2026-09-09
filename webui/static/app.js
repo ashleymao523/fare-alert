@@ -3,6 +3,7 @@
   var S = {
     cfg: null, secrets: null, sources: null,
     snap: null, routeId: null, selDate: null,
+    calView: "cal",
     cities: null, stations: null,
     _citiesReq: null, _stationsReq: null
   };
@@ -226,11 +227,227 @@
   }
 
   function cheapestFlight(route) {
-    var ds = (route && route.deals) || [];
+    var ds = ((route && route.deals) || []).filter(function (d) {
+      return d.source !== "nearby-ref";
+    });
     if (!ds.length) return null;
     var best = ds[0];
     for (var i = 1; i < ds.length; i++) if (ds[i].total_price < best.total_price) best = ds[i];
     return best;
+  }
+
+  /* ---------- v0.8 城市图鉴 & 路线 Hero ---------- */
+
+  var CITY_INFO = {
+    "杭州": { en: "Hangzhou", emoji: "🌊", desc: "西湖烟雨 · 数字之城", g: "cg1" },
+    "重庆": { en: "Chongqing", emoji: "🌶", desc: "8D魔幻山城 · 火锅之都", g: "cg2" },
+    "成都": { en: "Chengdu", emoji: "🐼", desc: "天府之国 · 悠闲慢生活", g: "cg3" },
+    "北京": { en: "Beijing", emoji: "🏯", desc: "千年古都 · 红墙金瓦", g: "cg4" },
+    "上海": { en: "Shanghai", emoji: "🌃", desc: "魔都 · 外滩万国建筑", g: "cg5" },
+    "西安": { en: "Xi'an", emoji: "🏺", desc: "十三朝古都 · 兵马俑", g: "cg6" },
+    "广州": { en: "Guangzhou", emoji: "🍜", desc: "食在广州 · 早茶之城", g: "cg7" },
+    "深圳": { en: "Shenzhen", emoji: "🌆", desc: "青春之城 · 科技硅谷", g: "cg8" },
+    "昆明": { en: "Kunming", emoji: "🌸", desc: "春城 · 四季花开", g: "cg1" },
+    "厦门": { en: "Xiamen", emoji: "🏝", desc: "海上花园 · 鼓浪屿", g: "cg2" },
+    "三亚": { en: "Sanya", emoji: "🏖", desc: "东方夏威夷 · 椰风海韵", g: "cg3" },
+    "海口": { en: "Haikou", emoji: "🥥", desc: "椰城 · 骑楼老街", g: "cg4" },
+    "丽江": { en: "Lijiang", emoji: "🏔", desc: "艳遇之都 · 古城雪山", g: "cg5" },
+    "大理": { en: "Dali", emoji: "🌾", desc: "风花雪月 · 苍山洱海", g: "cg6" },
+    "长沙": { en: "Changsha", emoji: "🔥", desc: "星城 · 网红美食", g: "cg7" },
+    "武汉": { en: "Wuhan", emoji: "🌸", desc: "江城 · 樱花黄鹤楼", g: "cg8" },
+    "南京": { en: "Nanjing", emoji: "🗿", desc: "六朝古都 · 秦淮风月", g: "cg1" },
+    "青岛": { en: "Qingdao", emoji: "🍺", desc: "红瓦绿树 · 碧海蓝天", g: "cg2" },
+    "哈尔滨": { en: "Harbin", emoji: "❄️", desc: "冰城 · 东方莫斯科", g: "cg5" },
+    "沈阳": { en: "Shenyang", emoji: "🏛", desc: "盛京 · 一朝发祥地", g: "cg6" },
+    "郑州": { en: "Zhengzhou", emoji: "⚒", desc: "中原枢纽 · 商都", g: "cg7" },
+    "洛阳": { en: "Luoyang", emoji: "🌺", desc: "牡丹花城 · 龙门石窟", g: "cg8" },
+    "天津": { en: "Tianjin", emoji: "🎡", desc: "津门 · 曲艺之乡", g: "cg1" },
+    "贵阳": { en: "Guiyang", emoji: "⛰", desc: "林城 · 避暑之都", g: "cg2" },
+    "桂林": { en: "Guilin", emoji: "🛶", desc: "山水甲天下", g: "cg3" },
+    "南宁": { en: "Nanning", emoji: "🌿", desc: "绿城 · 壮乡首府", g: "cg4" },
+    "福州": { en: "Fuzhou", emoji: "🌴", desc: "榕城 · 有福之州", g: "cg5" },
+    "济南": { en: "Jinan", emoji: "⛲", desc: "泉城 · 四面荷花", g: "cg6" },
+    "兰州": { en: "Lanzhou", emoji: "🐂", desc: "金城 · 黄河穿城", g: "cg7" },
+    "乌鲁木齐": { en: "Ürümqi", emoji: "🏔", desc: "亚洲腹地 · 丝路枢纽", g: "cg8" },
+    "拉萨": { en: "Lhasa", emoji: "🕌", desc: "日光城 · 高原圣域", g: "cg5" },
+    "西宁": { en: "Xining", emoji: "lake", desc: "夏都 · 青海门户", g: "cg6" },
+    "香港": { en: "Hong Kong", emoji: "🏙", desc: "东方之珠 · 购物天堂", g: "cg7" },
+    "澳门": { en: "Macau", emoji: "🎰", desc: "东方蒙特卡洛", g: "cg8" },
+    "台北": { en: "Taipei", emoji: "🏮", desc: "夜市之都 · 101大厦", g: "cg1" },
+    "曼谷": { en: "Bangkok", emoji: "🛕", desc: "天使之城 · 街头美食", g: "cg2" },
+    "清迈": { en: "Chiang Mai", emoji: "🌿", desc: "泰北玫瑰 · 慢城", g: "cg3" },
+    "普吉": { en: "Phuket", emoji: "🏝", desc: "安达曼海上明珠", g: "cg4" },
+    "东京": { en: "Tokyo", emoji: "🗼", desc: "霓虹都市 · 樱花动漫", g: "cg5" },
+    "大阪": { en: "Osaka", emoji: "🍣", desc: "天下厨房 · 环球影城", g: "cg6" },
+    "首尔": { en: "Seoul", emoji: "🏙", desc: "韩流之都 · 明洞购物", g: "cg7" },
+    "新加坡": { en: "Singapore", emoji: "🦁", desc: "狮城 · 花园城市", g: "cg8" },
+    "吉隆坡": { en: "Kuala Lumpur", emoji: "🗼", desc: "双子塔 · 美食熔炉", g: "cg1" },
+    "巴厘岛": { en: "Bali", emoji: "🌴", desc: "众神之岛 · 度假天堂", g: "cg2" }
+  };
+
+  function cityInfo(name) {
+    return CITY_INFO[name] ||
+      { en: "", emoji: "📍", desc: "低价好去处 · 点击直达查票", g: "cg0" };
+  }
+
+  function cityCard(name, iata) {
+    var info = cityInfo(name);
+    var c = el("div", "city-visual " + info.g);
+    c.appendChild(el("div", "cv-emoji", info.emoji));
+    c.appendChild(el("div", "cv-name", name));
+    if (info.en) c.appendChild(el("div", "cv-en", info.en + (iata ? " · " + iata : "")));
+    c.appendChild(el("div", "cv-desc", info.desc));
+    return c;
+  }
+
+  function renderHero(route) {
+    var box = $("heroBox");
+    box.textContent = "";
+    if (!route) { box.classList.add("hidden"); return; }
+    box.classList.remove("hidden");
+    var hero = el("div", "hero");
+    var cities = el("div", "hero-cities");
+    cities.appendChild(cityCard(route.from_city, route.from_iata));
+    var mid = el("div", "hero-mid");
+    mid.appendChild(el("div", "hero-plane", route.trip_type === "roundtrip" ? "⇄" : "✈"));
+    mid.appendChild(el("div", "hero-dir", route.trip_type === "roundtrip" ? "往返" : (route.intl ? "国际单程" : "单程")));
+    cities.appendChild(mid);
+    cities.appendChild(cityCard(route.to_city, route.to_iata));
+    hero.appendChild(cities);
+    var chips = el("div", "hero-chips");
+    var chipsDef = [
+      ["📅", "未来 " + (route.window_days || 60) + " 天"],
+      ["🎯", "心理价位 " + fmtMoney(route.threshold_total)],
+      ["💰", "当前最低 " + (route.cheapest_total ? fmtMoney(route.cheapest_total) : "待查")],
+      ["🔔", route.days_below + " 天低于阈值"]
+    ];
+    chipsDef.forEach(function (cd) {
+      var chip = el("span", "hero-chip");
+      chip.appendChild(el("span", "hc-ico", cd[0]));
+      chip.appendChild(document.createTextNode(cd[1]));
+      chips.appendChild(chip);
+    });
+    hero.appendChild(chips);
+    box.appendChild(hero);
+  }
+
+  /* ---------- v0.8 Skyscanner 式低价条形视图 ---------- */
+
+  function renderBars(route) {
+    var box = $("barsBox");
+    box.textContent = "";
+    if (!route) return;
+    var isRT = !!(route.trip_type === "roundtrip" && route.combined_by_date);
+    var days = dayList(route);
+    var prices = [], map = {};
+    (route.deals || []).forEach(function (d) {
+      var t = isRT && (route.combined_by_date || {})[d.date]
+        ? route.combined_by_date[d.date].total : d.total_price;
+      if (!map[d.date] || t < map[d.date].t) map[d.date] = { t: t, d: d };
+      prices.push(t);
+    });
+    prices = prices.filter(function (p) { return p > 0; }).sort(function (a, b) { return a - b; });
+    if (!prices.length) return;
+    var pmin = prices[0], pmax = prices[prices.length - 1];
+    var hint = el("div", "bars-hint",
+      "柱越高越便宜 · 绿=低于心理价位 · 斜纹=临近日参考价 · 点击柱看详情");
+    box.appendChild(hint);
+    var wrap = el("div", "bars-wrap");
+    days.forEach(function (ds) {
+      var m = map[ds];
+      var col = el("div", "bar-col");
+      var track = el("div", "bar-track");
+      if (m) {
+        var ratio = pmax > pmin
+          ? 0.25 + 0.75 * (1 - (m.t - pmin) / (pmax - pmin)) : 1;
+        var bar = el("div", "bar" +
+          (m.t < route.threshold_total ? " cheap" : "") +
+          (m.d.source === "nearby-ref" ? " ref" : ""));
+        bar.style.height = Math.round(ratio * 100) + "%";
+        track.appendChild(bar);
+        col.title = ds + " " + weekday(ds) + " · " + fmtMoney(m.t) +
+          (m.d.source === "nearby-ref"
+            ? " (临近日参考" + (m.d.ref_offset ? " · 距" + m.d.ref_offset + "天" : "") + ")" : "");
+        col.appendChild(el("div", "bar-price", fmtMoney(m.t)));
+        col.addEventListener("click", function () {
+          S.selDate = ds;
+          renderCalendar(route);
+          renderBars(route);
+          renderDayDetail(route);
+          var dd = $("dayDetail");
+          if (dd && dd.scrollIntoView) dd.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      }
+      col.appendChild(track);
+      var wd = parseDate(ds).getDay();
+      col.appendChild(el("div", "bar-date" + ((wd === 0 || wd === 6) ? " wk" : ""), fmtMD(ds)));
+      if (ds === S.selDate) col.classList.add("selected");
+      wrap.appendChild(col);
+    });
+    box.appendChild(wrap);
+  }
+
+  function renderCalendarView(route) {
+    var cal = $("calendar"), bars = $("barsBox");
+    var showBars = S.calView === "bars";
+    cal.classList.toggle("hidden", showBars);
+    bars.classList.toggle("hidden", !showBars);
+    var bCal = $("btnViewCal"), bBar = $("btnViewBars");
+    if (bCal && bBar) {
+      bCal.classList.toggle("active", !showBars);
+      bBar.classList.toggle("active", showBars);
+    }
+    if (showBars) renderBars(route); else renderCalendar(route);
+  }
+
+  /* ---------- v0.8 移动端低价提醒横幅 ---------- */
+
+  function checkMobileAlerts(route) {
+    var banner = $("alertFloat");
+    if (!banner || !route || !route.deals) return;
+    var key = "farealert_seen_" + route.id;
+    var seen = {};
+    try { seen = JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) {}
+    var fresh = (route.deals || []).filter(function (d) {
+      return d.below && d.source !== "nearby-ref" && !seen[d.date];
+    });
+    if (!fresh.length) { banner.classList.remove("show"); return; }
+    var cheapest = fresh[0];
+    for (var i = 1; i < fresh.length; i++) {
+      if (fresh[i].total_price < cheapest.total_price) cheapest = fresh[i];
+    }
+    fresh.forEach(function (d) { seen[d.date] = 1; });
+    try { localStorage.setItem(key, JSON.stringify(seen)); } catch (e) {}
+    banner.textContent = "";
+    var icon = el("span", "af-icon", "🔔");
+    var body = el("div", "af-body");
+    body.appendChild(el("div", "af-title",
+      route.from_city + "→" + route.to_city + " 有 " + fresh.length + " 天低于心理价位"));
+    body.appendChild(el("div", "af-sub",
+      "最低 " + fmtMoney(cheapest.total_price) + " · " + cheapest.date + " " + weekday(cheapest.date)));
+    var btnGo = el("button", "af-btn", "查看");
+    btnGo.addEventListener("click", function () {
+      S.selDate = cheapest.date;
+      renderDash();
+      banner.classList.remove("show");
+      var dd = $("dayDetail");
+      if (dd && dd.scrollIntoView) dd.scrollIntoView({ behavior: "smooth" });
+    });
+    var btnX = el("button", "af-close", "×");
+    btnX.addEventListener("click", function () { banner.classList.remove("show"); });
+    banner.appendChild(icon); banner.appendChild(body);
+    banner.appendChild(btnGo); banner.appendChild(btnX);
+    banner.classList.add("show");
+    if (navigator.vibrate) { try { navigator.vibrate([120, 60, 120]); } catch (e) {} }
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      try {
+        new Notification("FareAlert 低价提醒", {
+          body: route.from_city + "→" + route.to_city + " 最低 " +
+            fmtMoney(cheapest.total_price) + " (" + cheapest.date + ")",
+          icon: "/static/icon.svg"
+        });
+      } catch (e) {}
+    }
   }
 
   function trainBest(route) {
@@ -452,6 +669,7 @@
     dayList(route).forEach(function (ds) {
       var d = map[ds];
       var cls = "day " + (d ? heatClass(d.total_price, route.threshold_total) : "empty");
+      if (d && d.source === "nearby-ref") cls += " ref";
       if (ds === S.selDate) cls += " selected";
       var c = el("div", cls);
       c.appendChild(el("div", "d-date", fmtMD(ds)));
@@ -508,6 +726,9 @@
       title.appendChild(el("span", "badge sky", "Amadeus"));
     } else if (d.source === "amadeus-fill") {
       title.appendChild(el("span", "badge amber", "Amadeus补"));
+    } else if (d.source === "nearby-ref") {
+      title.appendChild(el("span", "badge gray",
+        d.ref_offset ? "临近日参考 · 距" + d.ref_offset + "天" : "临近日参考"));
     }
     box.appendChild(title);
 
@@ -548,6 +769,12 @@
     box.appendChild(line);
     var tr = trainBest(route);
     var note = el("div", "dd-meta");
+    if (d.source === "nearby-ref") {
+      var refHint = el("span", "dd-hint");
+      refHint.textContent = "该日期源端无缓存价，显示" + (d.ref_offset ? "距此 " + d.ref_offset + " 天的最近有价日参考" : "最近有价日的参考价") + " · 点击下方按钮直达查当日实际价格";
+      note.appendChild(refHint);
+      note.appendChild(document.createTextNode(" "));
+    }
     if (!hasTime) {
       var hint = el("span", "dd-hint");
       hint.textContent = "起降时刻以下单页为准 · 配置Amadeus密钥后国际线自动显示真实时刻";
@@ -813,9 +1040,10 @@
   function renderDash() {
     var route = curRoute();
     $("updatedAt").textContent = S.snap ? ("更新于 " + String(S.snap.updated_at || "").replace("T", " ")) : "";
+    renderHero(route);
     renderKpis(route);
     renderVerdict(route);
-    renderCalendar(route);
+    renderCalendarView(route);
     renderDayDetail(route);
     renderTrend(route);
     var isRT = !!(route && route.trip_type === "roundtrip");
@@ -826,6 +1054,7 @@
       : "绿点=低于心理价位 · 悬停看每日明细";
     if (isRT) renderTrendInto("trendReturn", (route && route.return_deals) || [], route, TREND_IDS_RET, false);
     renderTrains(route);
+    checkMobileAlerts(route);
   }
 
   function renderRouteTabs() {
@@ -1240,6 +1469,7 @@
     "amadeus-intl": "Amadeus·国际低价",
     "amadeus-fill": "Amadeus·缺价补全",
     "amadeus-times": "Amadeus·时刻增强",
+    "nearby-ref": "临近日参考价",
     "push": "提醒推送"
   };
 
@@ -1405,6 +1635,24 @@
     });
     $("btnRefreshLog").addEventListener("click", loadLog);
     $("btnRefreshCrawl").addEventListener("click", loadCrawl);
+    $("btnViewCal").addEventListener("click", function () {
+      S.calView = "cal";
+      renderCalendarView(curRoute());
+    });
+    $("btnViewBars").addEventListener("click", function () {
+      S.calView = "bars";
+      renderCalendarView(curRoute());
+    });
+    $("btnNotify").addEventListener("click", function () {
+      if (typeof Notification === "undefined") {
+        toast("此浏览器不支持系统通知");
+        return;
+      }
+      Notification.requestPermission().then(function (p) {
+        toast(p === "granted" ? "系统通知已开启，低于心理价位会弹提醒" :
+              p === "denied" ? "通知被浏览器拒绝，请在设置中允许" : "通知未开启");
+      });
+    });
   }
 
   function init() {

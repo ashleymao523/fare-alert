@@ -43,10 +43,15 @@ checks = {
     "行程类型选择": "行程类型" in h,
     "国际Amadeus配置卡": "amaSecret" in h,
     "往返返程趋势容器": "trendReturn" in h,
-    "浅色主题版本": ">v0.7" in h,
+    "浅色主题版本": ">v0.8" in h,
 "缺价补全徽标(详情卡)": ('d.source === "amadeus-fill"' in appjs) and ("badge amber" in appjs),
 "缺价补全徽标(最优卡)": appjs.count("amadeus-fill") >= 5,
 "补全数据源名": '"amadeus-fill": "Amadeus' in appjs,
+"v0.8城市图鉴Hero": ("city-visual" in h) and ("cv-desc" in h),
+"v0.8柱状图视图": ("barsBox" in h) and ("bar-track" in appjs),
+    "v0.8移动提醒横幅": ("alertFloat" in h) and ("alert-float" in h),
+"v0.8临近日参考价": appjs.count("nearby-ref") >= 5,
+"v0.8通知按钮": "btnNotify" in h,
 }
 bad = 0
 for k, v in checks.items():
