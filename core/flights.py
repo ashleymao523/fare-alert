@@ -92,16 +92,17 @@ def airline_name(code):
 
 
 def booking_url(from_city, to_city, date):
+    """Qunar H5 flight-list deep link (params match the SPA's own routing:
+    depCity/arrCity/goDate + from=touch_index_search, verified against
+    home.js searchFlight()). The legacy /h5/flight/oneway?fromCity=... URL
+    was retired server-side and 302'd back to the flight home page."""
     q = urllib.parse.urlencode({
-        "fromCity": from_city,
-        "toCity": to_city,
-        "fromDate": date,
-        "toDate": "",
-        "child": "0",
-        "baby": "0",
-        "cabinType": "0",
+        "depCity": from_city,
+        "arrCity": to_city,
+        "goDate": date,
+        "from": "touch_index_search",
     })
-    return "https://m.flight.qunar.com/h5/flight/oneway?" + q
+    return "https://m.flight.qunar.com/ncs/page/flightlist?" + q
 
 
 def fetch_calendar(session, net_cfg, from_city, to_city, date_from, date_to):
@@ -146,11 +147,16 @@ def fetch_calendar(session, net_cfg, from_city, to_city, date_from, date_to):
 
 
 def intl_booking_url(from_city, to_city, date):
+    """Qunar H5 intl flight-list deep link (same routing family as the
+    domestic list; the intl SPA pushes /ncs/page/interlist with the same
+    depCity/arrCity/goDate query params)."""
     q = urllib.parse.urlencode({
-        "fromCity": from_city, "toCity": to_city,
-        "fromDate": date, "toDate": "", "child": "0", "baby": "0",
+        "depCity": from_city,
+        "arrCity": to_city,
+        "goDate": date,
+        "from": "touch_index_search",
     })
-    return "https://m.flight.qunar.com/h5flight/intl/oneway?" + q
+    return "https://m.flight.qunar.com/ncs/page/interlist?" + q
 
 
 def fetch_intl_promo_calendar(session, net_cfg, from_city, to_city,
