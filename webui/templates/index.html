@@ -11,14 +11,14 @@
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon.svg">
 <title>FareAlert · 低价出行提醒</title>
-<link rel="stylesheet" href="/static/style.css?v=9">
+<link rel="stylesheet" href="/static/style.css?v=10">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
     <span class="logo">✈️</span>
     <span class="brand-name">FareAlert</span>
-<span class="ver">v0.9</span>
+<span class="ver">v0.10</span>
   </div>
   <nav id="routeTabs" class="route-tabs"></nav>
   <div class="top-actions">
@@ -40,6 +40,7 @@
 
   <section id="tab-dash" class="tab-panel active">
     <div id="heroBox" class="hidden"></div>
+    <div id="destIntel" class="card hidden"></div>
     <div id="kpis" class="kpis"></div>
     <div id="verdict" class="verdict"></div>
     <div class="card">
@@ -58,6 +59,10 @@
     <div class="card">
       <div class="card-head"><h3 id="trendTitle">价格趋势</h3><span id="trendHint" class="muted">靛蓝曲线=每日最低总价 · 绿点=低于心理价位 · 灰虚线=均价 · 悬停看明细</span></div>
       <div id="trend" class="trend"></div>
+    </div>
+    <div class="card" id="top5Card">
+      <div class="card-head"><h3>🗓 低价日 TOP5</h3><span class="muted">按含税总价升序 · 点「直达购票」跳去哪儿当日列表页</span></div>
+      <div id="top5Box"></div>
     </div>
     <div class="card hidden" id="returnTrendCard">
       <div class="card-head">
@@ -100,7 +105,7 @@
       <div id="sourcesList"></div>
     </div>
     <div class="card">
-      <div class="card-head"><h3>🌍 国际航班数据源 (Amadeus)</h3><span class="muted">免费 · 2分钟注册 · 配置后解锁国际全日历+真实起降时刻</span></div>
+      <div class="card-head"><h3>🌍 国际航班数据源 (Amadeus) <span class="badge sky">可选</span></h3><span class="muted">免费 · 配置后解锁国际全日历+真实起降时刻 · 核心功能零依赖</span></div>
       <div class="form-grid">
         <label>环境
           <select id="amaEnv">
@@ -120,7 +125,8 @@
         </ol>
         <span class="muted">
           配置后解锁: 国际航线全日期含税日历(Amadeus) · 真实起降时刻/飞行时长(时刻增强) · 国内缺价日补全(缓存24h保护额度) ·<br>
-          未配置时: 国内线照常可用; 国际线自动降级为「去哪儿国际特价日历」(免Key, 稀疏但真实)
+          未配置时: 国内线照常可用; 国际线自动降级为「去哪儿国际特价日历」(免Key, 稀疏但真实)<br>
+          🔒 隐私提示: Amadeus 注册需工作邮箱并校验所属公司; 若介意可跳过, 本工具的国内监控/天气/汇率/推送全部免注册可用
         </span>
         <div class="row-btns">
           <button id="btnAmaTest" class="btn">测试连接</button>
@@ -208,6 +214,6 @@
 <div id="alertFloat" class="alert-float"></div>
 
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=9"></script>
+<script src="/static/app.js?v=10"></script>
 </body>
 </html>

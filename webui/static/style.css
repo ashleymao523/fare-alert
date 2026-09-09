@@ -555,11 +555,11 @@ input::placeholder { color: var(--faint); }
   border-radius: 7px; display: flex; align-items: flex-end; overflow: hidden;
 }
 .bar {
-  width: 100%; border-radius: 7px 7px 3px 3px;
-  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  width: 100%; border-radius: 4px 4px 2px 2px;
+  background: #a8c0f0;
   min-height: 8px; transition: height 0.3s ease;
 }
-.bar.cheap { background: linear-gradient(180deg, #10b981, var(--green)); }
+.bar.cheap { background: #188038; }
 .bar.ref {
   background: repeating-linear-gradient(45deg, #c3cbd9, #c3cbd9 4px, #e2e7f0 4px, #e2e7f0 8px);
 }
@@ -599,6 +599,38 @@ input::placeholder { color: var(--faint); }
   border: 0; background: transparent; color: #fff; opacity: 0.7;
   font-size: 20px; cursor: pointer; padding: 4px; line-height: 1;
 }
+
+/* ---- v0.10 TOP5 低价表 + 目的地情报 ---- */
+.top5-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.top5-table th {
+  text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 700;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px;
+  border-bottom: 1.5px solid var(--line-soft);
+}
+.top5-table td {
+  padding: 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle;
+}
+.top5-table tr:last-child td { border-bottom: 0; }
+.top5-table tr:hover td { background: rgba(79, 70, 229, 0.04); }
+.top5-table .price-td b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.top5-table .price-td[data-below="1"] b { color: #188038; }
+.top5-table .cheap-row td { background: rgba(24, 128, 56, 0.045); }
+
+.intel-body { display: flex; flex-direction: column; gap: 12px; }
+.intel-title { font-size: 12px; font-weight: 700; color: var(--muted); }
+.wx-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.wx-day {
+  flex: 0 0 86px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 10px 6px; border: 1px solid var(--line-soft); border-radius: 10px;
+  background: #fafbfe;
+}
+.wx-ico { font-size: 22px; line-height: 1; }
+.wx-t { font-size: 13px; font-variant-numeric: tabular-nums; }
+.wx-t b { font-size: 13.5px; }
+.wx-date { font-size: 10.5px; color: var(--muted); }
+.wx-label { font-size: 10.5px; color: var(--muted); text-align: center; }
+.fx-line { font-size: 13px; padding: 8px 12px; background: #fafbfe; border-radius: 8px; border: 1px solid var(--line-soft); }
+.fx-line b { font-variant-numeric: tabular-nums; }
 
 @media (max-width: 640px) {
   .wrap { padding: 14px 12px 40px; }

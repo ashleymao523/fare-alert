@@ -11,6 +11,7 @@ import requests
 from flask import Flask, jsonify, render_template, request, send_from_directory
 
 import main as runner
+from core import travel
 from core.config import load_config, save_config
 from core.cities import CITIES
 from core.intl import get_token as amadeus_get_token
@@ -309,6 +310,40 @@ def api_city_photo():
     except Exception:
         pass
     return jsonify({"ok": bool(photo), "photo": photo})
+
+
+@app.get("/api/dest-intel")
+def api_dest_intel():
+    """Destination weather + FX strip (both keyless public APIs, cached).
+
+    ?route=<id> reads the snapshot to resolve to_city; intl routes also get
+    a CNY->local rate line. Domestic routes skip FX entirely.
+    """
+    rid = (request.args.get("route") or "").strip()[:64]
+    snap = _read_json(SNAPSHOT_PATH, None) or {}
+    route = next((r for r in (snap.get("routes") or [])
+                  if r.get("id") == rid), None)
+    if not route:
+        return jsonify({"ok": False, "error": "route not found"}), 404
+    city = route.get("to_city") or ""
+    cfg = load_config(CONFIG_PATH)
+    net = cfg.get("network", {})
+    try:
+        session = runner.make_session(cfg)
+    except Exception:
+        session = requests
+    out = {"ok": True, "city": city, "intl": bool(route.get("intl"))}
+    try:
+        out["weather"] = travel.dest_weather(session, city, net)
+    except Exception:
+        out["weather"] = None
+    cur = travel.CURRENCY_BY_CITY.get(city) if route.get("intl") else None
+    if cur:
+        try:
+            out["fx"] = travel.cny_rate(session, cur, net)
+        except Exception:
+            out["fx"] = None
+    return jsonify(out)
 
 
 @app.get("/api/config")
