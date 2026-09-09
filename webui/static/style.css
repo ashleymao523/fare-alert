@@ -454,6 +454,30 @@ input::placeholder { color: var(--faint); }
   content: ""; position: absolute; inset: 0;
   background: radial-gradient(120% 90% at 85% 10%, rgba(255,255,255,0.22), transparent 55%);
   pointer-events: none;
+  z-index: 1;
+}
+.cv-photo {
+  position: absolute; inset: 0; z-index: 0;
+  background-size: cover; background-position: center;
+  opacity: 0; transition: opacity 0.5s ease;
+}
+.cv-scene {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 62%;
+  z-index: 0; pointer-events: none;
+}
+.cv-scene svg { width: 100%; height: 100%; display: block; }
+.city-visual.has-photo .cv-photo { opacity: 1; }
+.city-visual.has-photo .cv-scene { opacity: 0; }
+.city-visual.has-photo::before {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(180deg, rgba(8,12,20,0.10) 25%, rgba(8,12,20,0.74) 100%);
+}
+.city-visual > *:not(.cv-photo):not(.cv-scene):not(.cv-src) {
+  position: relative; z-index: 2;
+}
+.cv-src {
+  position: absolute; right: 10px; bottom: 8px; z-index: 3;
+  font-size: 10px; opacity: 0.62; letter-spacing: 0.3px;
 }
 .cg0 { background: linear-gradient(135deg, #475569, #1e293b); }
 .cg1 { background: linear-gradient(135deg, #0ea5e9, #0369a1); }
@@ -529,6 +553,12 @@ input::placeholder { color: var(--faint); }
 }
 .bar-date { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
 .bar-date.wk { color: var(--red); font-weight: 700; }
+
+.ft-pend {
+  display: inline-block; margin-left: 8px; padding: 2px 9px;
+  border-radius: 999px; background: var(--line-soft); color: var(--muted);
+  font-size: 10.5px; font-weight: 600; vertical-align: 1px;
+}
 
 .calendar .day.ref {
   border: 1.5px dashed var(--faint);

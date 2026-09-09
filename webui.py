@@ -4,6 +4,9 @@ import json
 import os
 import re
 import threading
+import time
+
+import requests
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
 
@@ -257,6 +260,55 @@ def api_stations():
         return jsonify({"stations": out})
     except Exception as e:
         return jsonify({"ok": False, "error": "车站库获取失败: " + str(e)}), 503
+
+
+CITY_PHOTO_TTL = 86400
+CITY_PHOTO_CACHE = os.path.join(DATA_DIR, "city_photos.json")
+
+
+@app.get("/api/city-photo")
+def api_city_photo():
+    """City hero photo from Wikipedia REST summary (free, no key, cached 24h).
+
+    Returns {"ok": true, "photo": url}; misses are negative-cached so the
+    frontend gradient fallback stays until tomorrow's retry.
+    """
+    name = (request.args.get("name") or "").strip()[:32]
+    if not name:
+        return jsonify({"ok": False}), 400
+    now = time.time()
+    cache = _read_json(CITY_PHOTO_CACHE, {})
+    ent = cache.get(name)
+    if ent and now - float(ent.get("ts", 0)) < CITY_PHOTO_TTL:
+        return jsonify({"ok": bool(ent.get("photo")), "photo": ent.get("photo")})
+    photo = None
+    try:
+        cfg = load_config(CONFIG_PATH)
+        timeout = min(8, cfg.get("network", {}).get("timeout_seconds", 8) or 8)
+        r = requests.get(
+            "https://zh.wikipedia.org/api/rest_v1/page/summary/" +
+            requests.utils.quote(name),
+            headers={"User-Agent": "FareAlert/0.8 personal fare tracker"},
+            timeout=timeout)
+        if r.status_code == 200:
+            data = r.json()
+            thumb = ((data.get("thumbnail") or {}).get("source")) or ""
+            orig = data.get("originalimage") or {}
+            if thumb and (orig.get("width") or 0) > 800:
+                photo = thumb.replace("/320px-", "/800px-")
+            elif thumb:
+                photo = orig.get("source") or thumb
+            elif orig.get("source") and (orig.get("width") or 0) <= 1200:
+                photo = orig["source"]
+    except Exception:
+        photo = None
+    cache[name] = {"ts": now, "photo": photo}
+    try:
+        with open(CITY_PHOTO_CACHE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+    except Exception:
+        pass
+    return jsonify({"ok": bool(photo), "photo": photo})
 
 
 @app.get("/api/config")

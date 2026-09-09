@@ -52,6 +52,11 @@ checks = {
     "v0.8移动提醒横幅": ("alertFloat" in h) and ("alert-float" in h),
 "v0.8临近日参考价": appjs.count("nearby-ref") >= 5,
 "v0.8通知按钮": "btnNotify" in h,
+"v0.8城市海报剪影": ("cv-scene" in h) and ("citySceneSvg" in appjs),
+"v0.8参考价≈标记": "≈" in h,
+"v0.8时刻待接入徽标": ("ft-pend" in appjs) and ("时刻待接入" in appjs),
+"v0.8城市图片接口": ("city-photo" in appjs) and ("api/city-photo" in appjs),
+"v0.8 Amadeus域名修正": "developers.amadeus.com" in h,
 }
 bad = 0
 for k, v in checks.items():

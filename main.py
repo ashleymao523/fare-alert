@@ -272,6 +272,12 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
     for d in deals:
         no = (d.flight_no or "").strip()
         if "/" in no:  # connecting itinerary: estimate with layover
+            segs = [s.strip().upper() for s in no.split("/") if s.strip()]
+            seg_rows = [by_no.get(s) for s in segs]
+            if seg_rows and seg_rows[0]:
+                d.dep_time = seg_rows[0].get("dep") or d.dep_time
+            if seg_rows and seg_rows[-1]:
+                d.arr_time = seg_rows[-1].get("arr") or d.arr_time
             if not d.duration_text:
                 d.duration_text = estimate_duration_text(fi, ti, connecting=True)
             continue

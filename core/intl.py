@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Amadeus Self-Service: cheapest-date search for international flight calendars.
 
-Free test tier (developer.amadeus.com) is enough for personal low-fare alerts:
+Free test tier (developers.amadeus.com) is enough for personal low-fare alerts:
 one call covers a whole date range with tax-included lowest price per day.
 """
 import json

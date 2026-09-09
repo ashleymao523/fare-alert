@@ -270,7 +270,7 @@
     "兰州": { en: "Lanzhou", emoji: "🐂", desc: "金城 · 黄河穿城", g: "cg7" },
     "乌鲁木齐": { en: "Ürümqi", emoji: "🏔", desc: "亚洲腹地 · 丝路枢纽", g: "cg8" },
     "拉萨": { en: "Lhasa", emoji: "🕌", desc: "日光城 · 高原圣域", g: "cg5" },
-    "西宁": { en: "Xining", emoji: "lake", desc: "夏都 · 青海门户", g: "cg6" },
+    "西宁": { en: "Xining", emoji: "🌊", desc: "夏都 · 青海门户", g: "cg6" },
     "香港": { en: "Hong Kong", emoji: "🏙", desc: "东方之珠 · 购物天堂", g: "cg7" },
     "澳门": { en: "Macau", emoji: "🎰", desc: "东方蒙特卡洛", g: "cg8" },
     "台北": { en: "Taipei", emoji: "🏮", desc: "夜市之都 · 101大厦", g: "cg1" },
@@ -290,13 +290,143 @@
       { en: "", emoji: "📍", desc: "低价好去处 · 点击直达查票", g: "cg0" };
   }
 
+  // offline "travel poster" silhouettes per city scene type
+  var CITY_SCENES = {
+    "杭州": "lake", "西宁": "lake", "大理": "lake", "武汉": "skyline",
+    "重庆": "skyline", "上海": "skyline", "深圳": "skyline", "广州": "skyline",
+    "香港": "skyline", "台北": "skyline", "首尔": "skyline", "新加坡": "skyline",
+    "天津": "skyline", "沈阳": "skyline", "贵阳": "skyline", "南宁": "skyline",
+    "福州": "skyline", "济南": "skyline", "长沙": "skyline",
+    "北京": "temple", "西安": "temple", "南京": "temple", "洛阳": "temple",
+    "郑州": "temple", "澳门": "temple",
+    "三亚": "beach", "海口": "beach", "厦门": "beach", "普吉": "beach",
+    "巴厘岛": "beach",
+    "丽江": "mountain", "昆明": "mountain", "桂林": "mountain",
+    "乌鲁木齐": "mountain", "拉萨": "mountain", "兰州": "mountain",
+    "东京": "towers", "大阪": "towers", "哈尔滨": "towers", "曼谷": "towers",
+    "清迈": "towers", "青岛": "towers", "吉隆坡": "towers"
+  };
+
+  var INK = "rgba(8,14,24,0.38)", LIGHT = "rgba(255,255,255,0.30)";
+
+  function citySceneSvg(type) {
+    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 220 80");
+    svg.setAttribute("preserveAspectRatio", "xMidYMax slice");
+    function path(d, fill) {
+      var p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      p.setAttribute("d", d); p.setAttribute("fill", fill || INK);
+      svg.appendChild(p); return p;
+    }
+    function circle(cx, cy, r, fill) {
+      var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("cx", cx); c.setAttribute("cy", cy); c.setAttribute("r", r);
+      c.setAttribute("fill", fill || LIGHT);
+      svg.appendChild(c); return c;
+    }
+    if (type === "lake") {
+      circle(178, 20, 9);
+      path("M0,64 Q40,36 85,62 Q120,40 150,60 Q185,42 220,64 L220,80 L0,80 Z");
+      path("M152,64 L160,44 L168,64 Z");
+      path("M150,64 H170 L168,68 H154 Z");
+      path("M24,72 q8,-3 16,0 t16,0 t16,0", "none");
+      svg.lastChild.setAttribute("stroke", "rgba(255,255,255,0.35)");
+      svg.lastChild.setAttribute("stroke-width", "1.6");
+      svg.lastChild.setAttribute("fill", "none");
+    } else if (type === "skyline") {
+      circle(30, 18, 8);
+      [[8,14,34],[26,10,50],[40,16,26],[60,12,58],[76,9,40],[88,13,30],
+       [106,11,66],[121,8,48],[133,12,36],[150,10,54],[164,14,28],
+       [180,9,44],[193,12,60],[208,10,32]].forEach(function (b) {
+        path("M" + b[0] + ",80 V" + (80 - b[2]) + " h" + b[1] + " V80 Z");
+      });
+      path("M111,14 V4 M117,14 V6", "none");
+      svg.lastChild.setAttribute("stroke", INK);
+      svg.lastChild.setAttribute("stroke-width", "2");
+    } else if (type === "temple") {
+      circle(178, 20, 9);
+      path("M52,42 Q100,20 148,42 L134,47 H66 Z");
+      path("M62,56 Q100,40 138,56 L126,60 H74 Z");
+      path("M84,47 h32 v9 H84 Z");
+      path("M60,66 h80 v5 H60 Z");
+      path("M54,73 h92 v7 H54 Z");
+      path("M96,30 h8 v-8 h-8 Z");
+    } else if (type === "beach") {
+      circle(48, 20, 11, "rgba(255,214,140,0.55)");
+      path("M168,80 Q163,58 172,42", "none");
+      svg.lastChild.setAttribute("stroke", INK);
+      svg.lastChild.setAttribute("stroke-width", "4");
+      svg.lastChild.setAttribute("fill", "none");
+      svg.lastChild.setAttribute("stroke-linecap", "round");
+      [[172,42,-20,-10],[172,42,-6,-16],[172,42,10,-14],[172,42,20,-4],[172,42,-16,2]]
+        .forEach(function (f) {
+          path("M" + f[0] + "," + f[1] + " q" + f[2] + "," + f[3] + " " +
+               (f[2] * 2) + "," + (f[3] + 2), "none");
+          svg.lastChild.setAttribute("stroke", INK);
+          svg.lastChild.setAttribute("stroke-width", "3");
+          svg.lastChild.setAttribute("fill", "none");
+          svg.lastChild.setAttribute("stroke-linecap", "round");
+        });
+      path("M0,70 q14,-5 28,0 t28,0 t28,0 t28,0 t28,0 t28,0 t28,0 L220,80 H0 Z",
+           "rgba(8,14,24,0.22)");
+    } else if (type === "mountain") {
+      circle(176, 18, 8);
+      path("M0,80 L44,30 L66,52 L98,18 L138,62 L162,38 L220,80 Z");
+      path("M92,26 L98,18 L104,26 L100,29 L96,29 Z", "rgba(255,255,255,0.5)");
+      path("M39,37 L44,30 L49,37 L46,39 L42,39 Z", "rgba(255,255,255,0.5)");
+    } else {  // towers
+      circle(40, 18, 8);
+      path("M78,80 V30 L88,18 L98,30 V80 Z");
+      path("M122,80 V30 L132,18 L142,30 V80 Z");
+      path("M92,48 h26 v5 H92 Z");
+      path("M86,26 L88,18 L90,26 Z");
+      path("M130,26 L132,18 L134,26 Z");
+      path("M60,80 h100 v4 H60 Z", "rgba(8,14,24,0.22)");
+    }
+    return svg;
+  }
+
+  var CITY_PHOTOS = {};  // name -> {ok, photo} memory cache per session
+
+  function loadCityPhoto(name, card) {
+    if (CITY_PHOTOS[name] !== undefined) {
+      applyCityPhoto(card, CITY_PHOTOS[name]);
+      return;
+    }
+    fetch("/api/city-photo?name=" + encodeURIComponent(name))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        CITY_PHOTOS[name] = d && d.ok ? d : { ok: false };
+        applyCityPhoto(card, CITY_PHOTOS[name]);
+      })
+      .catch(function () { CITY_PHOTOS[name] = { ok: false }; });
+  }
+
+  function applyCityPhoto(card, d) {
+    if (!card || !d || !d.ok || !d.photo) return;
+    var probe = new Image();
+    probe.onload = function () {
+      if (!card.isConnected) return;
+      var ph = el("div", "cv-photo");
+      ph.style.backgroundImage = "url('" + d.photo + "')";
+      card.insertBefore(ph, card.firstChild);
+      card.classList.add("has-photo");
+      card.appendChild(el("div", "cv-src", "图 Wikipedia"));
+    };
+    probe.src = d.photo;
+  }
+
   function cityCard(name, iata) {
     var info = cityInfo(name);
     var c = el("div", "city-visual " + info.g);
+    var scene = el("div", "cv-scene");
+    scene.appendChild(citySceneSvg(CITY_SCENES[name] || "skyline"));
+    c.appendChild(scene);
     c.appendChild(el("div", "cv-emoji", info.emoji));
     c.appendChild(el("div", "cv-name", name));
     if (info.en) c.appendChild(el("div", "cv-en", info.en + (iata ? " · " + iata : "")));
     c.appendChild(el("div", "cv-desc", info.desc));
+    loadCityPhoto(name, c);
     return c;
   }
 
@@ -368,7 +498,8 @@
         col.title = ds + " " + weekday(ds) + " · " + fmtMoney(m.t) +
           (m.d.source === "nearby-ref"
             ? " (临近日参考" + (m.d.ref_offset ? " · 距" + m.d.ref_offset + "天" : "") + ")" : "");
-        col.appendChild(el("div", "bar-price", fmtMoney(m.t)));
+        col.appendChild(el("div", "bar-price",
+          (m.d.source === "nearby-ref" ? "≈" : "") + fmtMoney(m.t)));
         col.addEventListener("click", function () {
           S.selDate = ds;
           renderCalendar(route);
@@ -677,7 +808,9 @@
       var wd = parseDate(ds).getDay();
       if (wd === 0 || wd === 6) wk.classList.add("wk");
       c.appendChild(wk);
-      c.appendChild(el("div", "d-price", d ? fmtMoney(d.total_price) : "—"));
+      c.appendChild(el("div", "d-price", d
+        ? (d.source === "nearby-ref" ? "≈" : "") + fmtMoney(d.total_price)
+        : "—"));
       if (d) c.addEventListener("click", function () {
         S.selDate = (S.selDate === ds) ? null : ds;
         renderCalendar(route);
@@ -742,6 +875,7 @@
     var mid = el("div", "ft-mid");
     var durBox = el("div");
     durBox.appendChild(el("span", "ft-dur", connecting ? "中转 · " + (d.duration_text || "全程时刻待查") : (d.duration_text || "飞行时长待查")));
+    if (!hasTime) durBox.appendChild(el("span", "ft-pend", "时刻待接入"));
     mid.appendChild(durBox);
     var path = el("div", "ft-path");
     path.appendChild(el("span", "ft-plane", "\u2708"));
