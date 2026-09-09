@@ -228,7 +228,7 @@
 
   function cheapestFlight(route) {
     var ds = ((route && route.deals) || []).filter(function (d) {
-      return d.source !== "nearby-ref";
+      return d.source !== "nearby-ref" && d.source !== "interp";
     });
     if (!ds.length) return null;
     var best = ds[0];
@@ -492,14 +492,16 @@
           ? 0.25 + 0.75 * (1 - (m.t - pmin) / (pmax - pmin)) : 1;
         var bar = el("div", "bar" +
           (m.t < route.threshold_total ? " cheap" : "") +
-          (m.d.source === "nearby-ref" ? " ref" : ""));
+          (m.d.source === "nearby-ref" ? " ref" : "") +
+          (m.d.source === "interp" ? " interp" : ""));
         bar.style.height = Math.round(ratio * 100) + "%";
         track.appendChild(bar);
         col.title = ds + " " + weekday(ds) + " · " + fmtMoney(m.t) +
           (m.d.source === "nearby-ref"
-            ? " (临近日参考" + (m.d.ref_offset ? " · 距" + m.d.ref_offset + "天" : "") + ")" : "");
+            ? " (临近日参考" + (m.d.ref_offset ? " · 距" + m.d.ref_offset + "天" : "") + ")"
+            : m.d.source === "interp" ? " (两侧真实价插值估算)" : "");
         col.appendChild(el("div", "bar-price",
-          (m.d.source === "nearby-ref" ? "≈" : "") + fmtMoney(m.t)));
+          (m.d.source === "nearby-ref" || m.d.source === "interp" ? "≈" : "") + fmtMoney(m.t)));
         col.addEventListener("click", function () {
           S.selDate = ds;
           renderCalendar(route);
@@ -540,7 +542,7 @@
     var seen = {};
     try { seen = JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) {}
     var fresh = (route.deals || []).filter(function (d) {
-      return d.below && d.source !== "nearby-ref" && !seen[d.date];
+      return d.below && d.source !== "nearby-ref" && d.source !== "interp" && !seen[d.date];
     });
     if (!fresh.length) { banner.classList.remove("show"); return; }
     var cheapest = fresh[0];
@@ -801,6 +803,7 @@
       var d = map[ds];
       var cls = "day " + (d ? heatClass(d.total_price, route.threshold_total) : "empty");
       if (d && d.source === "nearby-ref") cls += " ref";
+      if (d && d.source === "interp") cls += " interp";
       if (ds === S.selDate) cls += " selected";
       var c = el("div", cls);
       c.appendChild(el("div", "d-date", fmtMD(ds)));
@@ -809,7 +812,7 @@
       if (wd === 0 || wd === 6) wk.classList.add("wk");
       c.appendChild(wk);
       c.appendChild(el("div", "d-price", d
-        ? (d.source === "nearby-ref" ? "≈" : "") + fmtMoney(d.total_price)
+        ? (d.source === "nearby-ref" || d.source === "interp" ? "≈" : "") + fmtMoney(d.total_price)
         : "—"));
       if (d) c.addEventListener("click", function () {
         S.selDate = (S.selDate === ds) ? null : ds;
@@ -862,6 +865,8 @@
     } else if (d.source === "nearby-ref") {
       title.appendChild(el("span", "badge gray",
         d.ref_offset ? "临近日参考 · 距" + d.ref_offset + "天" : "临近日参考"));
+    } else if (d.source === "interp") {
+      title.appendChild(el("span", "badge amber", "两侧真实价插值"));
     }
     box.appendChild(title);
 
@@ -907,6 +912,13 @@
       var refHint = el("span", "dd-hint");
       refHint.textContent = "该日期源端无缓存价，显示" + (d.ref_offset ? "距此 " + d.ref_offset + " 天的最近有价日参考" : "最近有价日的参考价") + " · 点击下方按钮直达查当日实际价格";
       note.appendChild(refHint);
+      note.appendChild(document.createTextNode(" "));
+    }
+    if (d.source === "interp") {
+      var interpHint = el("span", "dd-hint");
+      interpHint.textContent = "该日期源端无缓存价，价格为两侧真实价插值估算" +
+        (d.flight_no ? " · 参考航班 " + d.flight_no + "（时刻以购票页为准）" : "") + " · 点击下方按钮直达查当日实际价格";
+      note.appendChild(interpHint);
       note.appendChild(document.createTextNode(" "));
     }
     if (!hasTime) {
@@ -960,8 +972,13 @@
     function X(i) { return L + (W - L - R) * (pts.length === 1 ? 0.5 : i / (pts.length - 1)); }
     function Y(v) { return T + (H - T - B) * (1 - (v - lo) / (hi - lo)); }
     var P = pts.map(function (p, i) { return { x: X(i), y: Y(p.total_price) }; });
-    var minIdx = 0;
-    for (var m = 0; m < pts.length; m++) if (pts[m].total_price < pts[minIdx].total_price) minIdx = m;
+    function isEst(p) { return p.source === "nearby-ref" || p.source === "interp"; }
+    var realIdxs = [];
+    for (var r0 = 0; r0 < pts.length; r0++) if (!isEst(pts[r0])) realIdxs.push(r0);
+    var pool = realIdxs.length ? realIdxs : pts.map(function (p, i) { return i; });
+    var minIdx = pool[0];
+    for (var m = 1; m < pool.length; m++)
+      if (pts[pool[m]].total_price < pts[minIdx].total_price) minIdx = pool[m];
 
     function smooth(d) {
       // Monotone cubic (Fritsch-Carlson): Skyscanner-grade curve, no overshoot
@@ -1019,8 +1036,9 @@
     s.push("<text x=\"" + (L + 8) + "\" y=\"" + (Y(th) - 8).toFixed(1) + "\" fill=\"#d93025\" font-size=\"10.5\" font-weight=\"600\">心理价位 ¥" + Math.round(th) + "</text>");
 
     var sum = 0;
-    for (var a = 0; a < pts.length; a++) sum += pts[a].total_price;
-    var avg = sum / pts.length;
+    var avgPool = realIdxs.length ? realIdxs : pts.map(function (p, i) { return i; });
+    for (var a = 0; a < avgPool.length; a++) sum += pts[avgPool[a]].total_price;
+    var avg = sum / avgPool.length;
     s.push("<g><line x1=\"" + L + "\" y1=\"" + Y(avg).toFixed(1) + "\" x2=\"" + (W - R) + "\" y2=\"" + Y(avg).toFixed(1) +
            "\" stroke=\"#9aa0a6\" stroke-width=\"1\" stroke-dasharray=\"1.5 4.5\" stroke-linecap=\"round\"/>" +
            "<text x=\"" + (W - R - 4) + "\" y=\"" + (Y(avg) - 6).toFixed(1) + "\" fill=\"#5f6368\" font-size=\"10.5\" font-weight=\"600\" text-anchor=\"end\">均价 ¥" + Math.round(avg) + "</text></g>");
@@ -1037,10 +1055,17 @@
       if (k === minIdx) continue;
       var p = pts[k];
       var below = p.total_price < th;
+      if (p.source === "interp") {
+        s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) +
+               "\" r=\"3\" fill=\"#ffffff\" stroke=\"#d97706\" stroke-width=\"1.8\" stroke-dasharray=\"2.4 1.8\"><title>" +
+               p.date + " " + weekday(p.date) + " ≈" + fmtMoney(p.total_price) + " 插值估算</title></circle>");
+        continue;
+      }
       if (below) s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) + "\" r=\"5\" fill=\"rgba(24,128,56,0.12)\"/>");
       s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) +
              "\" r=\"" + (below ? 3.2 : 2.2) + "\" fill=\"" + (below ? "#188038" : "#9aa0a6") + "\" stroke=\"#ffffff\" stroke-width=\"1.2\"><title>" +
-             p.date + " " + weekday(p.date) + " " + fmtMoney(p.total_price) + " " + (p.flight_no || "") + "</title></circle>");
+             p.date + " " + weekday(p.date) + " " + fmtMoney(p.total_price) + " " +
+             (p.source === "nearby-ref" ? "临近日参考" : "") + " " + (p.flight_no || "") + "</title></circle>");
     }
 
     var mp = pts[minIdx];
@@ -1079,6 +1104,8 @@
           : ((q.flight_no || "") + (q.dep_time ? " · " + q.dep_time : "") +
              (q.duration_text ? " · " + q.duration_text : "") +
              (q.source === "amadeus-fill" ? " · Amadeus补" : "") +
+             (q.source === "interp" ? " · 插值估算" : "") +
+             (q.source === "nearby-ref" ? " · 临近日参考" : "") +
              (q.source === "qunar-intl" ? " · 国际特价" : ""))) + "</i>";
       tip.style.display = "block";
       var bRect = box.getBoundingClientRect();
@@ -1129,6 +1156,8 @@
         }
       }
       return cp;
+    }).filter(function (d) {
+      return d.source !== "nearby-ref" && d.source !== "interp";
     }).sort(function (a, b) { return a.total_price - b.total_price; }).slice(0, 5);
     var tbl = el("table", "top5-table");
     tbl.innerHTML = "<thead><tr><th>#</th><th>日期</th><th>总价</th><th>航班</th><th>托运</th><th></th></tr></thead>";
@@ -1699,6 +1728,7 @@
     "amadeus-fill": "Amadeus·缺价补全",
     "amadeus-times": "Amadeus·时刻增强",
     "nearby-ref": "临近日参考价",
+    "interp": "插值估算价",
     "push": "提醒推送"
   };
 

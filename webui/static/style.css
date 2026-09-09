@@ -563,6 +563,9 @@ input::placeholder { color: var(--faint); }
 .bar.ref {
   background: repeating-linear-gradient(45deg, #c3cbd9, #c3cbd9 4px, #e2e7f0 4px, #e2e7f0 8px);
 }
+.bar.interp {
+  background: repeating-linear-gradient(45deg, #e7b96a, #e7b96a 4px, #f2dcbb 4px, #f2dcbb 8px);
+}
 .bar-date { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
 .bar-date.wk { color: var(--red); font-weight: 700; }
 
@@ -577,6 +580,12 @@ input::placeholder { color: var(--faint); }
   background: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(152, 162, 179, 0.06) 5px, rgba(152, 162, 179, 0.06) 10px);
 }
 .calendar .day.ref .d-price { color: var(--muted); }
+
+.calendar .day.interp {
+  border: 1.5px dashed rgba(217, 119, 6, 0.45);
+  background: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(217, 119, 6, 0.05) 5px, rgba(217, 119, 6, 0.05) 10px);
+}
+.calendar .day.interp .d-price { color: var(--amber); }
 
 .alert-float {
   position: fixed; left: 50%; bottom: 18px; transform: translate(-50%, 140%);

@@ -46,7 +46,7 @@ checks = {
     "行程类型选择": "行程类型" in h,
     "国际Amadeus配置卡": "amaSecret" in h,
     "往返返程趋势容器": "trendReturn" in h,
-    "浅色主题版本": ">v0.10" in h,
+    "浅色主题版本": ">v0.11" in h,
 "缺价补全徽标(详情卡)": ('d.source === "amadeus-fill"' in appjs) and ("badge amber" in appjs),
 "缺价补全徽标(最优卡)": appjs.count("amadeus-fill") >= 5,
 "补全数据源名": '"amadeus-fill": "Amadeus' in appjs,
@@ -67,6 +67,15 @@ checks = {
 "v0.10天气情报渲染": ("wx-day" in appjs) and ("dest-intel" in appjs),
 "v0.10汇率条": "per_1000" in appjs,
 "v0.10 Amadeus隐私提示": ("隐私提示" in h) and ("可选" in h),
+"v0.11插值补全后端": ("max_interp_span" in open("main.py", encoding="utf-8").read()) and ("source=\"interp\"" in open("main.py", encoding="utf-8").read()),
+"v0.11插值过滤(最优/提醒)": appjs.count('d.source !== "interp"') >= 3,
+"v0.11插值徽标(详情卡)": ("两侧真实价插值" in appjs) and ("badge amber" in appjs),
+"v0.11插值日历样式": ("day.interp" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read()),
+"v0.11插值柱状样式": ("bar.interp" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read()),
+"v0.11趋势插值空心点": ("插值估算</title>" in appjs) and ("2.4 1.8" in appjs),
+"v0.11趋势最低仅真实价": ("realIdxs" in appjs) and ("var minIdx = pool[0]" in appjs),
+"v0.11数据源名interp": '"interp": "插值估算价"' in appjs,
+"v0.11 TOP5排除估算价": ("renderTop5" in appjs) and ("interp" in appjs[appjs.index("function renderTop5"):appjs.index("function renderTop5") + 2500]),
 }
 bad = 0
 for k, v in checks.items():

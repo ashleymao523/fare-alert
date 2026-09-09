@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """FareAlert: monitor lowest flight fares (tax-included) vs student train fares."""
 import argparse
+import bisect
 import datetime as dt
 import json
 import logging
@@ -30,6 +31,7 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 
 FILL_CACHE_FILE = "amadeus_fill_cache.json"
 FILL_CACHE_TTL = 86400  # gap-fill needs daily freshness, not per-poll
+NON_REAL_SOURCES = ("nearby-ref", "interp")
 
 
 def setup_logging():
@@ -71,6 +73,9 @@ def _flight_dict(route, deal, cfg, alert_dates):
     elif deal.source == "nearby-ref":
         airline = "临近日参考价"
         bag_default = "以购票页为准"
+    elif deal.source == "interp":
+        airline = "两侧真实价插值(估)"
+        bag_default = "以购票页为准"
     else:
         airline = airline_name(code)
         bag_default = "以购票页为准"
@@ -109,7 +114,7 @@ def _fill_reference_deals(deals, date_from, date_to, fc, tc,
     can label staleness. Reference deals never trigger alerts and never win
     cheapest/KPI computations.
     """
-    real = [d for d in deals if d.source != "nearby-ref"]
+    real = [d for d in deals if d.source not in NON_REAL_SOURCES]
     if not real:
         return deals
     have = {d.date for d in deals}
@@ -119,8 +124,30 @@ def _fill_reference_deals(deals, date_from, date_to, fc, tc,
     by_date = {d.date: d for d in real}
     dates_sorted = sorted(by_date)
     refs = []
+    max_interp_span = 14  # interp only between two real prices <= 14d apart
     for g in gaps:
         gd = dt.date.fromisoformat(g)
+        # Two-sided neighbor interpolation first (clearly badged, display-only)
+        i = bisect.bisect_left(dates_sorted, g)
+        left = dates_sorted[i - 1] if i > 0 else None
+        right = dates_sorted[i] if i < len(dates_sorted) else None
+        if left and right:
+            dl = (gd - dt.date.fromisoformat(left)).days
+            dr = (dt.date.fromisoformat(right) - gd).days
+            if dl + dr <= max_interp_span:
+                lo, hi = by_date[left], by_date[right]
+                w = dl / float(dl + dr)
+                price = int(round(
+                    (lo.bare_price * w + hi.bare_price * (1.0 - w)) / 10.0) * 10)
+                near = lo if dl <= dr else hi
+                refs.append(FlightDeal(
+                    date=g, bare_price=price, flight_no=near.flight_no,
+                    dep_time=near.dep_time, arr_time=near.arr_time,
+                    duration_text=near.duration_text,
+                    source="interp", url=booking_url(fc, tc, g),
+                    ref_offset=0))
+                continue
+        # Fall back to the nearest priced date as a reference
         best_d, best_delta = None, None
         for rd in dates_sorted:
             delta = abs((dt.date.fromisoformat(rd) - gd).days)
@@ -405,12 +432,13 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
         else:
             rec.step("12306-train", route_snap["id"], "fetch trains", "disabled", 0)
 
-        real_deals = [d for d in deals if d.source != "nearby-ref"]
+        real_deals = [d for d in deals if d.source not in NON_REAL_SOURCES]
         alert_deals, combined_meta, combined_by_date = real_deals, None, {}
         if trip_type == "roundtrip" and deals and return_deals:
             tax_cfg = cfg.get("tax", {})
             ret_sorted = sorted(
-                [d for d in return_deals if d.source != "nearby-ref"],
+                [d for d in return_deals
+                 if d.source not in NON_REAL_SOURCES],
                 key=lambda x: (x.bare_price, x.date))
             alert_deals = []
             for d1 in real_deals:
