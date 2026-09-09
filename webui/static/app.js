@@ -964,13 +964,30 @@
     for (var m = 0; m < pts.length; m++) if (pts[m].total_price < pts[minIdx].total_price) minIdx = m;
 
     function smooth(d) {
-      if (d.length < 3) return "M " + d[0].x.toFixed(1) + " " + d[0].y.toFixed(1) + " L " + d[d.length - 1].x.toFixed(1) + " " + d[d.length - 1].y.toFixed(1);
+      // Monotone cubic (Fritsch-Carlson): Skyscanner-grade curve, no overshoot
+      var n = d.length;
+      if (!n) return "";
+      if (n < 3) return "M " + d[0].x.toFixed(1) + " " + d[0].y.toFixed(1) +
+        (n === 2 ? " L " + d[1].x.toFixed(1) + " " + d[1].y.toFixed(1) : "");
+      var dx = [], ms = [];
+      for (var q = 0; q < n - 1; q++) {
+        dx.push(d[q + 1].x - d[q].x);
+        ms.push((d[q + 1].y - d[q].y) / (dx[q] || 1));
+      }
+      var t = [ms[0]];
+      for (var k = 1; k < n - 1; k++) t.push((ms[k - 1] * dx[k] + ms[k] * dx[k - 1]) / (dx[k - 1] + dx[k]));
+      t.push(ms[n - 2]);
+      for (var k2 = 0; k2 < n - 1; k2++) {
+        if (ms[k2] === 0) { t[k2] = 0; t[k2 + 1] = 0; continue; }
+        var a = t[k2] / ms[k2], b = t[k2 + 1] / ms[k2], s = a * a + b * b;
+        if (s > 9) { var tau = 3 / Math.sqrt(s); t[k2] = tau * a * ms[k2]; t[k2 + 1] = tau * b * ms[k2]; }
+      }
       var path = "M " + d[0].x.toFixed(1) + " " + d[0].y.toFixed(1);
-      for (var i = 0; i < d.length - 1; i++) {
-        var p0 = d[Math.max(0, i - 1)], p1 = d[i], p2 = d[i + 1], p3 = d[Math.min(d.length - 1, i + 2)];
-        path += " C " + (p1.x + (p2.x - p0.x) / 6).toFixed(1) + " " + (p1.y + (p2.y - p0.y) / 6).toFixed(1) +
-             ", " + (p2.x - (p3.x - p1.x) / 6).toFixed(1) + " " + (p2.y - (p3.y - p1.y) / 6).toFixed(1) +
-             ", " + p2.x.toFixed(1) + " " + p2.y.toFixed(1);
+      for (var i2 = 0; i2 < n - 1; i2++) {
+        var h = (d[i2 + 1].x - d[i2].x) / 3;
+        path += " C " + (d[i2].x + h).toFixed(1) + " " + (d[i2].y + t[i2] * h).toFixed(1) +
+             ", " + (d[i2 + 1].x - h).toFixed(1) + " " + (d[i2 + 1].y - t[i2 + 1] * h).toFixed(1) +
+             ", " + d[i2 + 1].x.toFixed(1) + " " + d[i2 + 1].y.toFixed(1);
       }
       return path;
     }
@@ -979,12 +996,17 @@
 
     var s = [];
     s.push("<svg id=\"" + ids.svg + "\" viewBox=\"0 0 " + W + " " + H + "\" xmlns=\"http://www.w3.org/2000/svg\">");
-    s.push("<defs><linearGradient id=\"" + ids.area + "\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">" +
-           "<stop offset=\"0%\" stop-color=\"#2563eb\" stop-opacity=\"0.20\"/>" +
-           "<stop offset=\"100%\" stop-color=\"#2563eb\" stop-opacity=\"0\"/></linearGradient>" +
+    var glowId = ids.line + "Glow";
+    s.push("<defs>" +
+           "<linearGradient id=\"" + ids.area + "\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">" +
+           "<stop offset=\"0%\" stop-color=\"#4f46e5\" stop-opacity=\"0.15\"/>" +
+           "<stop offset=\"100%\" stop-color=\"#4f46e5\" stop-opacity=\"0\"/></linearGradient>" +
            "<linearGradient id=\"" + ids.line + "\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">" +
-           "<stop offset=\"0%\" stop-color=\"#2563eb\"/><stop offset=\"55%\" stop-color=\"#0ea5e9\"/>" +
-           "<stop offset=\"100%\" stop-color=\"#06b6d4\"/></linearGradient></defs>");
+           "<stop offset=\"0%\" stop-color=\"#4338ca\"/><stop offset=\"45%\" stop-color=\"#4f46e5\"/>" +
+           "<stop offset=\"100%\" stop-color=\"#0ea5e9\"/></linearGradient>" +
+           "<filter id=\"" + glowId + "\" x=\"-20%\" y=\"-40%\" width=\"140%\" height=\"180%\">" +
+           "<feDropShadow dx=\"0\" dy=\"5\" stdDeviation=\"5\" flood-color=\"#4f46e5\" flood-opacity=\"0.22\"/></filter>" +
+           "</defs>");
 
     var stepX = pts.length > 1 ? (W - L - R) / (pts.length - 1) : 0;
     for (var w = 0; w < pts.length; w++) {
@@ -1009,8 +1031,14 @@
     s.push("<g><rect x=\"" + (L + 8) + "\" y=\"" + (Y(th) - 21).toFixed(1) + "\" width=\"100\" height=\"17\" rx=\"8.5\" fill=\"rgba(220,38,38,0.10)\"/>" +
            "<text x=\"" + (L + 58) + "\" y=\"" + (Y(th) - 8.5).toFixed(1) + "\" fill=\"#dc2626\" font-size=\"10.5\" font-weight=\"600\" text-anchor=\"middle\">心理价位 ¥" + Math.round(th) + "</text></g>");
 
+    var sum = 0;
+    for (var a = 0; a < pts.length; a++) sum += pts[a].total_price;
+    var avg = sum / pts.length;
     s.push("<path d=\"" + areaPath + "\" fill=\"url(#" + ids.area + ")\"/>");
-    s.push("<path d=\"" + linePath + "\" fill=\"none\" stroke=\"url(#" + ids.line + ")\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+    s.push("<g><line x1=\"" + L + "\" y1=\"" + Y(avg).toFixed(1) + "\" x2=\"" + (W - R) + "\" y2=\"" + Y(avg).toFixed(1) +
+           "\" stroke=\"#94a3b8\" stroke-width=\"1.2\" stroke-dasharray=\"1.5 4.5\" stroke-linecap=\"round\"/>" +
+           "<text x=\"" + (W - R - 4) + "\" y=\"" + (Y(avg) - 6).toFixed(1) + "\" fill=\"#94a3b8\" font-size=\"10.5\" font-weight=\"600\" text-anchor=\"end\">均价 ¥" + Math.round(avg) + "</text></g>");
+    s.push("<path d=\"" + linePath + "\" fill=\"none\" stroke=\"url(#" + ids.line + ")\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\" filter=\"url(#" + glowId + ")\"/>");
 
     var lstep = Math.max(1, Math.ceil(pts.length / 8));
     for (var j = 0; j < pts.length; j++) {
@@ -1023,23 +1051,23 @@
       if (k === minIdx) continue;
       var p = pts[k];
       var below = p.total_price < th;
-      if (below) s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) + "\" r=\"7\" fill=\"rgba(22,163,74,0.16)\"/>");
+      if (below) s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) + "\" r=\"6.5\" fill=\"rgba(16,185,129,0.14)\"/>");
       s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) +
-             "\" r=\"" + (below ? 4 : 2.5) + "\" fill=\"" + (below ? "#16a34a" : "#98a2b3") + "\" stroke=\"#ffffff\" stroke-width=\"1.5\"><title>" +
+             "\" r=\"" + (below ? 3.8 : 2) + "\" fill=\"" + (below ? "#10b981" : "#b9c2d4") + "\" opacity=\"" + (below ? 1 : 0.85) + "\" stroke=\"#ffffff\" stroke-width=\"" + (below ? 1.5 : 1) + "\"><title>" +
              p.date + " " + weekday(p.date) + " " + fmtMoney(p.total_price) + " " + (p.flight_no || "") + "</title></circle>");
     }
 
     var mp = pts[minIdx];
     var mx = X(minIdx), my = Y(mp.total_price);
-    var mLabel = (combined ? "最低合计 ¥" : "最低 ¥") + Math.round(mp.total_price);
-    var mW = mLabel.length * 7.5 + 18, mX = Math.min(Math.max(mx - mW / 2, L), W - R - mW);
+    var mLabel = (combined ? "最低合计 ¥" : "最低 ¥") + Math.round(mp.total_price) + " · " + fmtMD(mp.date);
+    var mW = mLabel.length * 7 + 20, mX = Math.min(Math.max(mx - mW / 2, L), W - R - mW);
     s.push("<g>" +
-           "<circle cx=\"" + mx.toFixed(1) + "\" cy=\"" + my.toFixed(1) + "\" r=\"8\" fill=\"rgba(22,163,74,0.22)\">" +
-           "<animate attributeName=\"r\" values=\"7;12;7\" dur=\"2.4s\" repeatCount=\"indefinite\"/>" +
-           "<animate attributeName=\"opacity\" values=\"0.8;0.1;0.8\" dur=\"2.4s\" repeatCount=\"indefinite\"/></circle>" +
-           "<circle cx=\"" + mx.toFixed(1) + "\" cy=\"" + my.toFixed(1) + "\" r=\"4.5\" fill=\"#16a34a\" stroke=\"#ffffff\" stroke-width=\"1.5\"/>" +
-           "<rect x=\"" + mX.toFixed(1) + "\" y=\"" + (my - 33).toFixed(1) + "\" width=\"" + mW.toFixed(1) + "\" height=\"21\" rx=\"10.5\" fill=\"#16a34a\"/>" +
-           "<text x=\"" + (mX + mW / 2).toFixed(1) + "\" y=\"" + (my - 18).toFixed(1) + "\" fill=\"#ffffff\" font-size=\"11.5\" font-weight=\"700\" text-anchor=\"middle\">" + mLabel + "</text></g>");
+           "<circle cx=\"" + mx.toFixed(1) + "\" cy=\"" + my.toFixed(1) + "\" r=\"8\" fill=\"rgba(16,185,129,0.22)\">" +
+           "<animate attributeName=\"r\" values=\"7;13;7\" dur=\"2.8s\" repeatCount=\"indefinite\"/>" +
+           "<animate attributeName=\"opacity\" values=\"0.7;0.05;0.7\" dur=\"2.8s\" repeatCount=\"indefinite\"/></circle>" +
+           "<circle cx=\"" + mx.toFixed(1) + "\" cy=\"" + my.toFixed(1) + "\" r=\"5\" fill=\"#10b981\" stroke=\"#ffffff\" stroke-width=\"2\"/>" +
+           "<rect x=\"" + mX.toFixed(1) + "\" y=\"" + (my - 35).toFixed(1) + "\" width=\"" + mW.toFixed(1) + "\" height=\"22\" rx=\"11\" fill=\"#059669\"/>" +
+           "<text x=\"" + (mX + mW / 2).toFixed(1) + "\" y=\"" + (my - 19.5).toFixed(1) + "\" fill=\"#ffffff\" font-size=\"11.5\" font-weight=\"700\" text-anchor=\"middle\">" + mLabel + "</text></g>");
 
     s.push("<line id=\"" + ids.cross + "\" x1=\"0\" y1=\"" + T + "\" x2=\"0\" y2=\"" + (H - B) + "\" stroke=\"rgba(23,32,64,0.35)\" stroke-width=\"1\" stroke-dasharray=\"3 3\" visibility=\"hidden\"/>");
     s.push("<circle id=\"" + ids.dot + "\" r=\"5\" fill=\"#0ea5e9\" stroke=\"#ffffff\" stroke-width=\"1.5\" visibility=\"hidden\"/>");

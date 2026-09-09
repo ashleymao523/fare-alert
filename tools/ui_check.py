@@ -16,6 +16,9 @@ checks = {
     "最优卡片动车": "动车二等 (" in h,
     "最优卡片学生": "学生动车" in h,
     "趋势SVG平滑曲线": ("<path" in h) and ("areaGrad" in h) and ("trend-tip" in h),
+    "趋势均价参考线": "均价 ¥" in h,
+    "趋势发光滤镜": "Glow" in h,
+    "趋势最低价日期旗标": re.search(r"最低 ¥\d+ · ", h) is not None,
     "阈值虚线标签": "心理价位" in h,
     "列车对比表格": "二等座" in h,
     "硬卧席位chip": "硬卧" in h,
@@ -43,7 +46,7 @@ checks = {
     "行程类型选择": "行程类型" in h,
     "国际Amadeus配置卡": "amaSecret" in h,
     "往返返程趋势容器": "trendReturn" in h,
-    "浅色主题版本": ">v0.8" in h,
+    "浅色主题版本": ">v0.9" in h,
 "缺价补全徽标(详情卡)": ('d.source === "amadeus-fill"' in appjs) and ("badge amber" in appjs),
 "缺价补全徽标(最优卡)": appjs.count("amadeus-fill") >= 5,
 "补全数据源名": '"amadeus-fill": "Amadeus' in appjs,
@@ -57,6 +60,8 @@ checks = {
 "v0.8时刻待接入徽标": ("ft-pend" in appjs) and ("时刻待接入" in appjs),
 "v0.8城市图片接口": ("city-photo" in appjs) and ("api/city-photo" in appjs),
 "v0.8 Amadeus域名修正": "developers.amadeus.com" in h,
+"v0.9 Amadeus注册直达": "developers.amadeus.com/register" in h,
+"v0.9 推送注册指引": ("sct.ftqq.com" in h) and ("apps.apple.com" in h),
 }
 bad = 0
 for k, v in checks.items():

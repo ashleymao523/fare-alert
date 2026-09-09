@@ -408,6 +408,18 @@ input::placeholder { color: var(--faint); }
 .ama-guide .ok-note { color: var(--green-d); font-weight: 600; }
 .ama-guide .err-note { color: var(--red); font-weight: 600; }
 
+.push-guide {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px; margin-bottom: 14px;
+}
+.push-ch {
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--card2); padding: 10px 13px;
+  font-size: 12px; line-height: 1.7; color: var(--muted);
+}
+.push-ch b { display: block; color: var(--text-2); font-size: 12.5px; margin-bottom: 2px; }
+.push-ch a { font-weight: 600; white-space: nowrap; }
+
 /* ---------- alerts history ---------- */
 .alert-item {
   border: 1px solid var(--line); border-radius: var(--r-md);

@@ -11,14 +11,14 @@
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon.svg">
 <title>FareAlert · 低价出行提醒</title>
-<link rel="stylesheet" href="/static/style.css?v=8">
+<link rel="stylesheet" href="/static/style.css?v=9">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
     <span class="logo">✈️</span>
     <span class="brand-name">FareAlert</span>
-<span class="ver">v0.8</span>
+<span class="ver">v0.9</span>
   </div>
   <nav id="routeTabs" class="route-tabs"></nav>
   <div class="top-actions">
@@ -56,7 +56,7 @@
       <div id="dayDetail" class="day-detail hidden"></div>
     </div>
     <div class="card">
-      <div class="card-head"><h3 id="trendTitle">价格趋势</h3><span id="trendHint" class="muted">绿点=低于心理价位 · 悬停看每日明细</span></div>
+      <div class="card-head"><h3 id="trendTitle">价格趋势</h3><span id="trendHint" class="muted">靛蓝曲线=每日最低总价 · 绿点=低于心理价位 · 灰虚线=均价 · 悬停看明细</span></div>
       <div id="trend" class="trend"></div>
     </div>
     <div class="card hidden" id="returnTrendCard">
@@ -114,8 +114,8 @@
       <div class="ama-guide" style="margin-top:12px">
         <b>配置步骤</b>
         <ol>
-          <li>打开 <a href="https://developers.amadeus.com/" target="_blank">developers.amadeus.com</a> 免费注册(邮箱验证, 无需信用卡; 注意域名是复数 developers)</li>
-          <li>注册后进入 <a href="https://developers.amadeus.com/my-apps" target="_blank">My Apps</a> → Create new app</li>
+          <li>点 <a href="https://developers.amadeus.com/register" target="_blank">① 打开注册页</a> 免费注册(邮箱验证, 无需信用卡; 注意域名是复数 developers)</li>
+          <li>注册后点 <a href="https://developers.amadeus.com/my-apps" target="_blank">② 打开 My Apps</a> → Create new app</li>
           <li>复制 API Key / API Secret 填到上方输入框 → 点「测试连接」验证</li>
         </ol>
         <span class="muted">
@@ -158,6 +158,22 @@
   <section id="tab-push" class="tab-panel">
     <div class="card">
       <div class="card-head"><h3>推送通道</h3><span class="muted">Bark=iPhone通知,ServerChan=微信</span></div>
+      <div class="push-guide">
+        <div class="push-ch">
+          <b>Bark (iPhone 推送)</b>
+          <span>App Store 免费下载, 无需网页注册。打开 App 复制 Key 填到左侧输入框即可。
+            <a href="https://apps.apple.com/app/bark/id1403753865" target="_blank">App Store 下载 →</a></span>
+        </div>
+        <div class="push-ch">
+          <b>ServerChan (微信推送)</b>
+          <span>微信扫码登录官网, 复制 SendKey (sct 开头) 填到左侧输入框。
+            <a href="https://sct.ftqq.com/" target="_blank">sct.ftqq.com 注册 →</a></span>
+        </div>
+        <div class="push-ch">
+          <b>系统通知 (浏览器)</b>
+          <span>无需注册。点顶部「🔔 通知」授权后, 页面开着就能在桌面/手机浏览器收到弹窗。</span>
+        </div>
+      </div>
       <div class="form-grid">
         <label>Bark Key<input id="barkKey" type="text" placeholder="App内复制的Key,留空禁用"></label>
         <label>ServerChan SendKey<input id="scKey" type="text" placeholder="sct开头,留空禁用"></label>
@@ -192,6 +208,6 @@
 <div id="alertFloat" class="alert-float"></div>
 
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=8"></script>
+<script src="/static/app.js?v=9"></script>
 </body>
 </html>
