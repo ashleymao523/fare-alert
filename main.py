@@ -544,6 +544,11 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
         "days_below": sum(r["days_below"] for r in snapshot_routes),
         "pushed": pushed,
     })
+    try:  # M2: per-source health score / degrade flag / diagnose (never block main flow)
+        from core.health import update_from_crawl
+        update_from_crawl(DATA_DIR)
+    except Exception:
+        log.exception("health update failed")
     return snapshot
 
 

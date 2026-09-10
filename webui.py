@@ -238,8 +238,13 @@ def api_snapshot():
 @app.get("/api/crawl-status")
 def api_crawl_status():
     """Crawl run telemetry for the visual crawler monitor tab."""
-    return jsonify(_read_json(CRAWL_PATH,
-                               {"running": False, "current": None, "history": []}))
+    doc = _read_json(CRAWL_PATH,
+                     {"running": False, "current": None, "history": []})
+    from core.health import SourceHealth
+    h = SourceHealth(os.path.join(DATA_DIR, "health.json"))
+    doc["health"] = {"sources": [dict(s, diagnose=h.diagnose(s["source"]))
+                                 for s in h.snapshot()["sources"]]}
+    return jsonify(doc)
 
 
 @app.get("/api/cities")

@@ -159,9 +159,11 @@ def gate_g6():
     rec("G6", "docs x%d" % len(need), not miss, "缺: " + ",".join(miss))
     guide = open("使用指南.md", encoding="utf-8").read(400)
     html = open("webui/templates/index.html", encoding="utf-8").read()
-    ver_html = "v0.11" in html
-    rec("G6", "version badge sync", ver_html and "v0.11" in guide,
-        "html v0.11=%s guide v0.11=%s" % (ver_html, "v0.11" in guide))
+    import re as _re
+    m = _re.search(r'class="ver">(v\d+\.\d+)<', html)
+    ver = m.group(1) if m else ""
+    rec("G6", "version badge sync", bool(ver) and ver in guide,
+        "html %s guide %s=%s" % (ver or "?", ver or "?", ver in guide))
 
 
 def main():

@@ -196,7 +196,24 @@ def tool_snapshot_get(args):
         else:
             lines.append("%s->%s(id=%s) 暂无真实价" %
                          (rt.get("from_city"), rt.get("to_city"), rt.get("id")))
+    try:  # M2: surface degraded sources so an agent can self-serve diagnosis
+        from core.health import SourceHealth
+        hh = SourceHealth(os.path.join(BASE_DIR, "data", "health.json"))
+        lines.extend(_degraded_lines(hh))
+    except Exception:
+        pass
     return _ok("\n".join(lines) or "快照为空")
+
+
+def _degraded_lines(hh):
+    out = []
+    for s in hh.snapshot()["sources"]:
+        if s["degraded"] or s["consecutive_fails"]:
+            rep = hh.diagnose(s["source"])
+            causes = "; ".join(c["cause"] for c in rep["candidates"]) or "未知"
+            out.append("⚠ 数据源 %s 已降级(连续失败%d) 原因: %s" %
+                       (s["source"], s["consecutive_fails"], causes))
+    return out
 
 
 HANDLERS = {"fare_search": tool_fare_search, "train_search": tool_train_search,

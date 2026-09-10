@@ -46,7 +46,7 @@ checks = {
     "行程类型选择": "行程类型" in h,
     "国际Amadeus配置卡": "amaSecret" in h,
     "往返返程趋势容器": "trendReturn" in h,
-    "浅色主题版本": ">v0.11" in h,
+    "浅色主题版本": ">v0.12" in h,
 "缺价补全徽标(详情卡)": ('d.source === "amadeus-fill"' in appjs) and ("badge amber" in appjs),
 "缺价补全徽标(最优卡)": appjs.count("amadeus-fill") >= 5,
 "补全数据源名": '"amadeus-fill": "Amadeus' in appjs,
@@ -76,6 +76,13 @@ checks = {
 "v0.11趋势最低仅真实价": ("realIdxs" in appjs) and ("var minIdx = pool[0]" in appjs),
 "v0.11数据源名interp": '"interp": "插值估算价"' in appjs,
 "v0.11 TOP5排除估算价": ("renderTop5" in appjs) and ("interp" in appjs[appjs.index("function renderTop5"):appjs.index("function renderTop5") + 2500]),
+"v0.12源健康徽标区": ("src-chip" in h) and ("数据源健康" in h),
+"v0.12源健康四源齐": h.count("src-chip ") >= 4,
+"v0.12源健康样式": ("src-health" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read()) and ("src-dot" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read()),
+"v0.12健康诊断行": "src-diag" in appjs,
+"v0.12健康API字段": "diagnose" in open("webui.py", encoding="utf-8").read(),
+"v0.12健康引擎阈值": ("DEGRADE_RUN_FAILS" in open(os.path.join("core", "health.py"), encoding="utf-8").read()),
+"v0.12 Tab深链": ("location.hash" in appjs) and ("gotoTab" in appjs),
 }
 bad = 0
 for k, v in checks.items():

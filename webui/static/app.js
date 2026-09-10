@@ -1775,9 +1775,46 @@
     return card;
   }
 
+  var SRC_LABELS = {
+    "qunar-calendar": "去哪儿日历", "12306-train": "12306车次",
+    "qunar-intl": "去哪儿国际", "amadeus-intl": "Amadeus国际",
+    "amadeus-fill": "Amadeus补价", "push": "推送"
+  };
+
+  function renderSourceHealth(health) {
+    var wrap = el("div", "src-health");
+    wrap.appendChild(el("div", "src-health-title", "数据源健康"));
+    (health.sources || []).forEach(function (s) {
+      var cls = s.degraded ? "bad" : ((s.score !== null && s.score !== undefined && s.score < 85) || s.consecutive_fails ? "warn" : "ok");
+      var chip = el("div", "src-chip " + cls);
+      chip.appendChild(el("span", "src-dot"));
+      chip.appendChild(el("span", "src-name", SRC_LABELS[s.source] || s.source));
+      chip.appendChild(el("span", "src-meta",
+        (s.score === null || s.score === undefined ? "--分" : s.score + "分") +
+        (s.degraded ? " · 已降级" : (s.consecutive_fails ? " · 波动" : " · 正常"))));
+      if (s.degraded || s.consecutive_fails) {
+        var det = el("div", "src-diag");
+        var cands = (s.diagnose && s.diagnose.candidates) || [];
+        if (cands.length) {
+          cands.forEach(function (c) {
+            det.appendChild(el("div", "src-diag-row", "ⓘ " + c.cause + " → " + c.action));
+          });
+        } else {
+          det.appendChild(el("div", "src-diag-row", "最近错误: " + (s.last_error || "-")));
+        }
+        chip.appendChild(det);
+      }
+      wrap.appendChild(chip);
+    });
+    return wrap;
+  }
+
   function renderCrawl(doc) {
     var box = $("crawlPanel");
     box.textContent = "";
+    if (doc && doc.health && (doc.health.sources || []).length) {
+      box.appendChild(renderSourceHealth(doc.health));
+    }
     var runs = [];
     if (doc && doc.current) runs.push(doc.current);
     if (doc && doc.history) runs = runs.concat(doc.history);
@@ -1799,6 +1836,11 @@
   }
   function stopCrawlPolling() {
     if (crawlTimer) { clearInterval(crawlTimer); crawlTimer = null; }
+  }
+
+  function gotoTab(name) {
+    var btn = document.querySelector('#mainTabs button[data-tab="' + name + '"]');
+    if (btn) btn.click();
   }
 
   /* ---------- 事件绑定 ---------- */
@@ -1823,6 +1865,8 @@
         refreshTab(b.dataset.tab);
       });
     });
+    var initTab = (location.hash || "").replace("#", "");
+    if (initTab) gotoTab(initTab);
   }
 
   function bindActions() {

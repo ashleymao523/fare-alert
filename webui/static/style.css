@@ -336,6 +336,32 @@ input::placeholder { color: var(--faint); }
 }
 .crawl-step .st { font-weight: 600; }
 .crawl-step.ok .st { color: var(--green); }
+
+/* ---------- source health (M2) ---------- */
+.src-health { display: grid; gap: 8px; margin-bottom: 14px; }
+.src-health-title {
+  font-size: 12.5px; font-weight: 700; color: var(--muted);
+  letter-spacing: .04em; text-transform: uppercase;
+}
+.src-chip {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--card); box-shadow: var(--sh-1);
+}
+.src-chip .src-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green); flex: 0 0 auto;
+}
+.src-chip.warn .src-dot { background: var(--amber); }
+.src-chip.bad { border-color: rgba(220, 38, 38, .38); background: #fef2f2; }
+.src-chip.bad .src-dot { background: var(--red); }
+.src-name { font-weight: 600; font-size: 12.5px; color: var(--text-2); }
+.src-meta { font-size: 11.5px; color: var(--muted); }
+.src-diag {
+  width: 100%; display: grid; gap: 4px;
+  border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 2px;
+}
+.src-diag-row { font-size: 11.5px; color: var(--amber); line-height: 1.5; }
 .crawl-step.error .st { color: var(--red); }
 .crawl-step.skip .st, .crawl-step.disabled .st { color: var(--faint); }
 .crawl-ms { color: var(--faint); font-size: 11.5px; font-variant-numeric: tabular-nums; }
