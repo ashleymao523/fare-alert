@@ -271,3 +271,37 @@ def board_lookup(db, flight_no, date_iso, from_city, to_city):
     if to_city and ent.get("to") and to_city not in ent["to"] and ent["to"] not in to_city:
         return None
     return ent
+
+
+def board_lookup_x(db, flight_no, date_iso, from_city, to_city):
+    """v0.19 跨日班期回退: 日历价已证明该航班号在该日期执飞, 而班期板只
+    返回当日 -> 时刻库尚未沉淀该 dow 属常态. 同航班号时刻按航季排班,
+    其他 dow 的时刻高度一致, 可作为参考借用(调用方需打 airport-board-x
+    标记). 返回 (entry, exact_bool) 或 None; exact=dow 精确命中.
+    跨日时优先选双时刻(dep+arr)且城市匹配的条目, 再退 dep-only."""
+    fdb = (db.get("flights") or {}).get(_norm_no(flight_no))
+    if not fdb:
+        return None
+    try:
+        dow = str(_dt.date.fromisoformat(date_iso).weekday())
+    except Exception:
+        return None
+
+    def _city_ok(ent):
+        if from_city and ent.get("from") and from_city not in ent["from"] and ent["from"] not in from_city:
+            return False
+        if to_city and ent.get("to") and to_city not in ent["to"] and ent["to"] not in to_city:
+            return False
+        return True
+
+    ent = fdb.get("dows", {}).get(dow)
+    if ent and _city_ok(ent):
+        return ent, True
+    cands = [e for e in (fdb.get("dows") or {}).values() if e and _city_ok(e)]
+    if not cands:
+        return None
+    dual = [e for e in cands if e.get("dep") and e.get("arr")]
+    # dual-time rows carry the most info; otherwise prefer an entry that
+    # at least has a dep time so the caller can still render the departure
+    pool = dual or [e for e in cands if e.get("dep")] or cands
+    return pool[0], False

@@ -115,6 +115,63 @@ class TestDbAndLookup(unittest.TestCase):
         self.assertEqual(ent["dep"], "06:20")  # dep must survive too
 
 
+class TestLookupX(unittest.TestCase):
+    """v0.19 board_lookup_x: exact dow first, then cross-dow borrow."""
+
+    def _db(self, dows):
+        return {"updated": 0, "flights": {"GJ8888": {"dows": dows}}}
+
+    def test_exact_dow_hit(self):
+        db = self._db({"2": {"dep": "07:55", "arr": "",
+                             "from": "杭州", "to": "重庆"}})
+        hit = sb.board_lookup_x(db, "GJ8888", "2026-09-09", "杭州", "重庆")
+        self.assertEqual(hit[1], True)
+        self.assertEqual(hit[0]["dep"], "07:55")
+
+    def test_cross_dow_borrow(self):
+        # 2026-09-10 is dow 3; db only has dow 2 -> borrow as reference
+        db = self._db({"2": {"dep": "07:55", "arr": "",
+                             "from": "杭州", "to": "重庆"}})
+        hit = sb.board_lookup_x(db, "GJ8888", "2026-09-10", "杭州", "重庆")
+        self.assertEqual(hit[1], False)
+        self.assertEqual(hit[0]["dep"], "07:55")
+
+    def test_cross_dow_city_mismatch_returns_none(self):
+        db = self._db({"2": {"dep": "07:55", "arr": "",
+                             "from": "杭州", "to": "重庆"}})
+        self.assertIsNone(sb.board_lookup_x(db, "GJ8888", "2026-09-10",
+                                            "北京", "重庆"))
+
+    def test_cross_dow_prefers_dual_time_entry(self):
+        db = self._db({
+            "1": {"dep": "07:55", "arr": "", "from": "杭州", "to": "重庆"},
+            "3": {"dep": "08:10", "arr": "10:35", "from": "杭州", "to": "重庆"},
+        })
+        hit = sb.board_lookup_x(db, "GJ8888", "2026-09-09", "杭州", "重庆")
+        self.assertEqual(hit[1], False)
+        self.assertEqual((hit[0]["dep"], hit[0]["arr"]), ("08:10", "10:35"))
+
+    def test_unknown_flight_returns_none(self):
+        self.assertIsNone(sb.board_lookup_x(self._db({}), "CA9999",
+                                            "2026-09-10", "杭州", "重庆"))
+
+    def test_exact_dow_city_mismatch_falls_to_cross(self):
+        # exact dow exists but for another city pair -> borrow cross-dow
+        db = self._db({
+            "3": {"dep": "09:00", "arr": "", "from": "北京", "to": "重庆"},
+            "1": {"dep": "07:55", "arr": "", "from": "杭州", "to": "重庆"},
+        })
+        hit = sb.board_lookup_x(db, "GJ8888", "2026-09-10", "杭州", "重庆")
+        self.assertEqual(hit[1], False)
+        self.assertEqual(hit[0]["dep"], "07:55")
+
+    def test_bad_date_returns_none(self):
+        db = self._db({"2": {"dep": "07:55", "arr": "",
+                             "from": "杭州", "to": "重庆"}})
+        self.assertIsNone(sb.board_lookup_x(db, "GJ8888", "not-a-date",
+                                            "杭州", "重庆"))
+
+
 class _FakeResp:
     def __init__(self, payload):
         self._p = payload

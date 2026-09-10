@@ -15,15 +15,16 @@ import requests
 from core.alerts import build_message, evaluate, tax_amount, total_price
 from core.config import load_config
 from core.crawl import CrawlRecorder
-from core.flights import (airline_name, booking_url, estimate_duration_text,
-                          fetch_calendar, fetch_intl_promo_calendar,
+from core.flights import (airline_name, booking_url, estimate_arrival_time,
+                          estimate_duration_text, fetch_calendar,
+                          fetch_intl_promo_calendar,
                           merge_fill_deals, window_dates)
 from core.intl import city_iata, fetch_intl_calendar, fetch_schedule_times
 from core.models import FlightDeal
 from core.notify import has_channel, push_all
 from core.report import write_report
-from core.sched_board import (board_lookup, load_sched_db, touches_hangzhou,
-                              update_sched_db)
+from core.sched_board import (board_lookup_x, load_sched_db,
+                              touches_hangzhou, update_sched_db)
 from core.state import load_state, save_state
 from core.trains import refresh_train_info
 
@@ -99,6 +100,7 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "url": deal.url,
         "dep_time": deal.dep_time,
         "arr_time": deal.arr_time,
+        "arr_est": deal.arr_est,
         "duration_text": deal.duration_text,
         "time_src": deal.time_src,
         "source": deal.source,
@@ -286,6 +288,14 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
     via Amadeus schedules (best-effort, 24h cached, only when key present)."""
     if not deals:
         return deals
+
+    def _mark_time_src(d, exact):
+        # weakest mark wins: one borrowed (cross-dow) segment keeps the
+        # airport-board-x badge even if the other segment hit an exact dow
+        if d.time_src in ("amadeus", "airport-board-x"):
+            return
+        d.time_src = "airport-board" if exact else "airport-board-x"
+
     fc, tc = route.get("from_city", ""), route.get("to_city", "")
     fi = (route.get("from_iata") or "").strip().upper() or city_iata(fc)
     ti = (route.get("to_iata") or "").strip().upper() or city_iata(tc)
@@ -304,11 +314,15 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
             if rec:
                 rec.step("amadeus-times", route_id, "schedule lookup", "skip",
                          (time.time() - t0) * 1000, error=e)
-    # v0.18: zero-key airport-board fallback (see core/sched_board.py).
+    # v0.18/v0.19: zero-key airport-board fallback (core/sched_board.py).
     # Amadeus rows win; the board only fills what Amadeus could not.
+    # board_lookup_x first tries the exact weekday, then borrows the same
+    # flight number's time from another weekday (calendar data already
+    # proves the flight operates that date) -> airport-board-x badge.
     bdb = load_sched_db(DATA_DIR)
     t0b = time.time()
     n_board = 0
+    n_x = 0
     for d in deals:
         no = (d.flight_no or "").strip()
         if "/" in no:  # connecting itinerary: estimate with layover
@@ -321,20 +335,28 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                 d.arr_time = seg_rows[-1]["arr"]
                 d.time_src = "amadeus"
             if not d.dep_time and segs:
-                ent = board_lookup(bdb, segs[0], d.date, fc, "")
-                if ent and ent.get("dep"):
+                hit = board_lookup_x(bdb, segs[0], d.date, fc, "")
+                if hit and hit[0].get("dep"):
+                    ent, exact = hit
                     d.dep_time = ent["dep"]
-                    d.time_src = "airport-board"
+                    _mark_time_src(d, exact)  # weakest mark wins across segs
                     n_board += 1
+                    if not exact:
+                        n_x += 1
             if not d.arr_time and segs:
-                ent = board_lookup(bdb, segs[-1], d.date, "", tc)
-                if ent and ent.get("arr"):
+                hit = board_lookup_x(bdb, segs[-1], d.date, "", tc)
+                if hit and hit[0].get("arr"):
+                    ent, exact = hit
                     d.arr_time = ent["arr"]
-                    if d.time_src != "amadeus":
-                        d.time_src = "airport-board"
+                    _mark_time_src(d, exact)
                     n_board += 1
+                    if not exact:
+                        n_x += 1
             if not d.duration_text:
                 d.duration_text = estimate_duration_text(fi, ti, connecting=True)
+            if not d.arr_time and d.dep_time:
+                d.arr_est = estimate_arrival_time(d.dep_time, fi, ti,
+                                                  connecting=True)
             continue
         row = by_no.get(no.upper())
         if row:
@@ -344,8 +366,9 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
             if d.dep_time or d.arr_time:
                 d.time_src = "amadeus"
         if no and not (d.dep_time and d.arr_time):
-            ent = board_lookup(bdb, no, d.date, fc, tc)
-            if ent:
+            hit = board_lookup_x(bdb, no, d.date, fc, tc)
+            if hit:
+                ent, exact = hit
                 got = False
                 if not d.dep_time and ent.get("dep"):
                     d.dep_time = ent["dep"]
@@ -355,12 +378,18 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                     got = True
                 if got:
                     n_board += 1
-                    if d.time_src != "amadeus":
-                        d.time_src = "airport-board"
+                    _mark_time_src(d, exact)
+                    if not exact:
+                        n_x += 1
         if not d.duration_text:
             d.duration_text = estimate_duration_text(fi, ti)
+        if not d.arr_time and d.dep_time:
+            d.arr_est = estimate_arrival_time(d.dep_time, fi, ti)
     if rec and (n_board or not ama_ready):
-        rec.step("hgh-board-times", route_id, "board time fallback", "ok",
+        action = "board time fallback"
+        if n_x:
+            action += " (cross-dow x%d)" % n_x  # keep error field for errors
+        rec.step("hgh-board-times", route_id, action, "ok",
                  (time.time() - t0b) * 1000, count=n_board)
     return deals
 

@@ -7,8 +7,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from core.alerts import evaluate, tax_amount, total_price
+from core.flights import estimate_arrival_time
 from core.models import FlightDeal, TrainFare
-from main import NON_REAL_SOURCES, _fill_reference_deals
+from main import NON_REAL_SOURCES, _fill_reference_deals, _flight_dict
 
 TAX = {"airport_fee": 70, "fuel_surcharge": 50}  # 120, current default
 
@@ -26,6 +27,24 @@ def test_student_est():
                   seats={"二等座": 513.5})
     est = t.student_second_class_est
     assert est and 385.0 < est < 385.3  # 513.5 * 0.75
+
+
+def test_estimate_arrival_time():
+    # HGH->CKG great circle ~2h30m incl. taxi, consistent w/ duration est
+    assert estimate_arrival_time("07:55", "HGH", "CKG") == "10:25"
+    assert estimate_arrival_time("23:00", "HGH", "CKG") == "01:30"  # +1d
+    assert estimate_arrival_time("07:55", "HGH", "CTU",
+                                 connecting=True) == "13:15"
+    assert estimate_arrival_time("07:55", "", "CKG") == ""  # unknown coord
+    assert estimate_arrival_time("bad", "HGH", "CKG") == ""  # bad dep time
+
+
+def test_flight_dict_serializes_arr_est():
+    d = FlightDeal(date="2026-09-10", bare_price=300, flight_no="GJ8888",
+                   dep_time="07:55", arr_est="10:25")
+    route = {"from_city": "杭州", "to_city": "重庆", "threshold_total": 500}
+    out = _flight_dict(route, d, {"tax": TAX}, set())
+    assert out["arr_est"] == "10:25" and out["arr_time"] == ""
 
 
 def test_interp_two_side():

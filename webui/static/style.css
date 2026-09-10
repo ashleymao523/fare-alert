@@ -245,6 +245,11 @@ input::placeholder { color: var(--faint); }
   letter-spacing: -0.02em; line-height: 1.1;
 }
 .ft-time.unknown { color: var(--faint); }
+.ft-time.est {
+  color: var(--muted);
+  border-bottom: 1px dashed var(--faint);
+  cursor: help;
+}
 .ft-code { font-size: 11px; color: var(--faint); margin-top: 2px; letter-spacing: 0.04em; }
 .ft-mid { flex: 1; min-width: 120px; max-width: 260px; text-align: center; }
 .ft-dur {

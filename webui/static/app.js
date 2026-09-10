@@ -872,6 +872,7 @@
 
     // ---- flight timeline: dep &arr times, duration ----
     var hasDep = !!d.dep_time, hasArr = !!d.arr_time;
+    var hasEst = !hasArr && !!d.arr_est; // v0.19 estimated arrival (badged)
     var hasTime = !!(d.dep_time && d.arr_time);
     var connecting = (d.flight_no || "").indexOf("/") >= 0;
     var tl = el("div", "ft-line");
@@ -883,6 +884,10 @@
     durBox.appendChild(el("span", "ft-dur", connecting ? "中转 · " + (d.duration_text || "全程时刻待查") : (d.duration_text || "飞行时长待查")));
     if (d.time_src === "airport-board") {
       durBox.appendChild(el("span", "badge gray ts-badge", "计划时刻·机场班期"));
+    } else if (d.time_src === "airport-board-x") {
+      var xb = el("span", "badge amber ts-badge", "跨日班期·参考");
+      xb.title = "同一航班号其他班期的时刻，同航季内通常一致，仅供参考";
+      durBox.appendChild(xb);
     } else if (d.time_src === "amadeus") {
       durBox.appendChild(el("span", "badge sky ts-badge", "计划时刻·Amadeus"));
     }
@@ -900,14 +905,18 @@
       durBox.appendChild(pend);
     } else if (!hasDep || !hasArr) {
       durBox.appendChild(el("span", "ft-pend",
-        d.time_src === "airport-board" ? "另一段时刻待班期库覆盖" : "另一段时刻待补"));
+        (d.time_src === "airport-board" || d.time_src === "airport-board-x")
+          ? "另一段时刻待班期库覆盖" : "另一段时刻待补"));
     }
     mid.appendChild(durBox);
     var path = el("div", "ft-path");
     path.appendChild(el("span", "ft-plane", "\u2708"));
     mid.appendChild(path);
     var arrEnd = el("div", "ft-endpoint");
-    arrEnd.appendChild(el("div", "ft-time" + (hasArr ? "" : " unknown"), d.arr_time || "--:--"));
+    var arrTime = el("div", "ft-time" + (hasArr ? "" : (hasEst ? " est" : " unknown")),
+      hasArr ? d.arr_time : (hasEst ? "~" + d.arr_est : "--:--"));
+    if (hasEst) arrTime.title = "落地时刻为按航线距离估算，以购票页为准";
+    arrEnd.appendChild(arrTime);
     arrEnd.appendChild(el("div", "ft-code", route.to_iata || route.to_city || "到达"));
     tl.appendChild(depEnd); tl.appendChild(mid); tl.appendChild(arrEnd);
     box.appendChild(tl);

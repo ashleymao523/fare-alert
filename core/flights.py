@@ -87,6 +87,27 @@ def estimate_duration_text(from_code, to_code, connecting=False):
     return "约{}h{:02d}m(估)".format(m // 60, m % 60)
 
 
+def estimate_arrival_time(dep_time, from_code, to_code, connecting=False):
+    """v0.19: estimated arrival hh:mm from a known dep time plus the
+    great-circle duration. Returns '' when inputs are unknown or the math
+    would be pure fiction (missing coords). Never written into arr_time:
+    callers store it in arr_est so the UI can badge it as an estimate."""
+    a = AIRPORT_COORDS.get((from_code or "").upper())
+    b = AIRPORT_COORDS.get((to_code or "").upper())
+    if not a or not b or not dep_time:
+        return ""
+    try:
+        h, m = int(dep_time[:2]), int(dep_time[3:5])
+    except (ValueError, IndexError):
+        return ""
+    hours = _haversine_km(a, b) / 750.0 + 0.7
+    if connecting:
+        hours += 2.5
+    total = h * 60 + m + max(60, int(round(hours * 60 / 5.0)) * 5)
+    total %= 24 * 60  # next-day arrival still renders as clock time
+    return "{:02d}:{:02d}".format(total // 60, total % 60)
+
+
 def airline_name(code):
     return AIRLINE_NAMES.get(code, code or "未知航司")
 
