@@ -698,6 +698,10 @@ input::placeholder { color: var(--faint); }
 /* ---------- 洞察周报 (M4) ---------- */
 .wk-text { white-space: pre-line; font-size: 14px; line-height: 1.75;
   background: var(--bg-soft, #f6f8fa); border-radius: 10px; padding: 14px 16px; }
+.wk-warn { font-size: 13px; color: #8a5a00; background: #fdf6ea;
+  border: 1px solid #f0dcb4; border-radius: 10px; padding: 10px 14px; }
+.wk-warn a { color: #8a5a00; font-weight: 650; }
+.wk-spark-dot { fill: var(--accent-ink, #0a7d32); }
 .wk-card { display: flex; flex-direction: column; gap: 10px; }
 .wk-head { display: flex; justify-content: space-between; align-items: center;
   flex-wrap: wrap; gap: 8px; }
@@ -706,10 +710,22 @@ input::placeholder { color: var(--faint); }
 .wk-chip { font-size: 12px; border: 1px solid var(--line, #dde3ea);
   border-radius: 999px; padding: 2px 10px; color: var(--ink, #333);
   background: #fff; }
+.wk-chip.hero { border-color: var(--accent-ink, #0a7d32);
+  color: var(--accent-ink, #0a7d32); font-weight: 700;
+  background: var(--accent-soft, #e8f8ee);
+  font-variant-numeric: tabular-nums; }
+.wk-chip { font-variant-numeric: tabular-nums; }
 .wk-body { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 .wk-spark { width: 260px; height: 56px; flex: 0 0 auto; }
+.wk-spark-date { font-size: 8.5px; fill: #98a2ad; }
+.wk-spark-dot-min { fill: #fff; stroke: var(--accent-ink, #0a7d32);
+  stroke-width: 2.2; }
 .wk-spark-line { fill: none; stroke: var(--accent-ink, #0a7d32);
   stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .wk-spark-area { fill: var(--accent-soft, #e8f8ee); opacity: 0.8; }
 .wk-info { flex: 1 1 220px; font-size: 13px; color: var(--muted-ink, #666);
   line-height: 1.7; }
+.wk-card { transition: box-shadow .18s ease, transform .18s ease; }
+.wk-card:hover { box-shadow: 0 6px 22px rgba(16,24,40,.08);
+  transform: translateY(-1px); }
+.wk-text { border-left: 3px solid var(--accent-ink, #0a7d32); }

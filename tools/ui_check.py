@@ -99,6 +99,10 @@ checks = {
 "v0.14周报引擎": ("build_weekly" in open("webui.py", encoding="utf-8").read()) and ("build_weekly" in open(os.path.join("core", "weekly.py"), encoding="utf-8").read()),
 "v0.14周报API": '/api/weekly-report' in appjs,
 "v0.14周报推送按钮": 'btnWeeklyPush' in h,
+"v0.16推送未配置警告": 'id="wkPushWarn"' in h,
+"v0.16推送守卫": "未配置推送渠道" in open("webui.py", encoding="utf-8").read(),
+"v0.16走势最低点": "wk-spark-dot-min" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read(),
+"v0.16单点占位": "wkDot" in appjs,
 }
 bad = 0
 for k, v in checks.items():

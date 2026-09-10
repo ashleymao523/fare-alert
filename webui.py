@@ -505,8 +505,15 @@ def api_weekly_push():
     report = build_weekly(os.path.join(DATA_DIR, "history.json"))
     if not report.get("ok"):
         return jsonify({"ok": False, "error": "暂无历史数据,先跑一次查询"}), 400
+    if not any(_secrets_set(cfg).values()):
+        return jsonify({"ok": False,
+                        "error": "未配置推送渠道:请先在「提醒推送」页填写 Bark Key 或 ServerChan SendKey"}), 400
     results = push_all(cfg, _log, "📈 FareAlert 价格周报",
                        report["text"], url="")
+    failed = [x for x in results if ":ERR" in x]
+    if failed:
+        return jsonify({"ok": False,
+                        "error": "推送失败: " + "; ".join(failed)[:200]}), 502
     try:
         mark_pushed(os.path.join(DATA_DIR, "weekly_push.json"))
     except Exception:

@@ -1961,6 +1961,7 @@
       " L" + pts[0][0].toFixed(1) + " " + (H - PAD) + " Z";
     var ns = "http://www.w3.org/2000/svg";
     function mk(tag) { return document.createElementNS(ns, tag); }
+    var minIdx = vals.indexOf(lo);
     var svg = mk("svg");
     svg.setAttribute("viewBox", "0 0 " + W + " " + H);
     svg.setAttribute("class", "wk-spark");
@@ -1970,7 +1971,35 @@
     var l = mk("path");
     l.setAttribute("d", path);
     l.setAttribute("class", "wk-spark-line");
-    svg.appendChild(a); svg.appendChild(l);
+    var dot = mk("circle");
+    dot.setAttribute("cx", pts[minIdx][0].toFixed(1));
+    dot.setAttribute("cy", pts[minIdx][1].toFixed(1));
+    dot.setAttribute("r", 3.5);
+    dot.setAttribute("class", "wk-spark-dot-min");
+    var t1 = mk("text");
+    t1.setAttribute("x", PAD); t1.setAttribute("y", H - 0.5);
+    t1.setAttribute("class", "wk-spark-date");
+    t1.textContent = fmtMD(series[0][0]);
+    var t2 = mk("text");
+    t2.setAttribute("x", W - PAD); t2.setAttribute("y", H - 0.5);
+    t2.setAttribute("text-anchor", "end");
+    t2.setAttribute("class", "wk-spark-date");
+    t2.textContent = fmtMD(series[series.length - 1][0]);
+    svg.appendChild(a); svg.appendChild(l); svg.appendChild(dot);
+    svg.appendChild(t1); svg.appendChild(t2);
+    return svg;
+  }
+
+  function wkDot(series) {
+    if (!series || series.length !== 1) return "";
+    var ns = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 260 56");
+    svg.setAttribute("class", "wk-spark");
+    var c = document.createElementNS(ns, "circle");
+    c.setAttribute("cx", 130); c.setAttribute("cy", 28); c.setAttribute("r", 5);
+    c.setAttribute("class", "wk-spark-dot");
+    svg.appendChild(c);
     return svg;
   }
 
@@ -1983,7 +2012,7 @@
       var head = el("div", "wk-head");
       head.appendChild(el("h4", null, r.name));
       var chips = el("div", "wk-chips");
-      chips.appendChild(el("span", "wk-chip",
+      chips.appendChild(el("span", "wk-chip hero",
         "本周最低 " + fmtMoney(r.week.min)));
       chips.appendChild(el("span", "wk-chip",
         "本周均价 " + fmtMoney(r.week.avg)));
@@ -1995,7 +2024,7 @@
       }
       head.appendChild(chips);
       var body = el("div", "wk-body");
-      body.appendChild(wkSpark(r.series));
+      body.appendChild(wkSpark(r.series) || wkDot(r.series));
       var info = el("div", "wk-info");
       info.textContent = r.text;
       body.appendChild(info);
@@ -2011,8 +2040,14 @@
   }
 
   function initWeekly() {
-    api("/api/weekly-report").then(function (rep) {
-      renderWeekly(rep);
+    Promise.all([api("/api/weekly-report"), api("/api/config")]).then(function (rs) {
+      renderWeekly(rs[0]);
+      S.cfg = rs[1].config;
+      S.secrets = rs[1].secrets_set;
+      S.sources = rs[1].sources || S.sources;
+      var hasCh = (S.secrets && (S.secrets.bark_key || S.secrets.serverchan_sendkey));
+      var warn = $("wkPushWarn");
+      if (warn) warn.style.display = hasCh ? "none" : "";
     }).catch(function (e) {
       $("wkText").textContent = "周报加载失败: " + e.message;
     });
@@ -2069,12 +2104,18 @@
     });
 
     $("btnWeeklyRefresh").addEventListener("click", initWeekly);
+    $("wkGotoPush").addEventListener("click", function (ev) {
+      ev.preventDefault();
+      gotoTab("push");
+    });
     $("btnWeeklyPush").addEventListener("click", function () {
       var btn = $("btnWeeklyPush");
       btn.disabled = true;
       btn.textContent = "推送中…";
       post("/api/weekly-push", {}).then(function () {
         toast("周报已推送 ✓");
+      }).then(function () {
+        initWeekly();
       }).catch(function (e) {
         toast("推送失败: " + e.message);
       }).finally(function () {
