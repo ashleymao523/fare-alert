@@ -6,7 +6,10 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-h = open("data/ui_dom.html", encoding="utf-8").read()
+_raw = open("data/ui_dom.html", encoding="utf-8").read()
+_docs = _raw.split("<html")  # dump_dom may concatenate several tab dumps
+h = ("<html" + _docs[1]) if len(_docs) > 1 else _raw  # first doc only
+_all = _raw  # content assertions may span all dumps
 appjs = open(os.path.join("webui", "static", "app.js"), encoding="utf-8").read()
 checks = {
     "KPI最低机票": "最低机票总价" in h,
@@ -46,7 +49,7 @@ checks = {
     "行程类型选择": "行程类型" in h,
     "国际Amadeus配置卡": "amaSecret" in h,
     "往返返程趋势容器": "trendReturn" in h,
-    "浅色主题版本": ">v0.12" in h,
+    "浅色主题版本": re.search(r'class="ver">v\d+\.\d+<', h) is not None,
 "缺价补全徽标(详情卡)": ('d.source === "amadeus-fill"' in appjs) and ("badge amber" in appjs),
 "缺价补全徽标(最优卡)": appjs.count("amadeus-fill") >= 5,
 "补全数据源名": '"amadeus-fill": "Amadeus' in appjs,
@@ -76,13 +79,19 @@ checks = {
 "v0.11趋势最低仅真实价": ("realIdxs" in appjs) and ("var minIdx = pool[0]" in appjs),
 "v0.11数据源名interp": '"interp": "插值估算价"' in appjs,
 "v0.11 TOP5排除估算价": ("renderTop5" in appjs) and ("interp" in appjs[appjs.index("function renderTop5"):appjs.index("function renderTop5") + 2500]),
-"v0.12源健康徽标区": ("src-chip" in h) and ("数据源健康" in h),
-"v0.12源健康四源齐": h.count("src-chip ") >= 4,
+"v0.12源健康徽标区": ("src-chip" in _all) and ("数据源健康" in _all),
+"v0.12源健康四源齐": _all.count("src-chip ") >= 4,
 "v0.12源健康样式": ("src-health" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read()) and ("src-dot" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read()),
 "v0.12健康诊断行": "src-diag" in appjs,
 "v0.12健康API字段": "diagnose" in open("webui.py", encoding="utf-8").read(),
 "v0.12健康引擎阈值": ("DEGRADE_RUN_FAILS" in open(os.path.join("core", "health.py"), encoding="utf-8").read()),
 "v0.12 Tab深链": ("location.hash" in appjs) and ("gotoTab" in appjs),
+"v0.13反向Tab": ('data-tab="reverse"' in h) and ('id="tab-reverse"' in h),
+"v0.13反向表单渲染": "扫描可去目的地" in _all,
+"v0.13反向引擎": ("renderReverse" in appjs) and ("/api/reverse-search" in appjs),
+"v0.13请求硬预算": "HARD_MAX_REQUESTS" in open(os.path.join("core", "reverse.py"), encoding="utf-8").read(),
+"v0.13结果卡样式": ("rev-hit" in appjs) and (".rev-hit" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read()),
+"v0.13缓存新鲜度徽标": "缓存" in appjs[appjs.index("function renderReverse"):appjs.index("function renderReverse") + 1500],
 }
 bad = 0
 for k, v in checks.items():

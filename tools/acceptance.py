@@ -11,6 +11,7 @@ import py_compile
 import subprocess
 import sys
 import urllib.request
+import urllib.error
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
@@ -107,6 +108,20 @@ def gate_g2():
         ok = bool(d) and need.issubset(set(d[0].keys()))
         note = "routes=%d deals[0]=%d" % (len(snap["routes"]), len(d))
     rec("G2", "/api/snapshot contract", ok, note)
+    try:  # M3: reverse-search endpoint rejects bad input with 400 (no fetch)
+        req = urllib.request.Request(
+            "http://127.0.0.1:8765/api/reverse-search",
+            data=json.dumps({"from_city": "", "budget": 500}).encode(),
+            headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            urllib.request.urlopen(req, timeout=5)
+            code = 200
+        except urllib.error.HTTPError as e:
+            code = e.code
+        rec("G2", "/api/reverse-search contract", code == 400,
+            "bad input -> %d" % code)
+    except Exception as e:
+        skip("G2", "/api/reverse-search contract", str(e)[:40])
 
 
 # ---------- G4 behaviour: KPI consistency on live data ----------

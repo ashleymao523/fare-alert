@@ -11,14 +11,14 @@
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon.svg">
 <title>FareAlert · 低价出行提醒</title>
-<link rel="stylesheet" href="/static/style.css?v=12">
+<link rel="stylesheet" href="/static/style.css?v=13">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
     <span class="logo">✈️</span>
     <span class="brand-name">FareAlert</span>
-<span class="ver">v0.12</span>
+<span class="ver">v0.13</span>
   </div>
   <nav id="routeTabs" class="route-tabs"></nav>
   <div class="top-actions">
@@ -33,6 +33,7 @@
     <button data-tab="dash" class="active">📊 仪表盘</button>
     <button data-tab="crawl">🕸 爬虫监控</button>
     <button data-tab="routes">🛫 线路管理</button>
+    <button data-tab="reverse">🧭 预算找目的地</button>
     <button data-tab="sources">🔌 数据源</button>
     <button data-tab="push">🔔 提醒推送</button>
     <button data-tab="logs">📜 日志</button>
@@ -97,6 +98,18 @@
         <button id="btnSaveRoutes" class="btn primary">保存线路</button>
       </div>
     </div>
+  </section>
+
+  <section id="tab-reverse" class="tab-panel">
+    <div class="card">
+      <div class="card-head">
+        <h3>🧭 预算找目的地</h3>
+        <span class="muted">"¥X 以内从 A 出发能去哪" · 只统计真实含税价 · 实发请求有硬预算(合规限速)</span>
+      </div>
+      <div id="revForm" class="rev-form"></div>
+      <div id="revMeta" class="muted"></div>
+    </div>
+    <div id="revResults"></div>
   </section>
 
   <section id="tab-sources" class="tab-panel">
@@ -214,6 +227,6 @@
 <div id="alertFloat" class="alert-float"></div>
 
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=12"></script>
+<script src="/static/app.js?v=13"></script>
 </body>
 </html>

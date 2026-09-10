@@ -21,7 +21,7 @@ _CLASSIFY = [
     ("timeout|timed? ?out", "网络超时", "检查本机网络/代理; 若持续可在网页设置里拉长超时"),
     ("connection|reset|refused|dns|name resolution", "连接失败", "确认能否正常访问去哪儿/12306; 检查防火墙与 DNS"),
     ("403|429|too many|rate", "疑似反爬限频", "把轮询间隔拉长(interval_minutes>=30), 稍后观察是否恢复"),
-    (r"5\d\d", "对方服务异常", "数据源服务端问题, 通常等待即可恢复"),
+    (r"\b5\d{2}\b", "对方服务异常", "数据源服务端问题, 通常等待即可恢复"),
     ("json|keyerror|attributeerror|parse", "响应结构变化", "页面/接口可能改版, 到 GitHub 提 issue 附 run_id"),
     ("empty|无结果|0 条", "空结果", "确认城市名/日期窗口是否有效; 该线路可能暂无航班"),
 ]

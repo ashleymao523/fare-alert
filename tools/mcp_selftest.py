@@ -68,7 +68,7 @@ def main():
     r = c.req("tools/list")
     names = sorted(t["name"] for t in r["result"]["tools"])
     expect = sorted(["fare_search", "train_search", "watch_add", "watch_del",
-                     "snapshot_get"])
+                     "snapshot_get", "reverse_search"])
     ok = names == expect and all(t.get("inputSchema") for t in r["result"]["tools"])
     print(("PASS" if ok else "FAIL") + " tools/list = %s" % names)
     if not ok:

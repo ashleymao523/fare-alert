@@ -16,3 +16,6 @@ venv/
 Thumbs.db
 .idea/
 .vscode/
+
+# headless edge cache written under a literal unexpanded-var path
+%SystemDrive%/

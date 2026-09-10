@@ -1838,6 +1838,102 @@
     if (crawlTimer) { clearInterval(crawlTimer); crawlTimer = null; }
   }
 
+  /* ---------- 预算找目的地 (M3 反向搜索) ---------- */
+
+  function initReverse() {
+    var form = $("revForm");
+    if (!form || form.childNodes.length) return;
+    var row = el("div", "rev-row");
+    var acw = el("div", "ac-wrap");
+    var fromInput = el("input");
+    fromInput.type = "text";
+    fromInput.placeholder = "出发城市, 如 杭州";
+    fromInput.value = (S.routes && S.routes[0] && S.routes[0].from_city) || "杭州";
+    acw.appendChild(fromInput);
+    attachAC(fromInput, { load: ensureCities, source: function () { return S.cities; } });
+    var budField = el("label", "field");
+    budField.appendChild(el("span", "f-label", "预算(含税总价)"));
+    var budInput = el("input");
+    budInput.type = "number"; budInput.value = 500; budInput.min = 50;
+    budField.appendChild(budInput);
+    var chips = el("div", "quick-chips");
+    [300, 500, 800, 1200].forEach(function (v) {
+      var c = el("button", "chip", "¥" + v);
+      c.type = "button";
+      c.addEventListener("click", function () { budInput.value = v; });
+      chips.appendChild(c);
+    });
+    var dayField = el("label", "field");
+    dayField.appendChild(el("span", "f-label", "未来天数"));
+    var daySel = el("select");
+    [[15, "15天"], [30, "30天"], [60, "60天"]].forEach(function (p) {
+      var o = el("option", "", p[1]); o.value = p[0]; daySel.appendChild(o);
+    });
+    daySel.value = 30;
+    dayField.appendChild(daySel);
+    var reqField = el("label", "field");
+    reqField.appendChild(el("span", "f-label", "请求预算"));
+    var reqSel = el("select");
+    [[4, "4 个(最快)"], [8, "8 个(默认)"], [12, "12 个"], [15, "15 个(上限)"]].forEach(function (p) {
+      var o = el("option", "", p[1]); o.value = p[0]; reqSel.appendChild(o);
+    });
+    reqSel.value = 8;
+    reqField.appendChild(reqSel);
+    var btn = el("button", "btn primary", "🧭 扫描可去目的地");
+    btn.type = "button";
+    row.appendChild(acw); row.appendChild(budField); row.appendChild(chips);
+    row.appendChild(dayField); row.appendChild(reqField); row.appendChild(btn);
+    form.appendChild(row);
+    var note = el("div", "muted rev-note",
+      "每次扫描按候选城市逐个查价格日历;结果缓存 6 小时,缓存命中不消耗请求预算,可逐步扩大扫描面。");
+    form.appendChild(note);
+    btn.addEventListener("click", function () {
+      var fc = (fromInput.value || "").trim();
+      if (!fc) { toast("请先填写出发城市"); return; }
+      btn.disabled = true;
+      btn.textContent = "扫描中…(约" + (parseInt(reqSel.value, 10) * 2) + "秒)";
+      $("revMeta").textContent = "正在扫描候选目的地,请稍候…";
+      $("revResults").textContent = "";
+      post("/api/reverse-search", {
+        from_city: fc, budget: parseFloat(budInput.value),
+        days: parseInt(daySel.value, 10),
+        max_requests: parseInt(reqSel.value, 10)
+      }).then(function (r) { renderReverse(r.result); })
+        .catch(function (e) { $("revMeta").textContent = "扫描失败: " + e.message; })
+        .finally(function () {
+          btn.disabled = false; btn.textContent = "🧭 扫描可去目的地";
+        });
+    });
+  }
+
+  function renderReverse(r) {
+    var meta = $("revMeta"), box = $("revResults");
+    meta.textContent = "扫描 " + r.scanned + "/" + r.pool_size + " 个候选 · 实发请求 " +
+      r.requests_used + " · 失败 " + r.failed + " · 窗口 " +
+      r.window.from + " ~ " + r.window.to;
+    box.textContent = "";
+    if (!r.hits.length) {
+      box.appendChild(el("div", "card muted",
+        "未找到 ≤ ¥" + r.budget + " 的目的地: 试试提高预算、扩大天数,或加大请求预算多扫几个候选。"));
+      return;
+    }
+    r.hits.forEach(function (h, i) {
+      var card = el("div", "card rev-hit");
+      var rank = el("span", "rev-rank", i + 1);
+      var city = el("div", "rev-city", h.city);
+      city.appendChild(el("span", "badge" + (h.cached ? " amber" : ""),
+        h.cached ? "缓存" : "实时"));
+      var price = el("div", "rev-price", "¥" + h.total_price);
+      var sub = el("div", "muted", h.date + " · " + (h.airline || h.flight_no || "") +
+        " · 裸价¥" + h.bare_price + "+税费");
+      var link = el("a", "v-link", "直达购票 →");
+      link.href = h.url; link.target = "_blank"; link.rel = "noopener";
+      card.appendChild(rank); card.appendChild(city);
+      card.appendChild(price); card.appendChild(sub); card.appendChild(link);
+      box.appendChild(card);
+    });
+  }
+
   function gotoTab(name) {
     var btn = document.querySelector('#mainTabs button[data-tab="' + name + '"]');
     if (btn) btn.click();
@@ -1848,6 +1944,7 @@
   function refreshTab(name) {
     if (name === "dash") renderDash();
     if (name === "crawl") loadCrawl();
+    if (name === "reverse") initReverse();
     if (name === "routes") renderRoutesEditor();
     if (name === "sources") renderSources();
     if (name === "push") { renderPush(); loadAlerts(); }

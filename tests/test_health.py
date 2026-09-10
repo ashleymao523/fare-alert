@@ -46,6 +46,20 @@ def test_mcp_degraded_lines_surfaces_diagnosis():
     assert "限频" in lines[0]  # diagnosis cause surfaced for agents
 
 
+def test_mcp_degraded_lines_distinguishes_degraded_vs_wobble():
+    import mcp_server
+    from core.health import SourceHealth
+    d = tempfile.mkdtemp()
+    crawl = os.path.join(d, "crawl_status.json")
+    _mk_crawl(crawl, [{"source": "12306-train", "status": "error",
+                       "error": "timeout"}])
+    update_from_crawl(d)  # 1 fail: wobble only, NOT degraded yet
+    h = SourceHealth(os.path.join(d, "health.json"))
+    lines = mcp_server._degraded_lines(h)
+    assert len(lines) == 1 and "波动(尚未降级)" in lines[0]
+    assert "已降级" not in lines[0]
+
+
 def test_inject_two_step_failure_degrades_in_one_run():
     d = tempfile.mkdtemp()
     _mk_crawl(os.path.join(d, "crawl_status.json"), [

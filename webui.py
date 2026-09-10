@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """FareAlert Web UI: local dashboard, config editor, manual run & push test."""
 import json
+import datetime
 import os
 import re
 import threading
@@ -401,6 +402,52 @@ def api_test_push():
     results = push_all(cfg, _log, "✈️ FareAlert 测试推送",
                        "推送通道配置成功!这是一条测试消息。", url="")
     return jsonify({"ok": True, "results": results})
+
+
+@app.post("/api/reverse-search")
+def api_reverse_search():
+    """M3: budget-first destination discovery ("¥X 以内从 A 出发能去哪")."""
+    body = request.get_json(silent=True) or {}
+    from_city = (body.get("from_city") or "").strip()
+    try:
+        budget = float(body.get("budget", 0))
+    except (TypeError, ValueError):
+        budget = 0
+    days = int(body.get("days", 30) or 30)
+    max_requests = int(body.get("max_requests", 8) or 8)
+    if not from_city:
+        return jsonify({"ok": False, "error": "请填写出发城市"}), 400
+    if budget <= 0:
+        return jsonify({"ok": False, "error": "预算需为正数"}), 400
+    days = max(1, min(days, 60))
+    max_requests = max(1, min(max_requests, 15))
+    today = datetime.date.today()
+    date_from = today.isoformat()
+    date_to = (today + datetime.timedelta(days=days - 1)).isoformat()
+    from core.crawl import CrawlRecorder
+    from core.reverse import reverse_search
+    rec = CrawlRecorder(DATA_DIR)
+    rec.begin(trigger="reverse")
+    with _lock:
+        cfg = load_config(CONFIG_PATH)
+        session = runner.make_session(cfg)
+        try:
+            result = reverse_search(
+                session, cfg.get("network", {}), cfg.get("tax", {}),
+                from_city, budget, date_from, date_to,
+                max_requests=max_requests, data_dir=DATA_DIR, rec=rec)
+        except Exception as e:
+            _log.error("reverse search failed: %s", e)
+            rec.finish({"error": str(e)[:200]})
+            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+    rec.finish({"hits": len(result["hits"]),
+                "requests": result["requests_used"]})
+    try:  # reverse runs feed the same source-health engine (M2)
+        from core.health import update_from_crawl
+        update_from_crawl(DATA_DIR)
+    except Exception:
+        pass
+    return jsonify({"ok": True, "result": result})
 
 
 @app.post("/api/amadeus-test")

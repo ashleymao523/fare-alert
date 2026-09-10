@@ -87,6 +87,20 @@ TOOLS = [
         "description": "读最新监控快照:每条线路的最低真实含税价/触发日/数据源(估算价不计入)",
         "inputSchema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "reverse_search",
+        "description": "反向搜索:'¥X以内从A出发能去哪'——扫描候选目的地带,返回窗口内最低真实含税价<=预算的目的地列表(带日期/航司/直达链接/新鲜度)",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "from_city": {"type": "string", "description": "出发城市中文名,如 杭州"},
+                "budget": {"type": "number", "description": "含税总价预算(元),如 500"},
+                "days": {"type": "integer", "description": "查询未来天数,默认30,上限60", "default": 30},
+                "max_requests": {"type": "integer", "description": "实发请求预算,默认8,硬上限15(缓存命中不耗预算)", "default": 8},
+            },
+            "required": ["from_city", "budget"],
+        },
+    },
 ]
 
 
@@ -211,14 +225,49 @@ def _degraded_lines(hh):
         if s["degraded"] or s["consecutive_fails"]:
             rep = hh.diagnose(s["source"])
             causes = "; ".join(c["cause"] for c in rep["candidates"]) or "未知"
-            out.append("⚠ 数据源 %s 已降级(连续失败%d) 原因: %s" %
-                       (s["source"], s["consecutive_fails"], causes))
+            state = "已降级" if s["degraded"] else "波动(尚未降级)"
+            out.append("⚠ 数据源 %s %s,连续失败%d 原因: %s" %
+                       (s["source"], state, s["consecutive_fails"], causes))
     return out
+
+
+def tool_reverse_search(args):
+    import requests
+    from core.reverse import reverse_search
+    cfg = load_config(CONFIG_PATH)
+    days = max(1, min(int(args.get("days") or 30), 60))
+    max_req = max(1, min(int(args.get("max_requests") or 8), 15))
+    budget = float(args["budget"])
+    today = dt.date.today()
+    sess = requests.Session()
+    sess.trust_env = bool(cfg.get("network", {}).get("trust_env", False))
+    r = reverse_search(sess, cfg.get("network", {}), cfg.get("tax", {}),
+                       args["from_city"], budget,
+                       today.isoformat(),
+                       (today + dt.timedelta(days=days - 1)).isoformat(),
+                       max_requests=max_req,
+                       data_dir=os.path.join(BASE_DIR, "data"))
+    if not r["hits"]:
+        return _ok("未来%d天内 %s 出发无 ≤¥%.0f 的目的地(扫描%d/候选%d,失败%d)"
+                   % (days, r["from_city"], budget, r["scanned"],
+                      r["pool_size"], r["failed"]))
+    lines = ["%s 出发 未来%d天 ≤¥%.0f 可去(按含税总价升序):"
+             % (r["from_city"], days, budget)]
+    for h in r["hits"]:
+        lines.append("%s ¥%d @%s %s %s%s" % (
+            h["city"], h["total_price"], h["date"],
+            h["airline"] or h["flight_no"], h["url"],
+            " [缓存]" if h.get("cached") else ""))
+    lines.append("(扫描%d/候选%d,实发请求%d,失败%d;估算价不参与)"
+                 % (r["scanned"], r["pool_size"], r["requests_used"],
+                    r["failed"]))
+    return _ok("\n".join(lines))
 
 
 HANDLERS = {"fare_search": tool_fare_search, "train_search": tool_train_search,
             "watch_add": tool_watch_add, "watch_del": tool_watch_del,
-            "snapshot_get": tool_snapshot_get}
+            "snapshot_get": tool_snapshot_get,
+            "reverse_search": tool_reverse_search}
 
 
 def handle(msg):
