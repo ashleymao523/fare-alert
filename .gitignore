@@ -1,5 +1,6 @@
 # local secrets & runtime data
 config.json
+config.json.bak
 data/
 tools/cache/
 cache/

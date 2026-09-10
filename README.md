@@ -132,7 +132,7 @@ fare-alert/
 - [x] **v0.10 TOP5+目的地情报**: 低价日 TOP5 表、目的地天气(Open-Meteo)/汇率情报卡、Amadeus 隐私说明
 - [x] **v0.11 插值补全**: 无价日期两侧真实价线性插值(琥珀标识,不参与统计)、趋势图估算空心点
 - [x] **eng 工程化**: AGENTS.md 人机守则、G0-G6 验收门禁(tools/acceptance.py)、核心单测、CI
-- [ ] **M1 Agent接入**: MCP Server 五工具、自然语言意图→监控配置(见 docs/迭代路线图.md)
+- [x] **M1 Agent接入**: 自研零依赖 MCP Server(stdio)五工具 fare_search/train_search/watch_add/watch_del/snapshot_get、"一句话建监控"意图解析(12组单测+8项协议自测+独立E2E验收)
 - [ ] **M2-M5**: 源自愈/反向搜索/洞察周报/插件生态(见 docs/迭代路线图.md)
 
 ## 常见问题

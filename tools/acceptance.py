@@ -51,12 +51,22 @@ def gate_g0():
 
 # ---------- G1 unit ----------
 def gate_g1():
-    r = subprocess.run([sys.executable, "tests/test_core.py"],
+    out = ""
+    rc = 0
+    import glob
+    for tf in sorted(glob.glob(os.path.join("tests", "test_*.py"))):
+        r = subprocess.run([sys.executable, tf],
+                           capture_output=True, text=True, timeout=120,
+                           encoding="utf-8", errors="replace")
+        rc = rc or r.returncode
+        out += (r.stdout or "") + (r.stderr or "")
+    r = subprocess.run([sys.executable, "tools/mcp_selftest.py"],
                        capture_output=True, text=True, timeout=120,
                        encoding="utf-8", errors="replace")
-    out = (r.stdout or "") + (r.stderr or "")
+    rc = rc or r.returncode
+    out += (r.stdout or "") + (r.stderr or "")
     fails = [l for l in out.splitlines() if l.startswith("FAIL")]
-    rec("G1", "tests/test_core.py", r.returncode == 0,
+    rec("G1", "tests/test_*.py", rc == 0,
         "; ".join(fails)[:160] or out.strip().splitlines()[-1] if out.strip() else "")
 
 

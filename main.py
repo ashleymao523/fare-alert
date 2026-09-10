@@ -35,6 +35,11 @@ NON_REAL_SOURCES = ("nearby-ref", "interp")
 
 
 def setup_logging():
+    try:  # GBK console pipes crash on CJK/¥ without lenient errors
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
     log = logging.getLogger("fare-alert")
     if log.handlers:
         return log
