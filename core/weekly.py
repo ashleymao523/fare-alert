@@ -104,14 +104,16 @@ def _route_text(r):
     p = r.get("prev")
     if p:
         delta = round(w["min"] - p["min"], 1)
+        pct = ("{}%".format(_fmt(round(-delta / p["min"] * 100, 1)))
+               if p["min"] else "")
         if delta < 0:
-            lines[-1] += "，比上周最低 ¥{} 便宜 ¥{}（{}%）".format(
+            lines[-1] += "，比上周最低 ¥{} 便宜 ¥{}{}".format(
                 _fmt(p["min"]), _fmt(-delta),
-                _fmt(round(-delta / p["min"] * 100, 1)))
+                "（" + pct + "）" if pct else "")
         elif delta > 0:
-            lines[-1] += "，比上周最低 ¥{} 贵 ¥{}（{}%）".format(
+            lines[-1] += "，比上周最低 ¥{} 贵 ¥{}{}".format(
                 _fmt(p["min"]), _fmt(delta),
-                _fmt(round(delta / p["min"] * 100, 1)))
+                "（" + pct + "）" if pct else "")
         else:
             lines[-1] += "，与上周最低持平"
     else:
@@ -124,7 +126,7 @@ def _route_text(r):
 
 def _summary_text(doc):
     if not doc.get("routes"):
-        return "暂无历史数据，等首次查询积累 2 天后这里会出现价格周报。"
+        return "暂无历史数据，跑一次查询后每天自动归档指标；积累 8 天起周报带环比。"
     head = "📊 价格周报（{}）".format(doc.get("period") or "")
     body = "\n".join(r["text"] for r in doc["routes"])
     return head + "\n" + body
@@ -144,8 +146,8 @@ def should_push(cfg, path):
 
 def mark_pushed(path):
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump({"ts": time.time()}, f)
     except Exception:
-        pass
+        raise

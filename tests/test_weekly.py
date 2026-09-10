@@ -98,6 +98,17 @@ class TestWeekly(unittest.TestCase):
         finally:
             os.remove(path)
 
+    def test_zero_prev_min_no_crash(self):
+        path = self._hist_path(week=[500, 480], prev=[0, 510, 505, 515, 498, 530, 512])
+        try:
+            rep = build_weekly(path)  # must not raise ZeroDivisionError
+            r = rep["routes"][0]
+            self.assertEqual(r["prev"]["min"], 0)
+            self.assertIn("贵 ¥480", r["text"])  # delta shown, no pct
+            self.assertNotIn("Infinity", r["text"])
+        finally:
+            os.remove(path)
+
     def test_push_switch_and_cooldown(self):
         path = os.path.join(os.path.dirname(__file__), "_wkpush_test.json")
         if os.path.exists(path):

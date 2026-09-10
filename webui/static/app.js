@@ -1631,10 +1631,12 @@
     $("scKey").value = S.cfg.push.serverchan_sendkey || "";
     $("pushGroup").value = S.cfg.push.group || "";
     $("pushSound").value = S.cfg.push.sound || "";
+    $("pushWeekly").checked = !!S.cfg.push.weekly_enabled;
     $("barkKey").oninput = function () { S.cfg.push.bark_key = this.value.trim(); };
     $("scKey").oninput = function () { S.cfg.push.serverchan_sendkey = this.value.trim(); };
     $("pushGroup").oninput = function () { S.cfg.push.group = this.value; };
     $("pushSound").oninput = function () { S.cfg.push.sound = this.value.trim(); };
+    $("pushWeekly").onchange = function () { S.cfg.push.weekly_enabled = this.checked; };
   }
 
   function applyConfigResp(resp) {
@@ -2003,7 +2005,7 @@
     if (!rep.ok) {
       var empty = el("div", "card");
       empty.appendChild(el("div", "muted",
-        "暂无历史数据:跑一次查询后,每天自动归档指标,积累 2 天即可出周报。"));
+        "暂无历史数据:跑一次查询后每天自动归档指标;积累 8 天起周报带环比。"));
       box.appendChild(empty);
     }
   }

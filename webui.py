@@ -507,7 +507,10 @@ def api_weekly_push():
         return jsonify({"ok": False, "error": "暂无历史数据,先跑一次查询"}), 400
     results = push_all(cfg, _log, "📈 FareAlert 价格周报",
                        report["text"], url="")
-    mark_pushed(os.path.join(DATA_DIR, "weekly_push.json"))
+    try:
+        mark_pushed(os.path.join(DATA_DIR, "weekly_push.json"))
+    except Exception:
+        _log.exception("weekly push marker write failed")
     return jsonify({"ok": True, "results": results})
 
 

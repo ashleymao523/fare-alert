@@ -62,9 +62,9 @@ def append_history(snapshot, path):
     for d in [k for k in doc["days"] if k < cutoff]:
         doc["days"].pop(d, None)
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(doc, f, ensure_ascii=False, indent=1)
     except Exception:
-        pass
+        raise
     return n
