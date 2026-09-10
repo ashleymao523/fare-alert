@@ -254,6 +254,26 @@ def load_sched_db(data_dir):
         return {"updated": 0, "flights": {}}
 
 
+def sched_stats(db):
+    """v0.20: coverage summary for the UI (pure, CI-testable).
+    Counts flights with >=1 non-empty dow entry and a per-dow histogram;
+    empty entries (None/{}) are ignored so the widget never lies."""
+    dows = {}
+    n_flights = 0
+    for _no, fdb in (db.get("flights") or {}).items():
+        have = [d for d, e in ((fdb or {}).get("dows") or {}).items() if e]
+        if not have:
+            continue
+        n_flights += 1
+        for d in have:
+            dows[str(d)] = dows.get(str(d), 0) + 1
+    return {
+        "updated": float(db.get("updated") or 0),
+        "flights": n_flights,
+        "dows": {str(i): dows.get(str(i), 0) for i in range(7)},
+    }
+
+
 def board_lookup(db, flight_no, date_iso, from_city, to_city):
     """按 航班号+星期几+城市 匹配参考时刻. 返回 entry 或 None."""
     fdb = (db.get("flights") or {}).get(_norm_no(flight_no))

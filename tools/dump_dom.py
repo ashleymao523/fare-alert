@@ -25,7 +25,7 @@ def main():
     parts = []
     for prof, tab in TABS:
         udd = os.path.join(cwd, "data", "edge_prof_" + prof)
-        url = "http://127.0.0.1:8765/?v=19#" + tab
+        url = "http://127.0.0.1:8765/?v=20#" + tab
         cmd = [EDGE, "--headless", "--disable-gpu", "--no-first-run",
                "--user-data-dir=" + udd, "--virtual-time-budget=12000",
                "--dump-dom", url]

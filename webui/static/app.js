@@ -1653,6 +1653,42 @@
     $("schJitter").oninput = function () { S.cfg.schedule.jitter_minutes = parseInt(this.value, 10) || 0; };
     $("webHost").oninput = function () { S.cfg.webui.host = this.value.trim() || "127.0.0.1"; };
     $("webPort").oninput = function () { S.cfg.webui.port = parseInt(this.value, 10) || 8765; };
+    api("/api/sched-stats").then(renderSchedStats).catch(function () {});
+  }
+
+  function renderSchedStats(s) {
+    var box = $("schedStats");
+    if (!box) return;
+    box.textContent = "";
+    if (!s || !s.flights) {
+      box.appendChild(el("div", "muted",
+        "时刻库暂无沉淀:第一次查询后自动按星期积累参考时刻。"));
+      return;
+    }
+    var names = ["一", "二", "三", "四", "五", "六", "日"];
+    var head = el("div", "sched-head");
+    head.appendChild(el("span", "sched-n", s.flights + " 个航班号已入库"));
+    var upd = s.updated
+      ? new Date(s.updated * 1000).toLocaleString("zh-CN", { hour12: false })
+      : "";
+    head.appendChild(el("span", "muted", upd ? "最近沉淀 " + upd : ""));
+    box.appendChild(head);
+    var row = el("div", "dow-row");
+    var covered = 0;
+    names.forEach(function (n, i) {
+      var c = (s.dows && s.dows[i]) || 0;
+      if (c) covered++;
+      var d = el("div", "dow-dot" + (c ? " has" : ""));
+      d.appendChild(el("span", "dow-k", "周" + n));
+      d.appendChild(el("span", "dow-v", c ? String(c) : "—"));
+      d.title = c
+        ? "周" + n + ":已沉淀 " + c + " 个航班时刻"
+        : "周" + n + ":尚未沉淀,由跨日借用+估算补齐";
+      row.appendChild(d);
+    });
+    box.appendChild(row);
+    box.appendChild(el("div", "muted sched-tip",
+      "覆盖 " + covered + "/7 天 · 跑满一周后精确时刻全覆盖;缺口由跨日借用 + 估算补齐(带参考标记,不触发提醒)。"));
   }
 
   function renderPush() {
@@ -2149,6 +2185,15 @@
         initWeekly();
       }).catch(function (e) {
         toast("推送失败: " + e.message);
+        if (/未配置推送渠道/.test(e.message || "")) {
+          gotoTab("push");
+          var kb = $("barkKey");
+          if (kb) {
+            kb.focus();
+            kb.classList.add("flash");
+            setTimeout(function () { kb.classList.remove("flash"); }, 1800);
+          }
+        }
       }).finally(function () {
         btn.disabled = false;
         btn.textContent = "立即推送周报";
@@ -2238,4 +2283,13 @@
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
+
+  /* v0.20 PWA: offline shell. SW needs a secure context:
+     https, localhost or 127.0.0.1 only (LAN http / file: cannot register). */
+  if ("serviceWorker" in navigator &&
+      (location.protocol === "https:" || location.hostname === "127.0.0.1" || location.hostname === "localhost")) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("/static/sw.js").catch(function () {});
+    });
+  }
 })();

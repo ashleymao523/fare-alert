@@ -281,5 +281,30 @@ class TestFetchGuardrails(unittest.TestCase):
         self.assertEqual(sess.calls, 2)
 
 
+class TestSchedStats(unittest.TestCase):
+    """v0.20 coverage widget: pure histogram, empty entries never count."""
+
+    def test_empty_db_shape(self):
+        st = sb.sched_stats({"updated": 0, "flights": {}})
+        self.assertEqual(st["flights"], 0)
+        self.assertEqual(st["updated"], 0)
+        self.assertEqual(set(st["dows"]), {str(i) for i in range(7)})
+        self.assertTrue(all(v == 0 for v in st["dows"].values()))
+
+    def test_histogram_skips_empty_entries(self):
+        db = {"updated": 1750000000.5, "flights": {
+            "GJ8888": {"dows": {"0": {"dep": "07:30"},
+                                 "3": {"dep": "08:10"}}},
+            "SC4774": {"dows": {"0": None, "5": {}}},
+        }}
+        st = sb.sched_stats(db)
+        self.assertEqual(st["flights"], 1)      # SC4774 has no real entry
+        self.assertEqual(st["dows"]["0"], 1)    # None on dow0 not counted
+        self.assertEqual(st["dows"]["3"], 1)
+        self.assertEqual(st["dows"]["5"], 0)    # {} not counted
+        self.assertEqual(st["dows"]["1"], 0)
+        self.assertEqual(st["updated"], 1750000000.5)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

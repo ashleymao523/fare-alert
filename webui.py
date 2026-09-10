@@ -528,6 +528,16 @@ def api_weekly_push():
                     **({"partial_failed": failed} if failed else {})})
 
 
+@app.get("/api/sched-stats")
+def api_sched_stats():
+    """v0.20: schedule-board coverage (dow histogram, zero-key).
+    Lets users see why some days lack exact times: the library builds up
+    per weekday as polls run; gaps are covered by cross-dow borrow+estimate."""
+    from core.sched_board import load_sched_db, sched_stats
+    db = load_sched_db(DATA_DIR)
+    return jsonify({"ok": True, **sched_stats(db)})
+
+
 @app.get("/api/log")
 def api_log():
     return jsonify({"log": _tail(LOG_PATH, 300)})

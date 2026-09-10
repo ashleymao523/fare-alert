@@ -38,6 +38,29 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 a { color: var(--accent); text-decoration: none; }
+
+/* v0.20 schedule-board coverage widget */
+.sched-stats { display: flex; flex-direction: column; gap: 12px; }
+.sched-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.sched-n { font-weight: 650; color: var(--text-2); }
+.dow-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.dow-dot {
+  flex: 1 1 0; min-width: 58px; text-align: center;
+  padding: 10px 6px 8px; border-radius: var(--r-sm);
+  background: var(--card2); border: 1px solid var(--line-soft); color: var(--faint);
+}
+.dow-dot.has {
+  background: var(--accent-soft); border-color: rgba(0, 98, 227, 0.28);
+  color: var(--accent-ink);
+}
+.dow-k { display: block; font-size: 12px; }
+.dow-v { display: block; font-weight: 700; font-size: 15px; margin-top: 2px; }
+.sched-tip { font-size: 12px; }
+.flash { animation: flashRing 1.8s ease; }
+@keyframes flashRing {
+  0%, 55% { box-shadow: var(--ring); }
+  100% { box-shadow: none; }
+}
 a:hover { text-decoration: underline; }
 .hidden { display: none !important; }
 .muted { color: var(--muted); font-size: 12.5px; }
