@@ -53,10 +53,10 @@ FareAlert：自部署的机票/动车低价监控组件。含税支付口径 + 1
 2. `git log --oneline -10` 看最近进展，跑 `python tools/acceptance.py` 确认基线全绿。
 3. 从路线图第一个未完成项继续，不重做已完成模块。
 
-每次开发结束的固定动作：过验收 → 提交 → 更新路线图勾选状态。
+每次开发结束的固定动作：过验收 → 提交 → 更新路线图勾选状态 → `git push`（含标签）。
 
 ### GitHub 推送规范（隐私红线）
 
 - 本地 git 无需任何权限，Agent 可正常 commit/tag。
-- 推送 GitHub 由人类本人执行 `gh auth login`（或系统凭据管理器登录一次）；**Agent 永不经手、不询问、不存储任何 token/密码**。
+- 推送凭据由 gh CLI 管理（本机已 `gh auth login` 完成，含 workflow scope）；**Agent 永不经手、不询问、不存储任何 token/密码**，直接 `git push` 即可；若凭据失效，由人类本人重新 `gh auth login`。
 - 外部贡献标准流：fork → 功能分支 → PR → CI 全绿 → 人工 review → 合入。
