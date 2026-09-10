@@ -44,4 +44,11 @@ SOURCE_REGISTRY = {
         "status": "需配置密钥",
         "desc": "去哪儿日历缺价日期自动用Amadeus含税最低价补洞,UI打'补'徽标;结果缓存24小时保护免费额度",
     },
+    "hgh-board-times": {
+        "kind": "flight",
+        "name": "机场班期·参考时刻",
+        "status": "可用",
+        "default": True,
+        "desc": "杭州(萧山)机场官网公开班期板,零密钥低频;按 航班号+星期 沉淀计划起降时刻库,首周逐日饱和;配置Amadeus后自动优先实时刻",
+    },
 }

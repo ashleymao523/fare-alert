@@ -13,6 +13,7 @@ class FlightDeal:
     dep_time: str = ""        # 起飞时刻(当前源未提供, 留给后续数据源)
     arr_time: str = ""        # 到达时刻
     duration_text: str = ""   # 飞行时长
+    time_src: str = ""        # 时刻来源: ""=无 | amadeus | airport-board
     ref_offset: int = 0       # nearby-ref: 距参考价日期的天数(0=非参考价)
 
     @property

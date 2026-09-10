@@ -14,6 +14,7 @@ from .history import load_history
 
 WEEK_SIZE = 7
 PUSH_INTERVAL = 7 * 86400  # seconds between weekly pushes
+RETRY_BACKOFF = 6 * 3600  # wait before retrying a failed weekly push
 
 
 def _series(history, route_id):
@@ -133,14 +134,19 @@ def _summary_text(doc):
 
 
 def should_push(cfg, path):
-    """Weekly push fires only when enabled AND >=7d since last push."""
+    """Weekly push fires only when enabled AND >=7d since last push.
+    A recent failure backs off (no push storm every loop cycle)."""
     if not (cfg.get("push") or {}).get("weekly_enabled", False):
         return False
     try:
         with open(path, encoding="utf-8") as f:
-            last = float(json.load(f).get("ts", 0))
+            doc = json.load(f)
     except Exception:
-        last = 0.0
+        doc = {}
+    last = float(doc.get("ts", 0) or 0)
+    retry_after = float(doc.get("retry_after", 0) or 0)
+    if retry_after and time.time() < retry_after:
+        return False  # failed recently: back off
     return (time.time() - last) >= PUSH_INTERVAL
 
 
@@ -149,5 +155,15 @@ def mark_pushed(path):
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump({"ts": time.time()}, f)
+    except Exception:
+        raise
+
+
+def mark_failed(path, retry_secs=RETRY_BACKOFF):
+    """Record a failed weekly push: keep the 7d timer, retry after backoff."""
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"retry_after": time.time() + retry_secs}, f)
     except Exception:
         raise

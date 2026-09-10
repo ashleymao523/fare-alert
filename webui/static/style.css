@@ -607,6 +607,7 @@ input::placeholder { color: var(--faint); }
   transition: background .15s ease, transform .15s ease;
 }
 .ft-pend.link:hover { background: rgba(0, 98, 227, 0.18); transform: translateY(-1px); }
+.ts-badge { margin-left: 8px; vertical-align: 1px; }
 
 .calendar .day.ref {
   border: 1.5px dashed var(--faint);

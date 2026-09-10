@@ -177,7 +177,8 @@ def _validate_config(body, current):
         if src is not None and k in src:
             clean_src[k] = bool(src[k])
         else:
-            clean_src[k] = bool(cur_src.get(k, False))
+            clean_src[k] = bool(cur_src.get(
+                k, bool(SOURCE_REGISTRY[k].get("default", False))))
     cur_ama = ((current.get("sources") or {}).get("amadeus")) or {}
     ama = (cfg.get("sources") or {}).get("amadeus")
     ama = ama if isinstance(ama, dict) else {}
@@ -500,7 +501,7 @@ def api_weekly_report():
 @app.post("/api/weekly-push")
 def api_weekly_push():
     """M4: send the current weekly digest now (also resets the 7d timer)."""
-    from core.weekly import build_weekly, mark_pushed
+    from core.weekly import build_weekly, mark_failed, mark_pushed
     cfg = load_config(CONFIG_PATH)
     report = build_weekly(os.path.join(DATA_DIR, "history.json"))
     if not report.get("ok"):
@@ -511,14 +512,20 @@ def api_weekly_push():
     results = push_all(cfg, _log, "📈 FareAlert 价格周报",
                        report["text"], url="")
     failed = [x for x in results if ":ERR" in x]
-    if failed:
+    wk_path = os.path.join(DATA_DIR, "weekly_push.json")
+    if len(failed) == len(results):
+        try:
+            mark_failed(wk_path)  # auto retry allowed after 6h backoff
+        except Exception:
+            _log.exception("weekly failure marker write failed")
         return jsonify({"ok": False,
                         "error": "推送失败: " + "; ".join(failed)[:200]}), 502
     try:
-        mark_pushed(os.path.join(DATA_DIR, "weekly_push.json"))
+        mark_pushed(wk_path)
     except Exception:
         _log.exception("weekly push marker write failed")
-    return jsonify({"ok": True, "results": results})
+    return jsonify({"ok": True, "results": results,
+                    **({"partial_failed": failed} if failed else {})})
 
 
 @app.get("/api/log")

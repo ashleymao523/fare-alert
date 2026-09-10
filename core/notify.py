@@ -11,6 +11,14 @@ _ALERTS_FILE = os.path.join(
     "data", "alerts.json")
 
 
+def has_channel(cfg):
+    """True when at least one real push channel (Bark/ServerChan) is set.
+    Used to avoid consuming the 7d weekly-push timer with a console-only push."""
+    p = cfg.get("push", {}) or {}
+    return bool((p.get("bark_key") or "").strip()
+                or (p.get("serverchan_sendkey") or "").strip())
+
+
 def push_all(cfg, log, title, body, url="", route_id=None):
     p = cfg.get("push", {})
     results = []
@@ -29,7 +37,10 @@ def push_all(cfg, log, title, body, url="", route_id=None):
             if p.get("sound"):
                 payload["sound"] = p["sound"]
             r = requests.post("https://api.day.app/" + bark, json=payload, timeout=15)
-            results.append("bark:" + str(r.status_code))
+            if r.status_code == 200:
+                results.append("bark:200")
+            else:  # invalid/expired key must count as failure downstream
+                results.append("bark:ERR HTTP " + str(r.status_code))
         except Exception as e:
             results.append("bark:ERR " + str(e))
 
@@ -38,7 +49,20 @@ def push_all(cfg, log, title, body, url="", route_id=None):
         try:
             r = requests.post("https://sctapi.ftqq.com/" + sc + ".send",
                               data={"title": title, "desp": body}, timeout=15)
-            results.append("serverchan:" + str(r.status_code))
+            ok = r.status_code == 200
+            body_code = None
+            if ok:  # ServerChan may answer 200 with an error body
+                try:
+                    body_code = int(r.json().get("code", 0))
+                    ok = body_code == 0
+                except Exception:
+                    ok = False
+            if ok:
+                results.append("serverchan:200")
+            elif r.status_code == 200:
+                results.append("serverchan:ERR BODY code=" + str(body_code))
+            else:
+                results.append("serverchan:ERR HTTP " + str(r.status_code))
         except Exception as e:
             results.append("serverchan:ERR " + str(e))
 

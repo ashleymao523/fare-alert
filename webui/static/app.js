@@ -871,16 +871,22 @@
     box.appendChild(title);
 
     // ---- flight timeline: dep &arr times, duration ----
+    var hasDep = !!d.dep_time, hasArr = !!d.arr_time;
     var hasTime = !!(d.dep_time && d.arr_time);
     var connecting = (d.flight_no || "").indexOf("/") >= 0;
     var tl = el("div", "ft-line");
     var depEnd = el("div", "ft-endpoint");
-    depEnd.appendChild(el("div", "ft-time" + (hasTime ? "" : " unknown"), hasTime ? d.dep_time : "--:--"));
+    depEnd.appendChild(el("div", "ft-time" + (hasDep ? "" : " unknown"), d.dep_time || "--:--"));
     depEnd.appendChild(el("div", "ft-code", route.from_iata || route.from_city || "出发"));
     var mid = el("div", "ft-mid");
     var durBox = el("div");
     durBox.appendChild(el("span", "ft-dur", connecting ? "中转 · " + (d.duration_text || "全程时刻待查") : (d.duration_text || "飞行时长待查")));
-    if (!hasTime) {
+    if (d.time_src === "airport-board") {
+      durBox.appendChild(el("span", "badge gray ts-badge", "计划时刻·机场班期"));
+    } else if (d.time_src === "amadeus") {
+      durBox.appendChild(el("span", "badge sky ts-badge", "计划时刻·Amadeus"));
+    }
+    if (!hasDep && !hasArr) {
       var amaSrc = (S.sources || {})["amadeus-intl"] || {};
       var amaOk = amaSrc.status === "可用";
       var pend = el("span", "ft-pend" + (amaOk ? "" : " link"), amaOk ? "时刻待接入" : "配置时刻源 →");
@@ -892,13 +898,16 @@
         };
       }
       durBox.appendChild(pend);
+    } else if (!hasDep || !hasArr) {
+      durBox.appendChild(el("span", "ft-pend",
+        d.time_src === "airport-board" ? "另一段时刻待班期库覆盖" : "另一段时刻待补"));
     }
     mid.appendChild(durBox);
     var path = el("div", "ft-path");
     path.appendChild(el("span", "ft-plane", "\u2708"));
     mid.appendChild(path);
     var arrEnd = el("div", "ft-endpoint");
-    arrEnd.appendChild(el("div", "ft-time" + (hasTime ? "" : " unknown"), hasTime ? d.arr_time : "--:--"));
+    arrEnd.appendChild(el("div", "ft-time" + (hasArr ? "" : " unknown"), d.arr_time || "--:--"));
     arrEnd.appendChild(el("div", "ft-code", route.to_iata || route.to_city || "到达"));
     tl.appendChild(depEnd); tl.appendChild(mid); tl.appendChild(arrEnd);
     box.appendChild(tl);
@@ -1741,6 +1750,7 @@
     "amadeus-intl": "Amadeus·国际低价",
     "amadeus-fill": "Amadeus·缺价补全",
     "amadeus-times": "Amadeus·时刻增强",
+    "hgh-board-times": "机场班期·参考时刻",
     "nearby-ref": "临近日参考价",
     "interp": "插值估算价",
     "push": "提醒推送"

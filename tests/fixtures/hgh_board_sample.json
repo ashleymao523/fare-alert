@@ -1,0 +1,10 @@
+{
+  "leave": [
+    {"hbh": "GJ8888", "main_hbh": "", "jhsj": "2026-09-10 07:55:00", "preschtime": "", "chinese_sfcs": "杭州/萧山", "chinese_mdcs": "重庆/江北", "chinese_hs": "长龙航空", "jxzs": "A320"},
+    {"hbh": "GJ8889", "main_hbh": "", "jhsj": "2026-09-10 12:00:00", "preschtime": "", "chinese_sfcs": "杭州/萧山", "chinese_mdcs": "重庆/江北", "chinese_hs": "长龙航空", "jxzs": "A320"},
+    {"hbh": "3U8887", "main_hbh": "GJ5321", "jhsj": "2026-09-10 11:20:00", "preschtime": "", "chinese_sfcs": "杭州/萧山", "chinese_mdcs": "成都/天府", "chinese_hs": "四川航空", "jxzs": "A321"}
+  ],
+  "arrive": [
+    {"hbh": "GJ8889", "main_hbh": "", "jhsj": "2026-09-10 10:30:00", "preschtime": "2026-09-10 06:20:00", "chinese_sfcs": "重庆/江北", "chinese_mdcs": "杭州/萧山", "chinese_hs": "长龙航空", "jxzs": "A320"}
+  ]
+}

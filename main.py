@@ -20,8 +20,10 @@ from core.flights import (airline_name, booking_url, estimate_duration_text,
                           merge_fill_deals, window_dates)
 from core.intl import city_iata, fetch_intl_calendar, fetch_schedule_times
 from core.models import FlightDeal
-from core.notify import push_all
+from core.notify import has_channel, push_all
 from core.report import write_report
+from core.sched_board import (board_lookup, load_sched_db, touches_hangzhou,
+                              update_sched_db)
 from core.state import load_state, save_state
 from core.trains import refresh_train_info
 
@@ -98,6 +100,7 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "dep_time": deal.dep_time,
         "arr_time": deal.arr_time,
         "duration_text": deal.duration_text,
+        "time_src": deal.time_src,
         "source": deal.source,
         "ref_offset": deal.ref_offset if deal.source == "nearby-ref" else 0,
     }
@@ -148,7 +151,7 @@ def _fill_reference_deals(deals, date_from, date_to, fc, tc,
                 refs.append(FlightDeal(
                     date=g, bare_price=price, flight_no=near.flight_no,
                     dep_time=near.dep_time, arr_time=near.arr_time,
-                    duration_text=near.duration_text,
+                    duration_text=near.duration_text, time_src=near.time_src,
                     source="interp", url=booking_url(fc, tc, g),
                     ref_offset=0))
                 continue
@@ -301,15 +304,35 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
             if rec:
                 rec.step("amadeus-times", route_id, "schedule lookup", "skip",
                          (time.time() - t0) * 1000, error=e)
+    # v0.18: zero-key airport-board fallback (see core/sched_board.py).
+    # Amadeus rows win; the board only fills what Amadeus could not.
+    bdb = load_sched_db(DATA_DIR)
+    t0b = time.time()
+    n_board = 0
     for d in deals:
         no = (d.flight_no or "").strip()
         if "/" in no:  # connecting itinerary: estimate with layover
             segs = [s.strip().upper() for s in no.split("/") if s.strip()]
             seg_rows = [by_no.get(s) for s in segs]
-            if seg_rows and seg_rows[0]:
-                d.dep_time = seg_rows[0].get("dep") or d.dep_time
-            if seg_rows and seg_rows[-1]:
-                d.arr_time = seg_rows[-1].get("arr") or d.arr_time
+            if seg_rows and seg_rows[0] and seg_rows[0].get("dep"):
+                d.dep_time = seg_rows[0]["dep"]
+                d.time_src = "amadeus"
+            if seg_rows and seg_rows[-1] and seg_rows[-1].get("arr"):
+                d.arr_time = seg_rows[-1]["arr"]
+                d.time_src = "amadeus"
+            if not d.dep_time and segs:
+                ent = board_lookup(bdb, segs[0], d.date, fc, "")
+                if ent and ent.get("dep"):
+                    d.dep_time = ent["dep"]
+                    d.time_src = "airport-board"
+                    n_board += 1
+            if not d.arr_time and segs:
+                ent = board_lookup(bdb, segs[-1], d.date, "", tc)
+                if ent and ent.get("arr"):
+                    d.arr_time = ent["arr"]
+                    if d.time_src != "amadeus":
+                        d.time_src = "airport-board"
+                    n_board += 1
             if not d.duration_text:
                 d.duration_text = estimate_duration_text(fi, ti, connecting=True)
             continue
@@ -318,8 +341,27 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
             d.dep_time = row.get("dep") or d.dep_time
             d.arr_time = row.get("arr") or d.arr_time
             d.duration_text = row.get("dur") or d.duration_text
+            if d.dep_time or d.arr_time:
+                d.time_src = "amadeus"
+        if no and not (d.dep_time and d.arr_time):
+            ent = board_lookup(bdb, no, d.date, fc, tc)
+            if ent:
+                got = False
+                if not d.dep_time and ent.get("dep"):
+                    d.dep_time = ent["dep"]
+                    got = True
+                if not d.arr_time and ent.get("arr"):
+                    d.arr_time = ent["arr"]
+                    got = True
+                if got:
+                    n_board += 1
+                    if d.time_src != "amadeus":
+                        d.time_src = "airport-board"
         if not d.duration_text:
             d.duration_text = estimate_duration_text(fi, ti)
+    if rec and (n_board or not ama_ready):
+        rec.step("hgh-board-times", route_id, "board time fallback", "ok",
+                 (time.time() - t0b) * 1000, count=n_board)
     return deals
 
 
@@ -334,6 +376,23 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
     enabled = (cfg.get("sources") or {}).get("enabled") or {}
     use_flight = enabled.get("qunar-calendar", True)
     use_train = enabled.get("12306-train", True)
+    if enabled.get("hgh-board-times", True):
+        t0b = time.time()
+        if not touches_hangzhou(cfg.get("routes")):
+            # board data only serves HGH routes: skip, save request budget
+            rec.step("hgh-board-times", "sched-db",
+                     "update flight time db", "skip", 0,
+                     error="no route touches Hangzhou(HGH) board")
+        else:
+            try:
+                update_sched_db(session, net, DATA_DIR, log)
+                rec.step("hgh-board-times", "sched-db",
+                         "update flight time db", "ok", (time.time() - t0b) * 1000)
+            except Exception as e:
+                log.warning("airport board update failed: %s" % e)
+                rec.step("hgh-board-times", "sched-db",
+                         "update flight time db", "skip",
+                         (time.time() - t0b) * 1000, error=e)
     snapshot_routes = []
     pending_push = []
 
@@ -551,16 +610,32 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
         log.exception("health update failed")
     try:  # M4: daily KPI archive + optional weekly digest push
         from core.history import append_history
-        from core.weekly import build_weekly, mark_pushed, should_push
+        from core.weekly import (build_weekly, mark_failed, mark_pushed,
+                                 should_push)
         hist_path = os.path.join(DATA_DIR, "history.json")
         append_history(snapshot, hist_path)
         wk_path = os.path.join(DATA_DIR, "weekly_push.json")
         if push_enabled and should_push(cfg, wk_path):
-            report = build_weekly(hist_path)
-            if report.get("ok"):
-                push_all(cfg, log, "📈 FareAlert 价格周报", report["text"], url="")
-                mark_pushed(wk_path)
-                log.info("weekly report pushed")
+            if not has_channel(cfg):
+                log.warning("weekly push skipped: no push channel configured "
+                            "(timer not consumed)")
+            else:
+                report = build_weekly(hist_path)
+                if report.get("ok"):
+                    results = push_all(cfg, log, "📈 FareAlert 价格周报",
+                                       report["text"], url="")
+                    failed = [x for x in results if ":ERR" in x]
+                    if len(failed) == len(results):
+                        # every channel failed: retry in 6h, no 45min storm
+                        mark_failed(wk_path)
+                        log.warning("weekly push failed on all channels, "
+                                    "will retry in 6h: " + "; ".join(failed))
+                    else:
+                        if failed:  # partial success still consumes the timer
+                            log.warning("weekly push partial failure "
+                                        "(timer consumed): " + "; ".join(failed))
+                        mark_pushed(wk_path)
+                        log.info("weekly report pushed")
     except Exception:
         log.exception("weekly history/report failed")
     return snapshot

@@ -10,8 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from core.history import append_history, load_history
-from core.weekly import (PUSH_INTERVAL, build_weekly, mark_pushed,
-                        should_push)
+from core.weekly import (PUSH_INTERVAL, build_weekly, mark_failed,
+                        mark_pushed, should_push)
 
 
 def _snap(cheapest_total, days_below=0):
@@ -125,6 +125,27 @@ class TestWeekly(unittest.TestCase):
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(doc, f)
             self.assertTrue(should_push(cfg, path))
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
+
+    def test_failed_push_backoff_no_storm(self):
+        path = os.path.join(os.path.dirname(__file__), "_wkfail_test.json")
+        if os.path.exists(path):
+            os.remove(path)
+        try:
+            cfg = {"push": {"weekly_enabled": True}}
+            self.assertTrue(should_push(cfg, path))
+            mark_failed(path)
+            self.assertFalse(should_push(cfg, path))  # inside 6h backoff
+            with open(path, encoding="utf-8") as f:
+                doc = json.load(f)
+            doc["retry_after"] = time.time() - 1
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(doc, f)
+            self.assertTrue(should_push(cfg, path))  # backoff elapsed
+            mark_pushed(path)  # success clears backoff state
+            self.assertFalse(should_push(cfg, path))
         finally:
             if os.path.exists(path):
                 os.remove(path)
