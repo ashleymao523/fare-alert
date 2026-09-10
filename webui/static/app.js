@@ -1939,12 +1939,90 @@
     if (btn) btn.click();
   }
 
+  /* ---------- 洞察周报 (M4) ---------- */
+
+  function wkSpark(series) {
+    if (!series || series.length < 2) return "";
+    var vals = series.map(function (p) { return p[1]; });
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    if (hi === lo) hi = lo + 1;
+    var W = 260, H = 56, PAD = 6;
+    var pts = series.map(function (p, i) {
+      var x = PAD + i * (W - 2 * PAD) / (series.length - 1);
+      var y = H - PAD - (p[1] - lo) * (H - 2 * PAD) / (hi - lo);
+      return [x, y];
+    });
+    var path = pts.map(function (p, i) {
+      return (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1);
+    }).join(", ");
+    var area = path + " L" + pts[pts.length - 1][0].toFixed(1) + " " + (H - PAD) +
+      " L" + pts[0][0].toFixed(1) + " " + (H - PAD) + " Z";
+    var ns = "http://www.w3.org/2000/svg";
+    function mk(tag) { return document.createElementNS(ns, tag); }
+    var svg = mk("svg");
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.setAttribute("class", "wk-spark");
+    var a = mk("path");
+    a.setAttribute("d", area);
+    a.setAttribute("class", "wk-spark-area");
+    var l = mk("path");
+    l.setAttribute("d", path);
+    l.setAttribute("class", "wk-spark-line");
+    svg.appendChild(a); svg.appendChild(l);
+    return svg;
+  }
+
+  function renderWeekly(rep) {
+    $("wkText").textContent = rep.text || "";
+    var box = $("wkRoutes");
+    box.innerHTML = "";
+    (rep.routes || []).forEach(function (r) {
+      var card = el("div", "card wk-card");
+      var head = el("div", "wk-head");
+      head.appendChild(el("h4", null, r.name));
+      var chips = el("div", "wk-chips");
+      chips.appendChild(el("span", "wk-chip",
+        "本周最低 " + fmtMoney(r.week.min)));
+      chips.appendChild(el("span", "wk-chip",
+        "本周均价 " + fmtMoney(r.week.avg)));
+      if (r.prev) {
+        chips.appendChild(el("span", "wk-chip",
+          "上周最低 " + fmtMoney(r.prev.min)));
+      } else {
+        chips.appendChild(el("span", "wk-chip muted", "上周暂无数据"));
+      }
+      head.appendChild(chips);
+      var body = el("div", "wk-body");
+      body.appendChild(wkSpark(r.series));
+      var info = el("div", "wk-info");
+      info.textContent = r.text;
+      body.appendChild(info);
+      card.appendChild(head); card.appendChild(body);
+      box.appendChild(card);
+    });
+    if (!rep.ok) {
+      var empty = el("div", "card");
+      empty.appendChild(el("div", "muted",
+        "暂无历史数据:跑一次查询后,每天自动归档指标,积累 2 天即可出周报。"));
+      box.appendChild(empty);
+    }
+  }
+
+  function initWeekly() {
+    api("/api/weekly-report").then(function (rep) {
+      renderWeekly(rep);
+    }).catch(function (e) {
+      $("wkText").textContent = "周报加载失败: " + e.message;
+    });
+  }
+
   /* ---------- 事件绑定 ---------- */
 
   function refreshTab(name) {
     if (name === "dash") renderDash();
     if (name === "crawl") loadCrawl();
     if (name === "reverse") initReverse();
+    if (name === "weekly") initWeekly();
     if (name === "routes") renderRoutesEditor();
     if (name === "sources") renderSources();
     if (name === "push") { renderPush(); loadAlerts(); }
@@ -1985,6 +2063,21 @@
         loadCrawl();
         btn.disabled = false;
         btn.textContent = "立即查询";
+      });
+    });
+
+    $("btnWeeklyRefresh").addEventListener("click", initWeekly);
+    $("btnWeeklyPush").addEventListener("click", function () {
+      var btn = $("btnWeeklyPush");
+      btn.disabled = true;
+      btn.textContent = "推送中…";
+      post("/api/weekly-push", {}).then(function () {
+        toast("周报已推送 ✓");
+      }).catch(function (e) {
+        toast("推送失败: " + e.message);
+      }).finally(function () {
+        btn.disabled = false;
+        btn.textContent = "立即推送周报";
       });
     });
 

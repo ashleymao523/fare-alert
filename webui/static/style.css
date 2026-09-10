@@ -694,3 +694,22 @@ input::placeholder { color: var(--faint); }
 .rev-price { grid-area: price; font-size: 22px; font-weight: 750; color: var(--accent-ink); }
 .rev-hit .muted { grid-area: sub; font-size: 12.5px; }
 .rev-hit .v-link { grid-area: link; }
+
+/* ---------- 洞察周报 (M4) ---------- */
+.wk-text { white-space: pre-line; font-size: 14px; line-height: 1.75;
+  background: var(--bg-soft, #f6f8fa); border-radius: 10px; padding: 14px 16px; }
+.wk-card { display: flex; flex-direction: column; gap: 10px; }
+.wk-head { display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 8px; }
+.wk-head h4 { margin: 0; font-size: 15px; }
+.wk-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.wk-chip { font-size: 12px; border: 1px solid var(--line, #dde3ea);
+  border-radius: 999px; padding: 2px 10px; color: var(--ink, #333);
+  background: #fff; }
+.wk-body { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.wk-spark { width: 260px; height: 56px; flex: 0 0 auto; }
+.wk-spark-line { fill: none; stroke: var(--accent-ink, #0a7d32);
+  stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.wk-spark-area { fill: var(--accent-soft, #e8f8ee); opacity: 0.8; }
+.wk-info { flex: 1 1 220px; font-size: 13px; color: var(--muted-ink, #666);
+  line-height: 1.7; }

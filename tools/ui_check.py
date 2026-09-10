@@ -92,6 +92,13 @@ checks = {
 "v0.13请求硬预算": "HARD_MAX_REQUESTS" in open(os.path.join("core", "reverse.py"), encoding="utf-8").read(),
 "v0.13结果卡样式": ("rev-hit" in appjs) and (".rev-hit" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read()),
 "v0.13缓存新鲜度徽标": "缓存" in appjs[appjs.index("function renderReverse"):appjs.index("function renderReverse") + 1500],
+"v0.14周报Tab": ('data-tab="weekly"' in h) and ('id="tab-weekly"' in h),
+"v0.14周报文本区": 'id="wkText"' in h,
+"v0.14周报路由卡": ("wk-card" in appjs) and (".wk-card" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read()),
+"v0.14周报走势图": ("wkSpark" in appjs) and (".wk-spark-line" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read()),
+"v0.14周报引擎": ("build_weekly" in open("webui.py", encoding="utf-8").read()) and ("build_weekly" in open(os.path.join("core", "weekly.py"), encoding="utf-8").read()),
+"v0.14周报API": '/api/weekly-report' in appjs,
+"v0.14周报推送按钮": 'btnWeeklyPush' in h,
 }
 bad = 0
 for k, v in checks.items():

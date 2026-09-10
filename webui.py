@@ -200,6 +200,7 @@ def _validate_config(body, current):
         push[k] = (cur_push.get(k) or "") if v == MASK else v.strip()
     for k in ("group", "sound"):
         push[k] = str(push.get(k) or "")
+    push["weekly_enabled"] = bool(push.get("weekly_enabled", False))
     cfg["push"] = push
 
     al = cfg.get("alert") or {}
@@ -475,6 +476,39 @@ def api_alerts():
     else:
         history = []
     return jsonify({"alerts": history})
+
+
+@app.get("/api/history")
+def api_history():
+    """M4: daily KPI archive (price trend source for the weekly tab)."""
+    from core.history import load_history
+    return jsonify({"history": load_history(os.path.join(DATA_DIR, "history.json"))})
+
+
+@app.get("/api/weekly-report")
+def api_weekly_report():
+    """M4: weekly digest preview (no push, numbers recomputable from history)."""
+    from core.weekly import build_weekly, should_push
+    cfg = load_config(CONFIG_PATH)
+    report = build_weekly(os.path.join(DATA_DIR, "history.json"))
+    report["push_enabled"] = (cfg.get("push") or {}).get("weekly_enabled", False)
+    report["push_due"] = should_push(
+        cfg, os.path.join(DATA_DIR, "weekly_push.json"))
+    return jsonify(report)
+
+
+@app.post("/api/weekly-push")
+def api_weekly_push():
+    """M4: send the current weekly digest now (also resets the 7d timer)."""
+    from core.weekly import build_weekly, mark_pushed
+    cfg = load_config(CONFIG_PATH)
+    report = build_weekly(os.path.join(DATA_DIR, "history.json"))
+    if not report.get("ok"):
+        return jsonify({"ok": False, "error": "暂无历史数据,先跑一次查询"}), 400
+    results = push_all(cfg, _log, "📈 FareAlert 价格周报",
+                       report["text"], url="")
+    mark_pushed(os.path.join(DATA_DIR, "weekly_push.json"))
+    return jsonify({"ok": True, "results": results})
 
 
 @app.get("/api/log")

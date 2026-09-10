@@ -549,6 +549,20 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
         update_from_crawl(DATA_DIR)
     except Exception:
         log.exception("health update failed")
+    try:  # M4: daily KPI archive + optional weekly digest push
+        from core.history import append_history
+        from core.weekly import build_weekly, mark_pushed, should_push
+        hist_path = os.path.join(DATA_DIR, "history.json")
+        append_history(snapshot, hist_path)
+        wk_path = os.path.join(DATA_DIR, "weekly_push.json")
+        if push_enabled and should_push(cfg, wk_path):
+            report = build_weekly(hist_path)
+            if report.get("ok"):
+                push_all(cfg, log, "📈 FareAlert 价格周报", report["text"], url="")
+                mark_pushed(wk_path)
+                log.info("weekly report pushed")
+    except Exception:
+        log.exception("weekly history/report failed")
     return snapshot
 
 

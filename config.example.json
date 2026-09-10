@@ -38,6 +38,7 @@
   "push": {
     "bark_key": "",
     "serverchan_sendkey": "",
+    "weekly_enabled": false,
     "group": "机票低价提醒",
     "sound": "calm"
   },

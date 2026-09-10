@@ -15,6 +15,7 @@ import urllib.error
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
+sys.path.insert(0, ROOT)
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 NON_REAL = ("nearby-ref", "interp")
@@ -147,6 +148,30 @@ def gate_g4():
                        (r.get("id"), r.get("cheapest_total"), mn))
     rec("G4", "cheapest_total==real-min x%d" % checked, not bad,
         "; ".join(bad)[:160])
+    # M4: weekly report numbers must equal an independent recomputation
+    hist_path = "data/history.json"
+    if not os.path.exists(hist_path):
+        skip("G4", "weekly==history recompute", "无 history,先跑一次抓取")
+        return
+    hist = json.load(open(hist_path, encoding="utf-8"))
+    from core.weekly import build_weekly
+    rep = build_weekly(hist_path)
+    wbad = []
+    for r in rep.get("routes", []):
+        series = []
+        for day in sorted(hist.get("days", {})):
+            m = (hist["days"][day].get("routes") or {}).get(r["id"])
+            if m and isinstance(m.get("cheapest_total"), (int, float)):
+                series.append(m["cheapest_total"])
+        wk = series[-7:]
+        if abs(min(wk) - r["week"]["min"]) > 0.051:
+            wbad.append("%s min" % r["id"])
+        if abs(round(sum(wk) / len(wk), 1) - r["week"]["avg"]) > 0.051:
+            wbad.append("%s avg" % r["id"])
+        if str(int(r["week"]["min"])) not in r["text"]:
+            wbad.append("%s text" % r["id"])
+    rec("G4", "weekly==history recompute x%d" % len(rep.get("routes", [])),
+        not wbad, "; ".join(wbad)[:160])
 
 
 # ---------- G5 compliance ----------
