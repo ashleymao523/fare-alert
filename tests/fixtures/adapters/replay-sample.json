@@ -1,0 +1,9 @@
+{
+  "id": "replay-sample",
+  "name": "示例回放源(国内)",
+  "deals": [
+    {"date": "2026-09-15", "price": 320, "flight_no": "GJ5421", "url": "https://example.com/b1"},
+    {"date": "2026-09-16", "price": 280, "flight_no": "3U8888", "url": "https://example.com/b2"},
+    {"date": "2026-09-17", "price": 410, "flight_no": "MU5421", "url": "https://example.com/b3"}
+  ]
+}

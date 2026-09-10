@@ -1,0 +1,8 @@
+{
+  "id": "replay-intl",
+  "name": "示例回放源(国际, 含时刻)",
+  "deals": [
+    {"date": "2026-09-20", "price": 890, "flight_no": "MU5041", "dep_time": "09:15", "arr_time": "13:40", "duration_text": "4h25m"},
+    {"date": "2026-09-21", "price": 760, "flight_no": "CZ3071", "dep_time": "18:05", "arr_time": "22:30", "duration_text": "4h25m"}
+  ]
+}
