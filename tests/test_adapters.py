@@ -65,7 +65,7 @@ class AdapterConformanceTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("Amadeus", hint)
         ok2, _ = AmadeusIntlAdapter().is_configured(
-            {"amadeus": {"api_key": "k", "api_secret": "s"}})
+            {"sources": {"amadeus": {"client_id": "k", "client_secret": "s"}}})
         self.assertTrue(ok2)
 
     def test_register_overrides_for_tests(self):

@@ -141,7 +141,7 @@ def city_iata(city):
 
 
 SCHEDULE_CACHE = "amadeus_schedule_cache.json"
-SCHEDULE_TTL = 86400
+SCHEDULE_TTL = 14 * 86400  # 航班排班按航季更新, 14 天缓存省配额
 
 
 def fetch_schedule_times(session, net_cfg, ama_cfg, from_iata, to_iata,

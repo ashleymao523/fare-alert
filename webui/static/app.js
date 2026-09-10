@@ -880,7 +880,19 @@
     var mid = el("div", "ft-mid");
     var durBox = el("div");
     durBox.appendChild(el("span", "ft-dur", connecting ? "中转 · " + (d.duration_text || "全程时刻待查") : (d.duration_text || "飞行时长待查")));
-    if (!hasTime) durBox.appendChild(el("span", "ft-pend", "时刻待接入"));
+    if (!hasTime) {
+      var amaSrc = (S.sources || {})["amadeus-intl"] || {};
+      var amaOk = amaSrc.status === "可用";
+      var pend = el("span", "ft-pend" + (amaOk ? "" : " link"), amaOk ? "时刻待接入" : "配置时刻源 →");
+      if (!amaOk) {
+        pend.title = "配置 Amadeus 免费测试密钥后, 显示航班真实起降时刻";
+        pend.onclick = function () {
+          gotoTab("sources");
+          setTimeout(function () { var f = $("amaId"); if (f) f.focus(); }, 80);
+        };
+      }
+      durBox.appendChild(pend);
+    }
     mid.appendChild(durBox);
     var path = el("div", "ft-path");
     path.appendChild(el("span", "ft-plane", "\u2708"));

@@ -103,6 +103,10 @@ checks = {
 "v0.16推送守卫": "未配置推送渠道" in open("webui.py", encoding="utf-8").read(),
 "v0.16走势最低点": "wk-spark-dot-min" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read(),
 "v0.16单点占位": "wkDot" in appjs,
+"v0.17时刻空态可配置": ("配置时刻源" in appjs) and ("amaId" in appjs),
+"v0.17时刻空态样式": ".ft-pend.link" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read(),
+"v0.17时刻跳转绑定": 'gotoTab("sources")' in appjs,
+"v0.17排班缓存14天": "14 * 86400" in open(os.path.join("core", "intl.py"), encoding="utf-8").read(),
 }
 bad = 0
 for k, v in checks.items():

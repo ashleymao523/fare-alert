@@ -601,6 +601,12 @@ input::placeholder { color: var(--faint); }
   border-radius: 999px; background: var(--line-soft); color: var(--muted);
   font-size: 10.5px; font-weight: 600; vertical-align: 1px;
 }
+.ft-pend.link {
+  background: var(--accent-soft); color: var(--accent-ink);
+  cursor: pointer; border: 1px solid rgba(0, 98, 227, 0.28);
+  transition: background .15s ease, transform .15s ease;
+}
+.ft-pend.link:hover { background: rgba(0, 98, 227, 0.18); transform: translateY(-1px); }
 
 .calendar .day.ref {
   border: 1.5px dashed var(--faint);

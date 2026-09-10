@@ -94,16 +94,18 @@ class AmadeusIntlAdapter(FlightSourceAdapter):
     priority = 30
 
     def is_configured(self, config):
-        key = ((config.get("amadeus") or {}).get("api_key") or "").strip()
-        sec = ((config.get("amadeus") or {}).get("api_secret") or "").strip()
+        ama = ((config.get("sources") or {}).get("amadeus")) or {}
+        key = (ama.get("client_id") or "").strip()
+        sec = (ama.get("client_secret") or "").strip()
         if not key or not sec:
-            return False, "Amadeus 需在「国际航班」页配置 api_key/api_secret"
+            return False, "Amadeus 需在「爬虫监控」页配置 client_id/client_secret"
         return True, ""
 
     def fetch(self, session, net_cfg, config, q):
         from . import intl
+        ama_cfg = q.ama_cfg or ((config.get("sources") or {}).get("amadeus")) or {}
         deals = intl.fetch_intl_calendar(
-            session, net_cfg, q.ama_cfg or config.get("amadeus") or {},
+            session, net_cfg, ama_cfg,
             q.tax_cfg, intl.city_iata(q.from_city),
             intl.city_iata(q.to_city), q.date_from, q.date_to, q.data_dir)
         return deals

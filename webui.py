@@ -534,8 +534,8 @@ def api_report(subpath):
 def main():
     cfg = load_config(CONFIG_PATH)
     w = cfg.get("webui", {})
-    host = w.get("host", "127.0.0.1")
-    port = int(w.get("port", 8765))
+    host = os.environ.get("FAREALERT_HOST") or w.get("host", "127.0.0.1")
+    port = int(os.environ.get("FAREALERT_PORT") or w.get("port", 8765))
     shown = "127.0.0.1" if host == "0.0.0.0" else host
     print("FareAlert Web UI: http://" + shown + ":" + str(port))
     app.run(host=host, port=port, debug=False, threaded=True)
