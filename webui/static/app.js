@@ -21,6 +21,11 @@
     return "¥" + (n % 1 === 0 ? n.toFixed(0) : n.toFixed(1));
   }
   function parseDate(s) { return new Date(s + "T00:00:00"); }
+  // v0.29.1: 本地时区序列化(toISOString 在东八区会使日期整体前移一天)
+  function dstrLocal(d) {
+    return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) +
+      "-" + ("0" + d.getDate()).slice(-2);
+  }
   function fmtMD(s) {
     var d = parseDate(s);
     return (d.getMonth() + 1) + "/" + d.getDate();
@@ -777,7 +782,7 @@
     var d = parseDate(route.window[0]), end = parseDate(route.window[1]);
     var guard = 0;
     while (d <= end && guard < 400) {
-      days.push(d.toISOString().slice(0, 10));
+      days.push(dstrLocal(d));
       d.setDate(d.getDate() + 1);
       guard++;
     }

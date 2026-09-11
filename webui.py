@@ -39,6 +39,10 @@ app = Flask(__name__,
 _lock = threading.RLock()
 _log = runner.setup_logging()
 
+from webui_v2 import register_v2  # noqa: E402
+
+register_v2(app)
+
 
 def _deep_copy(x):
     return json.loads(json.dumps(x))

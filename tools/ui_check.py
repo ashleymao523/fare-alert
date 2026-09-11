@@ -122,6 +122,37 @@ checks = {
     "v0.28设计令牌色板": all(t in css for t in ("--fs-2xs", "--r-pill", "--green-bg", "--on-accent", "--r-flag")),
     "v0.28令牌接线量": css.count("var(--") > 600,
 }
+# --- v0.29: v2 frontend (web/, Preact+Vite, hosted same-origin at /v2) ---
+_web_dist_idx = os.path.join("web", "dist", "index.html")
+if os.path.exists(_web_dist_idx):
+    _dist_html = open(_web_dist_idx, encoding="utf-8").read()
+    checks["v0.29 v2构建产物"] = ("/v2/assets/" in _dist_html) and ('id="app"' in _dist_html)
+else:
+    checks["v0.29 v2构建产物"] = False
+_webui_src = open("webui.py", encoding="utf-8").read()
+_v2mod_src = open("webui_v2.py", encoding="utf-8").read()
+checks["v0.29 v2同源托管"] = ("register_v2" in _webui_src) and ('"/v2"' in _v2mod_src)
+
+
+def _root_tokens(txt):
+    i = txt.index(":root")
+    j = txt.index("}", i)
+    return set(re.findall(r"--[A-Za-z0-9-]+(?=\s*:)", txt[i:j]))
+
+
+_old_tokens = _root_tokens(css)
+_new_tokens = _root_tokens(open(os.path.join("web", "src", "styles", "tokens.css"), encoding="utf-8").read())
+checks["v0.29 v2令牌同步"] = _old_tokens <= _new_tokens
+_hex_v2 = []
+for _root_dir, _sub_dirs, _fs in os.walk(os.path.join("web", "src")):
+    for _fn in _fs:
+        if _fn == "tokens.css":
+            continue
+        _p = os.path.join(_root_dir, _fn)
+        _t = open(_p, encoding="utf-8").read()
+        _hex_v2 += [_p + ":" + m for m in re.findall(r"#[0-9a-fA-F]{3,8}\b", _t)]
+checks["v0.29 v2零硬编码色"] = not _hex_v2
+
 bad = 0
 for k, v in checks.items():
     print(("PASS " if v else "FAIL ") + k)
@@ -155,4 +186,12 @@ if _hex_left or _fs_left:
     bad += 1
 else:
     print("PASS STRUCT v0.28 设计令牌: 规则体零硬编码色值/字号")
+if _hex_v2:
+    print("FAIL STRUCT v0.29 v2 frontend: hardcoded hex %d: %s" % (len(_hex_v2), ", ".join(_hex_v2[:5])))
+    bad += 1
+elif not _old_tokens <= _new_tokens:
+    print("FAIL STRUCT v0.29 v2 frontend: missing tokens: %s" % ", ".join(sorted(_old_tokens - _new_tokens)[:8]))
+    bad += 1
+else:
+    print("PASS STRUCT v0.29 v2 frontend: tokens synced, zero hardcoded hex (%d tokens)" % len(_new_tokens))
 sys.exit(1 if (bad or days < 30) else 0)

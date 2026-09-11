@@ -1,0 +1,60 @@
+/* v2 设计令牌: 与 webui/static/style.css 的 :root 保持同源同步(ui_check 门禁校验),
+   本文件仅允许追加 v2 专属令牌, 禁止修改/删除与旧版同名的令牌. */
+:root {
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 14px;
+  --sp-4: 20px;
+  --bg: #f2f5fa;
+  --card: #ffffff;
+  --card2: #f7f9fd;
+  --line: #dfe5ef;
+  --line-soft: #edf1f8;
+  --text: #0b0e13;
+  --text-2: #2b3442;
+  --muted: #5c6774;
+  --faint: #98a2b3;
+  --accent: #0062e3;
+  --accent-2: #0770d6;
+  --accent-ink: #004eb3;
+  --accent-soft: rgba(0, 98, 227, 0.09);
+  --green: #0a8550;
+  --green-d: #076b41;
+  --amber: #d97706;
+  --red: #dc2626;
+  --r-sm: 10px; --r-md: 14px; --r-lg: 20px;
+  --sh-1: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --sh-2: 0 4px 8px -2px rgba(16, 24, 40, 0.08), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
+  --sh-3: 0 12px 24px -6px rgba(16, 24, 40, 0.12), 0 4px 8px -4px rgba(16, 24, 40, 0.08);
+  --ring: 0 0 0 3px rgba(0, 98, 227, 0.20);
+  --on-accent: #ffffff;
+  --line-strong: #c8d1e0;
+  --green-bg: #e8f8ee;
+  --amber-d: #b45309;
+  --amber-bg: #fff3d6;
+  --gold: #e7b96a;
+  --gold-ink: #8a5a00;
+  --gold-bg: #f0d9a6;
+  --gold-soft: #ffe9bd;
+  --red-d: #9f1239;
+  --red-bg: #fef2f2;
+  --red-line: #fca5a5;
+  --info: #0369a1;
+  --info-2: #0e7490;
+  --sky: #a8c0f0;
+  --violet: #5b21b6;
+  --sp-xs: 2px; --sp-sm: 6px; --sp-md: 10px; --sp-lg: 12px;
+  --sp-xl: 16px; --sp-2xl: 28px; --sp-3xl: 40px;
+  --fs-2xs: 8.5px; --fs-xs: 10px; --fs-sm: 11px; --fs-md: 12px;
+  --fs-base: 13px; --fs-lg: 14px; --fs-xl: 15px; --fs-2xl: 16px;
+  --fs-3xl: 18px; --fs-4xl: 20px; --fs-5xl: 22px; --fs-6xl: 26px; --fs-7xl: 30px;
+  --r-1: 2px; --r-xs: 8px; --r-pill: 999px; --r-flag: 4px 4px 2px 2px;
+  --dur-fast: 120ms; --dur-base: 200ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  /* ---- v2 专属令牌 (旧版无对应) ---- */
+  --chart-grid: var(--line-soft);
+  --chart-area-a: rgba(0, 98, 227, 0.16);
+  --chart-area-b: rgba(0, 98, 227, 0.01);
+  --hero-grad-a: rgba(0, 98, 227, 0.10);
+  --hero-grad-b: rgba(168, 192, 240, 0.16);
+}
