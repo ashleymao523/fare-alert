@@ -173,7 +173,7 @@ python tools/acceptance.py
 ```
 
 - 门禁覆盖 G0 静态检查 / G1 单测 / G2 API 契约 / G3 DOM 断言 / G4-G6 红线(提醒、隐私、估算价)。
-- 人机协作守则见 [AGENTS.md](AGENTS.md),逐条门禁定义见 [docs/验收规范.md](docs/验收规范.md),里程碑与 DoD 见 [docs/迭代路线图.md](docs/迭代路线图.md)。
+- 人机协作守则见 [AGENTS.md](AGENTS.md),逐条门禁定义见 [docs/验收规范.md](docs/验收规范.md),里程碑与 DoD 见 [docs/迭代路线图.md](docs/迭代路线图.md),API 契约见 [docs/API.md](docs/API.md)。
 本仓库已接入 CI(push/PR 自动跑验收),本地全绿 + CI 全绿才可合入。
 
 ## 免责声明
