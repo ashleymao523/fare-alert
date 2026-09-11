@@ -324,5 +324,85 @@ class TestSchedStats(unittest.TestCase):
         self.assertEqual(st["updated"], 1750000000.5)
 
 
+class TestRoutePriors(unittest.TestCase):
+    def _db(self, *legs):
+        flights = {}
+        for i, (city, dep, arr) in enumerate(legs):
+            flights["T%d" % i] = {"dows": {"3": {
+                "dep": dep, "arr": arr, "from": city,
+                "to": "杭州"}}}
+        return {"updated": 1, "flights": flights}
+
+    def test_prior_median_and_samples(self):
+        priors = sb.build_route_priors(self._db(
+            ("重庆", "08:00", "10:30"),
+            ("重庆", "09:00", "11:35"),
+            ("重庆", "10:00", "12:40")))
+        self.assertEqual(priors["重庆"]["minutes"], 155)
+        self.assertEqual(priors["重庆"]["n"], 3)
+
+    def test_red_eye_wraps_midnight(self):
+        priors = sb.build_route_priors(self._db(
+            ("乌鲁木齐", "23:30", "01:40"),
+            ("乌鲁木齐", "22:00", "00:10"),
+            ("乌鲁木齐", "21:00", "23:20")))
+        self.assertEqual(priors["乌鲁木齐"]["minutes"], 130)
+
+    def test_garbage_rows_rejected(self):
+        # 20min / 12h rows are dropped, the 3 valid ~120min rows still
+        # yield a clean prior (median not dragged by garbage).
+        priors = sb.build_route_priors(self._db(
+            ("哈尔滨", "08:00", "08:20"),
+            ("哈尔滨", "08:00", "20:00"),
+            ("哈尔滨", "09:00", "11:00"),
+            ("哈尔滨", "10:00", "12:00"),
+            ("哈尔滨", "11:00", "13:00")))
+        self.assertEqual(priors["哈尔滨"]["minutes"], 120)
+
+    def test_codeshare_rows_deduped(self):
+        # one physical flight sold under several codeshare numbers is
+        # one sample, not three (v0.25 review P1)
+        priors = sb.build_route_priors(self._db(
+            ("重庆", "08:00", "10:30"),
+            ("重庆", "08:00", "10:30"),
+            ("重庆", "08:00", "10:30"),
+            ("重庆", "09:00", "11:35"),
+            ("重庆", "10:00", "12:40")))
+        self.assertEqual(priors["重庆"]["n"], 3)
+        self.assertEqual(priors["重庆"]["minutes"], 155)
+
+    def test_stopover_cluster_takes_full_leg(self):
+        # stopover rows carry only the last leg (100min); nonstop rows
+        # carry the whole trip (290min): biggest-median cluster wins
+        priors = sb.build_route_priors(self._db(
+            ("阿克苏", "07:00", "08:40"),
+            ("阿克苏", "09:00", "10:40"),
+            ("阿克苏", "11:00", "12:40"),
+            ("阿克苏", "08:00", "12:50"),
+            ("阿克苏", "09:30", "14:20"),
+            ("阿克苏", "10:00", "14:50")))
+        self.assertEqual(priors["阿克苏"]["minutes"], 290)
+        self.assertEqual(priors["阿克苏"]["n"], 3)
+
+    def test_min_samples_gate(self):
+        priors = sb.build_route_priors(self._db(("拉萨", "08:00", "10:00")))
+        self.assertEqual(priors, {})
+
+    def test_intl_airport_suffix_normalized(self):
+        priors = sb.build_route_priors(self._db(
+            ("河内机场", "03:50", "06:55"),
+            ("河内机场", "04:00", "07:05"),
+            ("河内机场", "03:40", "06:45")))
+        self.assertIn("河内", priors)
+
+    def test_prefix_lookup_prefers_busiest_airport(self):
+        priors = {
+            "曼谷素万那普": {"minutes": 240, "n": 12},
+            "曼谷廊曼": {"minutes": 230, "n": 2},
+        }
+        self.assertEqual(sb.prior_minutes_for(priors, "曼谷"), 240)
+        self.assertEqual(sb.prior_minutes_for(priors, "重庆"), None)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

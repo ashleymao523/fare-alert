@@ -19,3 +19,7 @@ Thumbs.db
 
 # headless edge cache written under a literal unexpanded-var path
 %SystemDrive%/
+
+# ad-hoc probe stdout/stderr captures
+probe_out.txt
+probe_err.txt

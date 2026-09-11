@@ -932,7 +932,7 @@
     var arrEnd = el("div", "ft-endpoint");
     var arrTime = el("div", "ft-time" + (hasArr ? "" : (hasEst ? " est" : " unknown")),
       hasArr ? d.arr_time : (hasEst ? "~" + d.arr_est : "--:--"));
-    if (hasEst) arrTime.title = "落地时刻为按航线距离估算，以购票页为准";
+    if (hasEst) arrTime.title = "落地时刻按同航线真实飞行时长推算(机场到达板实测中位数)，以购票页为准";
     arrEnd.appendChild(arrTime);
     arrEnd.appendChild(el("div", "ft-code", route.to_iata || route.to_city || "到达"));
     tl.appendChild(depEnd); tl.appendChild(mid); tl.appendChild(arrEnd);

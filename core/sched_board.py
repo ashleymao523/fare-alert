@@ -352,3 +352,91 @@ def board_lookup_x(db, flight_no, date_iso, from_city, to_city):
     # at least has a dep time so the caller can still render the departure
     pool = dual or [e for e in cands if e.get("dep")] or cands
     return pool[0], False
+
+
+def _hhmm_min(t):
+    try:
+        return int(t[:2]) * 60 + int(t[3:5])
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def build_route_priors(db, min_samples=3):
+    """v0.25 route duration priors from the arrive-board dual-time rows.
+
+    Every arrive-board entry stores preschtime (upstream dep) + jhsj
+    (HGH arr): the REAL flown minutes of the CITY->Hangzhou leg. The same
+    physical route flown HGH->CITY takes nearly the same time (route
+    winds shift it by ~5-15min), which beats the great-circle guess
+    (taxi/detour/holding often 30min+ off) for the outbound arr_est.
+
+    Returns {from_city: {'minutes': median, 'n': hits}} built from
+    entries with dep+arr present; median is robust to delays/outliers.
+    Pure function over the db dict -> CI-testable without network."""
+    import statistics
+    buckets = {}
+    seen = set()
+    for fdb in (db.get("flights") or {}).values():
+        for ent in (fdb.get("dows") or {}).values():
+            if not ent or not ent.get("dep") or not ent.get("arr"):
+                continue
+            city = (ent.get("from") or "").strip().replace("机场", "")
+            if not city or "杭州" in city:
+                continue
+            d, a = _hhmm_min(ent["dep"]), _hhmm_min(ent["arr"])
+            if d is None or a is None:
+                continue
+            if a < d:  # red-eye lands next day
+                a += 24 * 60
+            mins = a - d
+            if not 45 <= mins <= 17 * 60:  # reject garbage rows
+                continue
+            # codeshare rows repeat one physical flight under several
+            # numbers (same dep+arr): count each time pair once or the
+            # duplicate mass flips the median (v0.25 review P1)
+            key = (city, ent["dep"], ent["arr"])
+            if key in seen:
+                continue
+            seen.add(key)
+            buckets.setdefault(city, []).append(mins)
+    out = {}
+    for city, vals in buckets.items():
+        if len(vals) < min_samples:
+            continue
+        # a stopover flight's preschtime is the LAYOVER station's dep,
+        # not the origin city's: its minutes cover only the last leg.
+        # Full-trip minutes are physically >= last-leg ones for the same
+        # city, so split the samples into gap clusters and keep the
+        # biggest-median cluster with enough samples (= nonstop whole leg).
+        vals.sort()
+        clusters = [[vals[0]]]
+        for v in vals[1:]:
+            if v - clusters[-1][-1] > 75:
+                clusters.append([v])
+            else:
+                clusters[-1].append(v)
+        good = [c for c in clusters if len(c) >= min_samples]
+        if good:
+            best = max(good, key=lambda c: statistics.median(c))
+            out[city] = {"minutes": int(statistics.median(best)),
+                         "n": len(best)}
+    return out
+
+
+def prior_minutes_for(priors, city):
+    """Lookup a duration prior for a route city. Intl board keys are
+    'city + airport' ('曼谷素万那普'), while routes say '曼谷': fall back
+    to prefix matches and take the busiest airport's prior (same metro
+    area, flight-time difference is negligible)."""
+    city = (city or "").strip()
+    if not city:
+        return None
+    p = priors.get(city)
+    if p:
+        return p["minutes"]
+    cands = [(v["n"], v["minutes"]) for k, v in priors.items()
+             if k.startswith(city)]
+    if not cands:
+        return None
+    cands.sort(reverse=True)
+    return cands[0][1]

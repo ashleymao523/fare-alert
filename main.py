@@ -24,7 +24,8 @@ from core.intl import city_iata, fetch_intl_calendar, fetch_schedule_times
 from core.models import FlightDeal
 from core.notify import has_channel, push_all
 from core.report import write_report
-from core.sched_board import (board_lookup_x, load_sched_db,
+from core.sched_board import (board_lookup_x, build_route_priors,
+                              load_sched_db, prior_minutes_for,
                               touches_hangzhou, update_sched_db)
 from core.state import load_state, save_state
 from core.trains import refresh_train_info
@@ -333,6 +334,12 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
     t0b = time.time()
     n_board = 0
     n_x = 0
+    n_prior = 0
+    # v0.25: real-leg duration priors from the arrive board (reverse leg
+    # CITY->HGH minutes) make outbound arr_est/duration far closer to
+    # truth than the great-circle guess. Direct flights only: connecting
+    # legs keep the +2.5h layover model.
+    priors = build_route_priors(bdb)
     for d in deals:
         no = (d.flight_no or "").strip()
         if "/" in no:  # connecting itinerary: estimate with layover
@@ -399,16 +406,25 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                     _mark_time_src(d, exact)
                     if not exact:
                         n_x += 1
+        prior_min = prior_minutes_for(priors, tc)
         if not d.duration_text:
-            d.duration_text = estimate_duration_text(fi, ti)
+            d.duration_text = estimate_duration_text(fi, ti,
+                                                    prior_minutes=prior_min)
         if not d.arr_time and d.dep_time:
-            d.arr_est = estimate_arrival_time(d.dep_time, fi, ti)
+            d.arr_est = estimate_arrival_time(d.dep_time, fi, ti,
+                                             prior_minutes=prior_min)
+            if prior_min:
+                n_prior += 1
     if rec and (n_board or not ama_ready):
         action = "board time fallback"
         if n_x:
             action += " (cross-dow x%d)" % n_x  # keep error field for errors
         rec.step("hgh-board-times", route_id, action, "ok",
                  (time.time() - t0b) * 1000, count=n_board)
+    if rec and n_prior:
+        rec.step("hgh-board-times", route_id,
+                 "route duration prior (est)", "ok",
+                 (time.time() - t0b) * 1000, count=n_prior)
     return deals
 
 

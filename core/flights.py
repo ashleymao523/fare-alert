@@ -72,10 +72,15 @@ def _haversine_km(a, b):
     return 6371.0 * 2 * math.asin(math.sqrt(h))
 
 
-def estimate_duration_text(from_code, to_code, connecting=False):
-    """Honest great-circle estimate: ~750km/h cruise + 40min taxi/queue.
-    Returns '' when coordinates unknown. connecting adds typical 2.5h layover.
-    """
+def estimate_duration_text(from_code, to_code, connecting=False,
+                           prior_minutes=None):
+    """Duration estimate. prior_minutes (v0.25) wins when present: the
+    median REAL minutes of the reverse leg measured from the HGH arrive
+    board. Falls back to the honest great-circle estimate (~750km/h +
+    40min taxi/queue; connecting adds 2.5h layover)."""
+    if prior_minutes and not connecting:
+        m = max(60, int(round(prior_minutes / 5.0)) * 5)
+        return "约{}h{:02d}m(估)".format(m // 60, m % 60)
     a = AIRPORT_COORDS.get((from_code or "").upper())
     b = AIRPORT_COORDS.get((to_code or "").upper())
     if not a or not b:
@@ -87,11 +92,22 @@ def estimate_duration_text(from_code, to_code, connecting=False):
     return "约{}h{:02d}m(估)".format(m // 60, m % 60)
 
 
-def estimate_arrival_time(dep_time, from_code, to_code, connecting=False):
-    """v0.19: estimated arrival hh:mm from a known dep time plus the
-    great-circle duration. Returns '' when inputs are unknown or the math
-    would be pure fiction (missing coords). Never written into arr_time:
+def estimate_arrival_time(dep_time, from_code, to_code, connecting=False,
+                          prior_minutes=None):
+    """v0.25: estimated arrival hh:mm. prior_minutes (median real minutes
+    of the reverse leg from the HGH arrive board) beats the great-circle
+    guess and even works without coordinates. Never written into arr_time:
     callers store it in arr_est so the UI can badge it as an estimate."""
+    if not dep_time:
+        return ""
+    try:
+        h, m = int(dep_time[:2]), int(dep_time[3:5])
+    except (ValueError, IndexError):
+        return ""
+    if prior_minutes and not connecting:
+        total = h * 60 + m + max(60, int(round(prior_minutes / 5.0)) * 5)
+        total %= 24 * 60
+        return "{:02d}:{:02d}".format(total // 60, total % 60)
     a = AIRPORT_COORDS.get((from_code or "").upper())
     b = AIRPORT_COORDS.get((to_code or "").upper())
     if not a or not b or not dep_time:

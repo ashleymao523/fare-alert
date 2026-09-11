@@ -39,6 +39,21 @@ def test_estimate_arrival_time():
     assert estimate_arrival_time("bad", "HGH", "CKG") == ""  # bad dep time
 
 
+def test_estimate_arrival_time_prior():
+    # v0.25: real reverse-leg minutes beat the great-circle guess
+    assert estimate_arrival_time("08:00", "HGH", "CKG",
+                                 prior_minutes=155) == "10:35"
+    assert estimate_arrival_time("23:00", "HGH", "",
+                                 prior_minutes=155) == "01:35"  # +1d
+    assert estimate_arrival_time("08:00", "", "",
+                                 prior_minutes=100) == "09:40"  # no coords needed
+    # connecting keeps the great-circle + layover model: the prior covers
+    # one single leg only and cannot be mapped to a multi-leg itinerary
+    assert estimate_arrival_time("08:00", "HGH", "BKK",
+                                 connecting=True,
+                                 prior_minutes=240) == "14:50"
+
+
 def test_flight_dict_serializes_arr_est():
     d = FlightDeal(date="2026-09-10", bare_price=300, flight_no="GJ8888",
                    dep_time="07:55", arr_est="10:25")
