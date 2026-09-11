@@ -53,7 +53,7 @@ v0.29 起新增 **/v2 前后端分离版**(web/ 下的 Vite+Preact 工程,构建
 3. 双击 `start_windows.bat`,浏览器自动打开 http://127.0.0.1:8765
 4. 在"提醒推送"页填入 Bark Key(iPhone App Store 下载 Bark,复制 Key),点"发送测试推送"验证
 5. 想要后台自动监控:以管理员运行 `deploy/register_task.ps1`(计划任务每 45 分钟静默查询一次,满足条件即推送)
-6. 想要开机自动打开监控面板:运行 `tools/install_autostart.ps1`(写 HKCU Run 键,免管理员;`-Uninstall` 卸载,端口已占用时自动跳过)
+6. 想要开机自启(面板+抓取循环):运行 `tools/install_autostart.ps1`(写 HKCU Run 键,免管理员,默认装 webui+worker 双条目;`-Components webui` 仅面板;`-Uninstall` 卸载;已在运行时自动跳过)。worker 循环持续采集班期板,星期覆盖 7 天长满后起飞时刻缺口自动收敛
 
 ### macOS / Linux
 
@@ -158,6 +158,7 @@ fare-alert/
 - [x] **v0.27 覆盖率合并口径 + 部署可观测**: KPI 覆盖大数字改精确+参考合并口径(副文案拆分); /api/health 一站式健康端点(快照新鲜度/板库沉淀/推送就绪, 供外部 uptime 监控轮询); 顶栏更新时间带绿/黄/红新鲜度状态色。
 - [x] **v0.32 落地时刻精确化 + v2 默认入口**: 出发板 nextschtime 提取为精确落地时刻(经停存 via 元数据)+ 离线回填 backfill_from_cache + 快照再富化工具 reenrich_times.py, 双时刻条目 3253→6075(重庆真实落地 22/39, 此前全 0); / 根路径 302 至 /v2/, 经典版转 /classic 维护模式; Docker HEALTHCHECK。85 单测全绿。(v0.28–v0.31 设计令牌/web 前端工程/三波 tab 迁移详见 docs/迭代路线图.md)
 - [x] **v0.33 中转/经停透明化 + CI 前端门禁**: 联程票首段到达+中转城市、经停票经停站+到达时刻从板库透传至日详情时间线(「中转 武汉 · 08:55 到」), 四线 81 天获得说明, 估算落地不再是无解释的孤数; ci.yml 新增 frontend job(npm ci+build+git diff --exit-code, dist 与提交强制同步)。87 单测全绿。
+- [x] **v0.34 部署工业化: worker 自启 + 心跳可观测**: 「时刻显示不全」的机制根因=抓取循环无人拉起、班期 dow 覆盖停在手动运行那两天。autostart_worker.ps1 单实例守卫 + install_autostart.ps1 升级双组件(-Components webui,worker); main.py 每轮写心跳、/api/health 暴露 worker 存活年龄; 无时刻文案按换季/联程段细化原因。92 单测全绿。
 
 ## 常见问题
 

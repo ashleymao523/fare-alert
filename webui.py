@@ -583,12 +583,22 @@ def api_health():
             updated = None
     sched = sched_stats(load_sched_db(DATA_DIR))
     dows = sched.get("dows") or {}
+    hb = _read_json(os.path.join(DATA_DIR, "worker_heartbeat.json"), None)
+    worker = None
+    if hb and hb.get("ts"):
+        try:
+            worker = {"ok": bool(hb.get("ok")),
+                      "age_min": round((time.time() - float(hb["ts"])) / 60.0, 1),
+                      "pid": hb.get("pid")}
+        except (TypeError, ValueError):
+            worker = None
     return jsonify({
         "ok": True,
         "snapshot": {"updated_at": updated, "age_min": age_min},
         "board": {"flights": sched.get("flights"),
                   "weekdays_covered": sum(1 for v in dows.values() if v),
                   "dows": dows},
+        "worker": worker,
         "push_pending": _push_pending(),
     })
 

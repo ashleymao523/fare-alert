@@ -764,6 +764,22 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
     return snapshot
 
 
+def _write_heartbeat(ok=True):
+    """v0.34: worker liveness file, surfaced by /api/health.
+
+    Written after every loop cycle (and after a manual one-shot run) so
+    the dashboard can tell "scheduler alive" from "stale deployment".
+    """
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(os.path.join(DATA_DIR, "worker_heartbeat.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump({"ts": time.time(), "pid": os.getpid(),
+                       "ok": bool(ok)}, f)
+    except Exception:
+        pass  # heartbeat is best-effort observability, never fatal
+
+
 def main():
     ap = argparse.ArgumentParser(description="fare alert component")
     ap.add_argument("--once", action="store_true", help="run one cycle then exit")
@@ -787,11 +803,14 @@ def main():
         while True:
             try:
                 run_once(cfg, log)
+                _write_heartbeat(True)
             except Exception as e:
                 log.error("cycle error: " + str(e))
+                _write_heartbeat(False)
             time.sleep(interval + random.randint(0, jitter))
         return
     run_once(cfg, log)
+    _write_heartbeat(True)
 
 
 if __name__ == "__main__":

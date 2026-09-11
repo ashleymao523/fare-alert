@@ -46,6 +46,7 @@ export default function DayDetail({ route, date }) {
   const warn = /不含|确认/.test(d.baggage || "") ? " ⚠️" : " 🧳";
   const alts = d.alt_times || [];
   const shownArr = hasArr ? d.arr_time : (hasEst ? d.arr_est : "");
+  const SEASON_SWITCH = "2026-10-25"; // winter schedule rollover
   let midBadges = null;
   if (hasDep || hasArr) {
     if (depSrc && depSrc === arrSrc) {
@@ -104,9 +105,21 @@ export default function DayDetail({ route, date }) {
             </div>
           )}
           {!hasDep && !hasArr && alts.length === 0 && (
-            <div class="ft-pend">时刻待班期库覆盖 · 以购票页为准</div>
+            <div class="ft-pend">
+              {d.date >= SEASON_SWITCH
+                ? "换季班期待收录 · 持续运行自动补全"
+                : "班期库暂未覆盖 · 持续运行自动补全"}
+            </div>
           )}
-          {hasDep !== hasArr && <div class="ft-pend">另一段时刻待班期库覆盖</div>}
+          {hasDep !== hasArr && (
+            <div class="ft-pend">
+              {!hasDep && connecting
+                ? "首段班期待覆盖 · 以购票页为准"
+                : (hasDep && connecting
+                  ? "中转段不经杭州板 · 落地以购票页为准"
+                  : "另一段时刻待班期库覆盖")}
+            </div>
+          )}
         </div>
         <div class="ft-endpoint">
           <div
