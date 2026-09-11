@@ -361,7 +361,7 @@ def tool_patrol_run(args):
     Delegates to core.patrol.run_patrol (shared with the daily 09:00
     schedule) and renders the doc as readable text."""
     from core.patrol import run_patrol
-    doc = run_patrol(BASE_DIR, notify=bool(args.get("notify")))
+    doc = run_patrol(BASE_DIR, notify=bool(args.get("notify")), caller="mcp")
     lines = ["巡检结论: " + doc.get("verdict", "?")]
     lines += ["  [%s] %s (%s)" % (c["status"], c["name"], c["detail"])
               for c in doc.get("checks", [])]

@@ -149,7 +149,7 @@ def patrol_once(repo_dir, now=None):
     if _state.get("patrol_done_day") == day:
         return "already-done"
     try:
-        doc = run_patrol(repo_dir, notify=True)
+        doc = run_patrol(repo_dir, notify=True, caller="schedule")
         _state["patrol_last"] = {"ts": doc.get("ts"),
                                  "verdict": doc.get("verdict"),
                                  "notified": doc.get("notified")}
@@ -157,6 +157,11 @@ def patrol_once(repo_dir, now=None):
         return "ran:" + (doc.get("verdict") or "?")
     except Exception as e:
         _state["patrol_last_error"] = str(e)
+        # v0.40.1: a failed day must not keep showing yesterday's healthy
+        # verdict in the dashboard - surface "error" as the latest result.
+        _state["patrol_last"] = {
+            "ts": now.isoformat(timespec="seconds"),
+            "verdict": "error", "notified": False}
         _state["patrol_done_day"] = day
         return "error"
 

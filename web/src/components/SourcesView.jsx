@@ -57,6 +57,8 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
   const covered = Object.keys(dows).filter((k) => dows[k] > 0).length;
   const wk = hb && hb.worker;
   const alive = !!(wk && wk.ok && wk.age_min < 120);
+  const pt = (hb && hb.revive && hb.revive.supervisor
+    && hb.revive.supervisor.patrol) || null;
   const hbState = !hb ? "未知" : alive ? "运行中" : wk ? "心跳过期" : "未启动";
   return (
     <div>
@@ -130,14 +132,14 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
             {(hb.revive.task && hb.revive.task.installed) ? " · 计划任务已装" : ""}
           </div>
         ) : null}
-        {(hb.revive && hb.revive.supervisor && hb.revive.supervisor.patrol) ? (
+        {pt ? (
           <div class="muted">
-            🔎 每日巡检: {hb.revive.supervisor.patrol.enabled
+            🔎 每日巡检: {pt.enabled
               ? "已启用, 每日 09:00 后自动体检, 异常时经配置渠道提醒"
               : "未启用(config deploy.patrol_daily)"}
-            {(hb.revive.supervisor.patrol.last
-              && hb.revive.supervisor.patrol.last.verdict)
-              ? " · 最近结论: " + hb.revive.supervisor.patrol.last.verdict : ""}
+            {(pt.last && pt.last.verdict)
+              ? " · 最近结论: " + pt.last.verdict : ""}
+            {pt.last_error ? " · 最近异常: " + pt.last_error : ""}
           </div>
         ) : null}
       </div>

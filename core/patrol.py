@@ -42,7 +42,7 @@ def _default_push(cfg, title, body, url=""):
 
 
 def run_patrol(base_dir, notify=False, config_loader=None,
-               health_fetch=None, push=None):
+               health_fetch=None, push=None, caller="manual"):
     """Run one patrol pass; returns the archived doc (never pushes unless
     notify=True AND the verdict is unhealthy AND a channel is ready)."""
     if config_loader is None:
@@ -93,6 +93,7 @@ def run_patrol(base_dir, notify=False, config_loader=None,
         notified = bool(push(cfg, "FareAlert 巡检异常",
                              "以下检查未通过: " + ", ".join(bad), url=""))
     doc = {"ts": dt.datetime.now().isoformat(timespec="seconds"),
+           "caller": caller,
            "verdict": verdict, "checks": checks, "notified": notified,
            "health": {"ok": body.get("ok"),
                       "snapshot_age_min": snap_age,

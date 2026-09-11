@@ -54,6 +54,7 @@ class PatrolCoreTests(unittest.TestCase):
         self._cfg["push"]["bark_key"] = "k"  # healthy needs a ready channel
         doc = self._run(_health())
         self.assertEqual(doc["verdict"], "healthy")
+        self.assertEqual(doc["caller"], "manual")
         self.assertEqual(len(doc["checks"]), 5)
         self.assertFalse(doc["notified"])
         arch = self._archive()
@@ -90,7 +91,8 @@ class PatrolMcpDelegationTests(unittest.TestCase):
         with mock.patch.object(patrol, "run_patrol") as rp:
             rp.return_value = {"verdict": "healthy", "checks": [], "notified": False}
             r = mcp_server.tool_patrol_run({"notify": True})
-        rp.assert_called_once_with(mcp_server.BASE_DIR, notify=True)
+        rp.assert_called_once_with(mcp_server.BASE_DIR, notify=True,
+                                   caller="mcp")
         self.assertFalse(r.get("isError"))
         self.assertIn("healthy", r["content"][0]["text"])
 

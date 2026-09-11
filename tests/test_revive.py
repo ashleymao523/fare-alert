@@ -116,6 +116,8 @@ class ReviveSupervisorTests(unittest.TestCase):
         self.assertEqual(rv1, "error")
         self.assertEqual(rv2, "already-done")
         rp.assert_called_once()
+        self.assertEqual(
+            revive.supervisor_snapshot()["patrol"]["last"]["verdict"], "error")
         self.assertIn("webui down",
                       revive.supervisor_snapshot()["patrol"]["last_error"])
 

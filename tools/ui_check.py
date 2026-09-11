@@ -224,6 +224,7 @@ checks["v0.40 巡检核心抽取"] = (("run_patrol" in _patrol_src)
 checks["v0.40 巡检定时化"] = "patrol_once" in open(
     os.path.join("core", "revive.py"), encoding="utf-8").read()
 checks["v0.40 v2 DOM真实票口径"] = "真实票时刻覆盖" in _all
+checks["v0.40.1 v2产物巡检异常可见"] = "最近异常" in _dist_js
 
 bad = 0
 for k, v in checks.items():
