@@ -15,13 +15,19 @@ import CrawlView from "./components/CrawlView.jsx";
 import WeeklyView from "./components/WeeklyView.jsx";
 import SourcesView from "./components/SourcesView.jsx";
 import PushView from "./components/PushView.jsx";
+import RoutesView from "./components/RoutesView.jsx";
+import ReverseView from "./components/ReverseView.jsx";
+import LogsView from "./components/LogsView.jsx";
 
 const TABS = [
   ["dash", "📊 仪表盘"],
+  ["routes", "🧭 线路"],
+  ["reverse", "🧭 预算找目的地"],
   ["crawl", "🕷 爬虫监控"],
   ["weekly", "📈 周报"],
   ["sources", "🔌 数据源"],
   ["push", "🔔 推送"],
+  ["logs", "📜 日志"],
 ];
 
 export function App() {
@@ -73,6 +79,11 @@ export function App() {
               onClick={() => setTab(id)}>{label}</button>
           ))}
         </nav>
+        {tab === "routes" ? (
+          <RoutesView cfg={cfg} setCfg={setCfg} cfgErr={cfgErr} />
+        ) : null}
+        {tab === "reverse" ? <ReverseView /> : null}
+        {tab === "logs" ? <LogsView /> : null}
         {tab === "crawl" ? <CrawlView /> : null}
         {tab === "weekly" ? <WeeklyView /> : null}
         {tab === "sources" ? (
@@ -125,8 +136,8 @@ export function App() {
             <Top5 route={route} />
             <Trains route={route} />
             <div class="foot">
-              v2 · 线路管理/预算找目的地/日志暂在
-              <a href="/">经典版</a> · 逐 tab 迁移中 · Preact + Vite
+              v2 · 全部 8 个功能页已迁移 · Preact + Vite ·
+              <a href="/">经典版</a>
             </div>
           </div>
         ) : null}

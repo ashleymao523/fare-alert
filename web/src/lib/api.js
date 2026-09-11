@@ -40,3 +40,27 @@ export function testPush() { return post("/api/test-push", {}); }
 export function fetchSchedStats() { return fetch("/api/sched-stats").then(j); }
 
 export function fetchAlerts() { return fetch("/api/alerts").then(j); }
+
+let _citiesCache = null;
+export function fetchCities() {
+  if (!_citiesCache) {
+    _citiesCache = fetch("/api/cities").then(j).then((x) => x.cities || []);
+    _citiesCache.catch(() => { _citiesCache = null; }); // failure: allow retry
+  }
+  return _citiesCache;
+}
+
+let _stationsCache = null;
+export function fetchStations() {
+  if (!_stationsCache) {
+    _stationsCache = fetch("/api/stations").then(j).then((x) => x.stations || []);
+    _stationsCache.catch(() => { _stationsCache = null; }); // failure: allow retry
+  }
+  return _stationsCache;
+}
+
+export function reverseSearch(body) {
+  return post("/api/reverse-search", body).then((x) => x.result);
+}
+
+export function fetchLog() { return fetch("/api/log").then(j); }

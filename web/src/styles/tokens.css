@@ -57,4 +57,6 @@
   --chart-area-b: rgba(0, 98, 227, 0.01);
   --hero-grad-a: rgba(0, 98, 227, 0.10);
   --hero-grad-b: rgba(168, 192, 240, 0.16);
+  --log-bg: #0d1424;
+  --log-ink: #c8d6f0;
 }
