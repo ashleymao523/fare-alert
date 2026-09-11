@@ -56,6 +56,17 @@ a { color: var(--accent); text-decoration: none; }
 .dow-k { display: block; font-size: 12px; }
 .dow-v { display: block; font-weight: 700; font-size: 15px; margin-top: 2px; }
 .sched-tip { font-size: 12px; }
+
+.tc-box { display: flex; flex-direction: column; gap: 8px; }
+.tc-row { display: grid; grid-template-columns: 130px 1fr 44px; align-items: center; gap: 10px; }
+.tc-k { font-size: 12px; color: var(--ink-soft, #5a6b84); }
+.tc-bar { height: 8px; border-radius: 999px; background: rgba(16, 24, 40, 0.07); overflow: hidden; }
+.tc-fill { height: 100%; border-radius: 999px; min-width: 2px; }
+.tc-fill.ok { background: linear-gradient(90deg, #12b76a, #7ccf8f); }
+.tc-fill.mid { background: linear-gradient(90deg, #f79009, #fdb022); }
+.tc-fill.mid2 { background: linear-gradient(90deg, #7a5af8, #b0a3ff); }
+.tc-fill.miss { background: rgba(16, 24, 40, 0.22); }
+.tc-v { font-size: 12px; font-weight: 600; text-align: right; color: var(--ink, #10203a); }
 .flash { animation: flashRing 1.8s ease; }
 @keyframes flashRing {
   0%, 55% { box-shadow: var(--ring); }

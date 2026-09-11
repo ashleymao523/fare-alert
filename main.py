@@ -18,7 +18,8 @@ from core.crawl import CrawlRecorder
 from core.flights import (airline_name, booking_url, estimate_arrival_time,
                           estimate_duration_text, fetch_calendar,
                           fetch_intl_promo_calendar,
-                          merge_fill_deals, window_dates)
+                          merge_fill_deals, time_coverage, window_dates,
+                          NON_REAL_SOURCES)
 from core.intl import city_iata, fetch_intl_calendar, fetch_schedule_times
 from core.models import FlightDeal
 from core.notify import has_channel, push_all
@@ -34,7 +35,6 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 
 FILL_CACHE_FILE = "amadeus_fill_cache.json"
 FILL_CACHE_TTL = 86400  # gap-fill needs daily freshness, not per-poll
-NON_REAL_SOURCES = ("nearby-ref", "interp")
 
 
 def setup_logging():
@@ -598,6 +598,7 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 deals[0].date, deals[0].flight_no,
                 int(route_snap["cheapest_total"]), len(below)))
         route_snap["train"] = train_info
+        route_snap["time_coverage"] = time_coverage(deals)
         if verbose:
             for d in deals[:15]:
                 log.info("   {} {} {} bare ¥{} total ¥{}".format(

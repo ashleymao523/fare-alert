@@ -12,14 +12,14 @@
 <link rel="icon" href="/static/icon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 <title>FareAlert · 低价出行提醒</title>
-<link rel="stylesheet" href="/static/style.css?v=20">
+<link rel="stylesheet" href="/static/style.css?v=21">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
     <span class="logo">✈️</span>
     <span class="brand-name">FareAlert</span>
-<span class="ver">v0.20</span>
+<span class="ver">v0.21</span>
   </div>
   <nav id="routeTabs" class="route-tabs"></nav>
   <div class="top-actions">
@@ -143,6 +143,10 @@
       <div id="schedStats" class="sched-stats"></div>
     </div>
     <div class="card">
+      <div class="card-head"><h3>⏱ 本轮时刻覆盖体检</h3><span class="muted">起飞/落地时刻来源构成 · 每轮查询自动刷新</span></div>
+      <div id="timeCoverage" class="tc-box"></div>
+    </div>
+    <div class="card">
       <div class="card-head"><h3>🌍 国际航班数据源 (Amadeus) <span class="badge sky">可选</span></h3><span class="muted">免费 · 配置后解锁国际全日历+真实起降时刻 · 核心功能零依赖</span></div>
       <div class="form-grid">
         <label>环境
@@ -253,6 +257,6 @@
 <div id="alertFloat" class="alert-float"></div>
 
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=20"></script>
+<script src="/static/app.js?v=21"></script>
 </body>
 </html>

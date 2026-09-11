@@ -18,7 +18,8 @@ sys.stdin.reconfigure(encoding="utf-8", errors="replace")
 from core.config import load_config, save_config
 from core.intent import parse_intent, window_from_date
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.environ.get("FAREALERT_HOME") or os.path.dirname(
+    os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 SNAPSHOT_PATH = os.path.join(BASE_DIR, "data", "snapshot.json")
 PROTOCOL_VERSION = "2024-11-05"

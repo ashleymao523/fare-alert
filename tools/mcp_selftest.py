@@ -5,9 +5,12 @@
 结束后校验 config.json 线路数与开始时一致。Run: python tools/mcp_selftest.py
 """
 import json
+import atexit
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE)
@@ -15,11 +18,12 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 class Client:
-    def __init__(self):
+    def __init__(self, home):
         self.p = subprocess.Popen(
             [sys.executable, os.path.join(BASE, "mcp_server.py")],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, text=True, encoding="utf-8", cwd=BASE)
+            stderr=subprocess.PIPE, text=True, encoding="utf-8", cwd=BASE,
+            env={**os.environ, "FAREALERT_HOME": home})
         self.i = 0
 
     def send(self, obj):
@@ -51,11 +55,33 @@ def result_text(resp):
 
 def main():
     from core.config import load_config
-    cfg_path = os.path.join(BASE, "config.json")
+    # v0.21: run against a throwaway FAREALERT_HOME copy so concurrent
+    # runs (e.g. acceptance + selftest) never touch the real config.json.
+    home = tempfile.mkdtemp(prefix="farealert-selftest-")
+    ctx = {"dir": home, "proc": None}  # atexit-serviced: orphan-process + tmpdir
+
+    def _cleanup():
+        p = ctx["proc"]
+        if p and p.poll() is None:
+            try:
+                p.stdin.close()
+                p.wait(timeout=5)
+            except Exception:
+                p.kill()
+        shutil.rmtree(ctx["dir"], ignore_errors=True)
+
+    atexit.register(_cleanup)
+    real_cfg = os.path.join(BASE, "config.json")
+    real_bytes = open(real_cfg, "rb").read() if os.path.exists(real_cfg) else b""
+    if real_bytes:
+        with open(os.path.join(home, "config.json"), "wb") as f:
+            f.write(real_bytes)
+    cfg_path = os.path.join(home, "config.json")
     n_before = len(load_config(cfg_path)["routes"])
     fails = []
 
-    c = Client()
+    c = Client(home)
+    ctx["proc"] = c.p
     r = c.req("initialize", {"protocolVersion": "2024-11-05",
                              "clientInfo": {"name": "selftest", "version": "0"}})
     ok = r["result"]["serverInfo"]["name"] == "fare-alert"
@@ -123,8 +149,13 @@ def main():
         fails.append("restore")
 
     c.close()
+    untouched = (open(real_cfg, "rb").read() == real_bytes) if real_bytes else True
+    print(("PASS" if untouched else "FAIL") + " real config.json untouched")
+    if not untouched:
+        fails.append("real-config-touched")
+    shutil.rmtree(home, ignore_errors=True)
     print("selftest: %s (%d checks)" % ("ALL PASS" if not fails else "FAIL " + str(fails),
-                                        8 - len(fails)))
+                                        9 - len(fails)))
     return 1 if fails else 0
 
 

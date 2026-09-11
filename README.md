@@ -51,6 +51,7 @@ Web 仪表盘(v0.8 设计系统:Skyscanner 式浅色+城市图鉴+低价柱状�
 3. 双击 `start_windows.bat`,浏览器自动打开 http://127.0.0.1:8765
 4. 在"提醒推送"页填入 Bark Key(iPhone App Store 下载 Bark,复制 Key),点"发送测试推送"验证
 5. 想要后台自动监控:以管理员运行 `deploy/register_task.ps1`(计划任务每 45 分钟静默查询一次,满足条件即推送)
+6. 想要开机自动打开监控面板:运行 `tools/install_autostart.ps1`(写 HKCU Run 键,免管理员;`-Uninstall` 卸载,端口已占用时自动跳过)
 
 ### macOS / Linux
 
@@ -144,6 +145,7 @@ fare-alert/
 - [x] **v0.19 跨日班期时刻补全**: 班期板无日期参数(官网页面无日期选择,?date= 与路径段探测均无效,按日期回填否决)→改跨日借用:日历价已证明航班号当日执飞,board_lookup_x 先精确星期再跨星期借用同号时刻(优先双时刻条目),「跨日班期·参考」徽标;仅有起飞时新增落地估算 arr_est(大圆+滑行,~ 前缀+虚线样式,不写入 arr_time 防混源);时刻仍纯展示不影响提醒。新增 9 项单测(42+8 全绿),dump_dom 改同步等待版防半写
 - [x] **v0.20 真 PWA + 时刻库透明度**: 新增 tools/gen_icons.py(PIL 渐变底+纸飞机,可复现)产出 512/192/180/32 与 maskable 图标,manifest 补 PNG(iOS apple-touch-icon 不支持 SVG 的空白主屏图标修复);sw.js 离线壳(/static 缓存优先、?v= 版本 busted;/api GET 网络优先+缓存兜底);/api/sched-stats + 数据源页七天沉淀进度 widget(回答「为什么这天没时刻」);周报推送无渠道时自动跳转推送页并高亮输入框。新增 2 项单测(44+8 全绿)
 - [ ] **M4-M5**: 洞察周报/插件生态(见 docs/迭代路线图.md)
+- [x] **v0.21 时刻覆盖仪表 + 自启 + selftest 隔离**: snapshot 每线路写入 time_coverage(起飞/落地时刻 精确/借用/估算/缺失 四档统计,剔除邻近日参考价),数据源页新增「本轮时刻覆盖体检」分组条形图,时刻质量从黑盒变仪表;mcp_server 支持 FAREALERT_HOME 环境变量,selftest 改临时目录副本运行(修复并发验收假 FAIL,真实 config.json 零触碰+校验);tools/install_autostart.ps1 一条命令装开机自启(HKCU Run 键,免管理员,8765 已监听自动跳过,-Uninstall 卸载,-Mode task 备选计划任务);周报页无推送渠道时「立即推送」按钮直接禁用并提示,不再点了才报错。新增 5 项单测(49+8 全绿)
 
 ## 常见问题
 

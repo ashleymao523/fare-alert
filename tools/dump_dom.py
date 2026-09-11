@@ -14,7 +14,8 @@ import time
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 EDGE = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-TABS = [("p1", "crawl"), ("p2", "reverse"), ("p3", "weekly")]
+TABS = [("p1", "crawl"), ("p2", "reverse"), ("p3", "weekly"),
+        ("p4", "sources")]
 
 
 def main():
@@ -25,7 +26,7 @@ def main():
     parts = []
     for prof, tab in TABS:
         udd = os.path.join(cwd, "data", "edge_prof_" + prof)
-        url = "http://127.0.0.1:8765/?v=20#" + tab
+        url = "http://127.0.0.1:8765/?v=21#" + tab
         cmd = [EDGE, "--headless", "--disable-gpu", "--no-first-run",
                "--user-data-dir=" + udd, "--virtual-time-budget=12000",
                "--dump-dom", url]

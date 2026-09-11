@@ -1654,6 +1654,48 @@
     $("webHost").oninput = function () { S.cfg.webui.host = this.value.trim() || "127.0.0.1"; };
     $("webPort").oninput = function () { S.cfg.webui.port = parseInt(this.value, 10) || 8765; };
     api("/api/sched-stats").then(renderSchedStats).catch(function () {});
+    renderTimeCoverage();
+  }
+
+  function renderTimeCoverage() {
+    var box = $("timeCoverage");
+    if (!box) return;
+    var routes = (S.snap && S.snap.routes) || [];
+    var tot = 0, de = 0, db = 0, dm = 0, ae = 0, ab = 0, as = 0, am = 0;
+    routes.forEach(function (r) {
+      var c = r.time_coverage;
+      if (!c) return;
+      tot += c.total || 0;
+      de += c.dep_exact || 0; db += c.dep_borrow || 0; dm += c.dep_missing || 0;
+      ae += c.arr_exact || 0; ab += c.arr_borrow || 0; as += c.arr_est || 0;
+      am += c.arr_missing || 0;
+    });
+    box.textContent = "";
+    if (!tot) {
+      box.appendChild(el("div", "muted",
+        "本轮查询后, 这里展示每个航班起飞/落地时刻的来源构成(精确/借用/估算/缺失)。"));
+      return;
+    }
+    function bar(label, val, cls) {
+      var row = el("div", "tc-row");
+      row.appendChild(el("span", "tc-k", label));
+      var track = el("div", "tc-bar");
+      var fill = el("div", "tc-fill " + cls);
+      fill.style.width = Math.round((val / tot) * 100) + "%";
+      track.appendChild(fill);
+      row.appendChild(track);
+      row.appendChild(el("span", "tc-v", String(val)));
+      box.appendChild(row);
+    }
+    bar("起飞 · 精确时刻", de, "ok");
+    bar("起飞 · 跨日借用", db, "mid");
+    bar("起飞 · 缺失", dm, "miss");
+    bar("落地 · 精确时刻", ae, "ok");
+    bar("落地 · 跨日借用", ab, "mid");
+    bar("落地 · 估算(参考)", as, "mid2");
+    bar("落地 · 缺失", am, "miss");
+    box.appendChild(el("div", "muted sched-tip",
+      "共 " + tot + " 条真实可购航班(已剔除邻近日参考价); 估算与借用时刻仅作参考标注, 不触发低价提醒。"));
   }
 
   function renderSchedStats(s) {
@@ -2115,6 +2157,11 @@
       var hasCh = (S.secrets && (S.secrets.bark_key || S.secrets.serverchan_sendkey));
       var warn = $("wkPushWarn");
       if (warn) warn.style.display = hasCh ? "none" : "";
+      var btn = $("btnWeeklyPush");
+      if (btn) {  // v0.21: gate the button up-front instead of failing on click
+        btn.disabled = !hasCh;
+        btn.title = hasCh ? "" : "请先在「提醒推送」页配置 Bark Key 或 ServerChan";
+      }
     }).catch(function (e) {
       $("wkText").textContent = "周报加载失败: " + e.message;
     });
@@ -2159,6 +2206,7 @@
         S.routeId = S.snap.routes && S.snap.routes.length ? (curRoute() || S.snap.routes[0]).id : null;
         renderRouteTabs();
         renderDash();
+        renderTimeCoverage();  // v0.21: refresh coverage widget after each run
         toast("查询完成 ✓");
       }).catch(function (e) {
         toast("查询失败: " + e.message);
@@ -2276,6 +2324,11 @@
       if (S.snap && S.snap.routes && S.snap.routes.length) S.routeId = S.snap.routes[0].id;
       renderRouteTabs();
       renderDash();
+      renderTimeCoverage();  // v0.21: fill even when sources tab rendered pre-data
+      var active = document.querySelector(".tab-panel.active");
+      if (active && active.id !== "tab-dash") {
+        refreshTab(active.id.replace("tab-", ""));  // deep-link tab rendered pre-config: rerun
+      }
     }).catch(function (e) {
       toast("初始化失败: " + e.message);
     });

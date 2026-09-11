@@ -112,6 +112,38 @@ def airline_name(code):
     return AIRLINE_NAMES.get(code, code or "未知航司")
 
 
+# Deals whose price itself is borrowed/interpolated: excluded from time
+# coverage stats so the widget reflects real purchasable flights only.
+NON_REAL_SOURCES = ("nearby-ref", "interp")
+
+
+def time_coverage(deals):
+    """Count dep/arr time quality across deals (pure, no IO).
+
+    dep: exact (amadeus/airport-board + dep_time) / borrow (airport-board-x
+    + dep_time) / missing. arr adds est (arr_est only, never real).
+    NON_REAL_SOURCES rows are skipped: their price is already a reference.
+    """
+    cov = {"total": 0, "dep_exact": 0, "dep_borrow": 0, "dep_missing": 0,
+           "arr_exact": 0, "arr_borrow": 0, "arr_est": 0, "arr_missing": 0}
+    for d in deals:
+        if (getattr(d, "source", "") or "") in NON_REAL_SOURCES:
+            continue
+        cov["total"] += 1
+        exact_src = getattr(d, "time_src", "") in ("amadeus", "airport-board")
+        if getattr(d, "dep_time", ""):
+            cov["dep_borrow" if not exact_src else "dep_exact"] += 1
+        else:
+            cov["dep_missing"] += 1
+        if getattr(d, "arr_time", ""):
+            cov["arr_borrow" if not exact_src else "arr_exact"] += 1
+        elif getattr(d, "arr_est", ""):
+            cov["arr_est"] += 1
+        else:
+            cov["arr_missing"] += 1
+    return cov
+
+
 def booking_url(from_city, to_city, date):
     """Qunar H5 flight-list deep link (params match the SPA's own routing:
     depCity/arrCity/goDate + from=touch_index_search, verified against
