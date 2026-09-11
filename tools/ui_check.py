@@ -11,6 +11,7 @@ _docs = _raw.split("<html")  # dump_dom may concatenate several tab dumps
 h = ("<html" + _docs[1]) if len(_docs) > 1 else _raw  # first doc only
 _all = _raw  # content assertions may span all dumps
 appjs = open(os.path.join("webui", "static", "app.js"), encoding="utf-8").read()
+css = open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read()
 checks = {
     "KPI最低机票": "最低机票总价" in h,
     "KPI低价天数": "低于心理价位" in h,
@@ -118,6 +119,8 @@ checks = {
     "v0.27健康端点": '"/api/health"' in open("webui.py", encoding="utf-8").read(),
     "v0.27新鲜度相对时间": "分钟前" in appjs,
     "v0.27保存即刷新推送徽标": "applyPushPending(resp.push_pending)" in appjs,
+    "v0.28设计令牌色板": all(t in css for t in ("--fs-2xs", "--r-pill", "--green-bg", "--on-accent", "--r-flag")),
+    "v0.28令牌接线量": css.count("var(--") > 600,
 }
 bad = 0
 for k, v in checks.items():
@@ -144,4 +147,12 @@ for s in struct_bad:
     bad += 1
 if not struct_bad:
     print("PASS STRUCT %d tabs 1:1 panels, ids unique" % len(tabs))
+css_body = css[css.index("}", css.index(":root")) + 1:]
+_hex_left = re.findall(r"#[0-9a-fA-F]{3,8}\b", css_body)
+_fs_left = re.findall(r"font-size:\s*[\d.]+px", css_body)
+if _hex_left or _fs_left:
+    print("FAIL STRUCT v0.28 设计令牌: 硬编码残留 hex=%d font-size=%d" % (len(_hex_left), len(_fs_left)))
+    bad += 1
+else:
+    print("PASS STRUCT v0.28 设计令牌: 规则体零硬编码色值/字号")
 sys.exit(1 if (bad or days < 30) else 0)
