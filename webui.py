@@ -550,6 +550,24 @@ def api_report(subpath):
     return send_from_directory(REPORT_DIR, subpath)
 
 
+def _register_api_v1_aliases():
+    """v0.25: mirror every /api/<rule> as /api/v1/<rule> (same endpoint).
+
+    Old paths stay first-class (cached PWAs keep working); /api/v1/* is the
+    stable contract a future standalone frontend / native app can pin to.
+    """
+    from werkzeug.routing import Rule
+    api_rules = [r for r in app.url_map.iter_rules()
+                 if r.rule.startswith("/api/")]
+    for r in api_rules:
+        v1 = "/api/v1" + r.rule[len("/api"):]
+        app.url_map.add(Rule(v1, endpoint=r.endpoint, methods=r.methods,
+                             defaults=getattr(r, "defaults", None) or None))
+
+
+_register_api_v1_aliases()
+
+
 def main():
     cfg = load_config(CONFIG_PATH)
     w = cfg.get("webui", {})
