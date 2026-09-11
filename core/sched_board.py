@@ -37,6 +37,13 @@ def _city(field):
     return str(field).split("/")[0].strip()
 
 
+def _via_city(field):
+    """Stop city: '青岛/胶东' -> '青岛'; [] / list / None safe."""
+    if isinstance(field, (list, tuple)):
+        field = field[0] if field else ""
+    return _city(field)
+
+
 def _hhmm(ts):
     try:
         return str(ts)[11:16]
@@ -155,11 +162,20 @@ def _entry_from_leave(row):
     no = _norm_no(row.get("hbh"))
     if not no:
         return None
+    # v0.32: nextschtime = scheduled arrival at the NEXT point. For
+    # nonstop rows that is the final destination -> a real arr time from
+    # the same zero-key board (no extra request). For stopover rows it
+    # is the STOP city arrival: storing it as the final arr would lie,
+    # so keep arr empty and record the stop as metadata only.
+    via = _via_city(row.get("chinese_jtcs"))
+    arr = "" if via else _hhmm(row.get("nextschtime"))
     return {
         "dep": _hhmm(row.get("jhsj")),
-        "arr": "",
+        "arr": arr,
         "from": _city(row.get("chinese_sfcs")),
         "to": _city(row.get("chinese_mdcs")),
+        "via": via,
+        "via_arr": _hhmm(row.get("nextschtime")) if via else "",
         "airline": row.get("chinese_hs") or "",
         "craft": row.get("jxzs") or "",
         "src": "airport-board",
@@ -179,6 +195,117 @@ def _entry_from_arrive(row):
         "craft": row.get("jxzs") or "",
         "src": "airport-board",
     }
+
+
+def _merge_board_rows(db, rows, conv, dow):
+    """Merge one board's rows into db under dow. Returns True when the
+    db actually changed (idempotent for identical replays)."""
+    changed = False
+    for row in rows or []:
+        ent = conv(row)
+        if not ent:
+            continue
+        nos = {_norm_no(row.get("hbh")), _norm_no(row.get("main_hbh"))}
+        for no in nos:
+            if not no:
+                continue
+            fdb = db["flights"].setdefault(no, {"dows": {}})
+            cur = fdb["dows"].get(dow)
+            if cur is None:
+                # dict(ent): codeshare aliases must not share one object
+                fdb["dows"][dow] = dict(ent)
+                changed = True
+            elif ent.get("dep") and ent.get("arr"):
+                # richest row (dual-time) replaces a dep-only one; only
+                # flag a change when content actually differs so cache
+                # replays stay idempotent. Carry over via metadata the
+                # stored entry may already hold: an arrive-board dual row
+                # has no via keys and would otherwise drop them.
+                merged = dict(ent)
+                for k in ("via", "via_arr"):
+                    if cur.get(k) and not merged.get(k):
+                        merged[k] = cur[k]
+                if any(merged.get(k) != cur.get(k)
+                       for k in ("dep", "arr", "via", "via_arr",
+                                 "from", "to")):
+                    fdb["dows"][dow] = merged
+                    changed = True
+            else:
+                # partial row (missing one time): only FILL missing
+                # fields, never erase an earlier stored time
+                for k in ("dep", "arr", "via", "via_arr"):
+                    if not cur.get(k) and ent.get(k):
+                        cur[k] = ent[k]
+                        changed = True
+    return changed
+
+
+def backfill_from_cache(data_dir, log=None, db=None):
+    """v0.32: one-shot offline db upgrade from cached board files.
+
+    Re-merges every board_(leave|arrive)_YYYY-MM-DD.json still in the
+    cache window through the CURRENT converters. Zero network requests
+    (pure local replay): upgrades an old-format db (leave rows stored
+    without the nextschtime arrival) as soon as the converter learns to
+    extract more, without waiting a full week for each dow to re-fetch.
+    Idempotent by merge rules. Pass db= to merge into a dict already
+    loaded by the caller (update_sched_db) so both write the same object;
+    when omitted the db is loaded from disk here. Returns stats.
+    """
+    import glob
+    import re as _re
+    db_path = os.path.join(data_dir, DB_NAME)
+    if db is None:
+        db = {"updated": 0, "flights": {}}
+        try:
+            with open(db_path, encoding="utf-8") as f:
+                db = json.load(f)
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            # same guard as update_sched_db: never silently wipe a
+            # half-written db when replaying caches standalone
+            try:
+                os.replace(db_path, "%s.corrupt-%d"
+                           % (db_path, int(time.time())))
+            except Exception:
+                pass
+            if log:
+                log.warning("sched db unreadable, backed up + rebuilding: %s"
+                            % e)
+            pass
+    changed = False
+    files = 0
+    for path in sorted(glob.glob(os.path.join(data_dir, "board_*.json"))):
+        m = _re.match(r"board_(leave|arrive)_(\d{4}-\d{2}-\d{2})\.json$",
+                      os.path.basename(path))
+        if not m:
+            continue
+        kind, day = m.group(1), m.group(2)
+        try:
+            with open(path, encoding="utf-8") as f:
+                ent = json.load(f)
+            rows = ent.get("rows") or []
+        except Exception as e:
+            if log:
+                log.warning("backfill skip %s: %s" % (os.path.basename(path), e))
+            continue
+        files += 1
+        try:
+            dow = str(_dt.date.fromisoformat(day).weekday())
+        except ValueError:
+            continue
+        conv = _entry_from_leave if kind == "leave" else _entry_from_arrive
+        changed = _merge_board_rows(db, rows, conv, dow) or changed
+    if changed:
+        db["updated"] = time.time()
+        try:
+            os.makedirs(data_dir, exist_ok=True)
+            _atomic_write(db_path, db)
+        except Exception as e:
+            if log:
+                log.warning("backfill db write failed: %s" % e)
+    return {"files": files, "changed": changed}
 
 
 def update_sched_db(session, net_cfg, data_dir, log=None):
@@ -201,7 +328,7 @@ def update_sched_db(session, net_cfg, data_dir, log=None):
         pass
     today = _dt.date.today()
     dow = str(today.weekday())
-    changed = False
+    changed = backfill_from_cache(data_dir, log, db=db)["changed"]
     for kind, conv in (("leave", _entry_from_leave), ("arrive", _entry_from_arrive)):
         try:
             rows, cached = fetch_board(session, net_cfg, kind, data_dir)
@@ -209,31 +336,7 @@ def update_sched_db(session, net_cfg, data_dir, log=None):
             if log:
                 log.warning("board %s fetch failed: %s" % (kind, e))
             continue
-        for row in rows:
-            ent = conv(row)
-            if not ent:
-                continue
-            nos = {_norm_no(row.get("hbh")), _norm_no(row.get("main_hbh"))}
-            for no in nos:
-                if not no:
-                    continue
-                fdb = db["flights"].setdefault(no, {"dows": {}})
-                cur = fdb["dows"].get(dow)
-                if cur is None:
-                    fdb["dows"][dow] = ent
-                    changed = True
-                elif ent.get("dep") and ent.get("arr"):
-                    # richest row (arrive board dual-time) replaces a
-                    # dep-only one; today's board is the fresher source
-                    fdb["dows"][dow] = ent
-                    changed = True
-                else:
-                    # partial row (missing one time): only FILL missing
-                    # fields, never erase an earlier stored time
-                    for k in ("dep", "arr"):
-                        if not cur.get(k) and ent.get(k):
-                            cur[k] = ent[k]
-                            changed = True
+        changed = _merge_board_rows(db, rows, conv, dow) or changed
     if changed:
         db["updated"] = time.time()
         try:
@@ -308,6 +411,17 @@ def board_lookup_x(db, flight_no, date_iso, from_city, to_city):
       tier2 仅到达侧匹配 > tier3 都不匹配.
     dow 精确命中: 板是机场维数据(号+dow+机场唯一), 任何 tier 都算 exact.
     跨 dow 借用: 只接受 tier0/tier1(出发侧必须一致, 拒绝跨航线误借)."""
+    def _as_dest(ent):
+        """Through-flight hop-off: the deal's destination IS the stored
+        stop city -> the stop arrival (via_arr, same board row) is that
+        passenger's real arrival. Expose it as arr."""
+        if to_city and ent and not ent.get("arr") and ent.get("via"):
+            if to_city in ent["via"] or ent["via"] in to_city:
+                e = dict(ent)
+                e["arr"] = e.get("via_arr") or ""
+                return e
+        return ent
+
     fdb = (db.get("flights") or {}).get(_norm_no(flight_no))
     if not fdb:
         return None
@@ -342,7 +456,7 @@ def board_lookup_x(db, flight_no, date_iso, from_city, to_city):
     ent = fdb.get("dows", {}).get(dow)
     if ent:
         # 号+dow+机场 唯一确定一班, 城市不匹配只是经停终点不同 -> 仍算精确
-        return ent, True
+        return _as_dest(ent), True
     cands = [e for e in (fdb.get("dows") or {}).values() if e and _city_ok(e)]
     if not cands:
         return None
@@ -351,7 +465,7 @@ def board_lookup_x(db, flight_no, date_iso, from_city, to_city):
     # dual-time rows carry the most info; otherwise prefer an entry that
     # at least has a dep time so the caller can still render the departure
     pool = dual or [e for e in cands if e.get("dep")] or cands
-    return pool[0], False
+    return _as_dest(pool[0]), False
 
 
 def _hhmm_min(t):

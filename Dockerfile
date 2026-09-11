@@ -20,4 +20,10 @@ RUN chmod +x /start.sh
 
 VOLUME /app/data
 EXPOSE 8765
+
+# v0.32: self-healing deploy - compose/docker restart the container when
+# the panel stops answering; python:slim has no wget, use stdlib urllib
+HEALTHCHECK --interval=60s --timeout=10s --start-period=90s --retries=3 \
+    CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8765/api/snapshot', timeout=8)" || exit 1
+
 CMD ["/start.sh"]

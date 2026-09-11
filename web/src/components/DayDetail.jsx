@@ -107,6 +107,9 @@ export default function DayDetail({ route, date }) {
             title={hasEst ? "按同航线真实飞行时长推算(到达板实测中位数)" : ""}
           >
             {hasArr ? d.arr_time : (hasEst ? "~" + d.arr_est : "--:--")}
+            {hasArr && d.dep_time && d.arr_time < d.dep_time ? (
+              <span class="ft-nextday" title="跨零点航班 · 次日到达">+1d</span>
+            ) : null}
           </div>
           <div class="ft-code">{route.to_iata || route.to_city}</div>
         </div>

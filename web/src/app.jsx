@@ -30,6 +30,13 @@ const TABS = [
   ["logs", "📜 日志"],
 ];
 
+const TAB_IDS = TABS.map(([id]) => id);
+
+function tabFromHash() {
+  const h = (location.hash || "").replace(/^#\/?/, "");
+  return TAB_IDS.includes(h) ? h : "dash";
+}
+
 export function App() {
   const [snap, setSnap] = useState(null);
   const [err, setErr] = useState("");
@@ -37,7 +44,7 @@ export function App() {
   const [selDate, setSelDate] = useState(null);
   const [calView, setCalView] = useState("cal");
   const [photos, setPhotos] = useState({});
-  const [tab, setTab] = useState("dash");
+  const [tab, setTab] = useState(tabFromHash);
   const [cfg, setCfg] = useState(null);
   const [cfgMeta, setCfgMeta] = useState({});
   const [cfgErr, setCfgErr] = useState("");
@@ -50,6 +57,19 @@ export function App() {
       .then((c) => { setCfg(c.config); setCfgMeta(c.sources || {}); })
       .catch((e) => setCfgErr("配置加载失败: " + (e.message || e)));
   }, []);
+
+  useEffect(() => {
+    const onHash = () => setTab(tabFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const switchTab = (id) => {
+    setTab(id);
+    if ("#" + id !== location.hash) {
+      history.replaceState(null, "", "#" + id);
+    }
+  };
 
   const routes = (snap && snap.routes) || [];
   const route = routes.find((r) => r.id === routeId) || routes[0] || null;
@@ -76,7 +96,7 @@ export function App() {
         <nav class="tabbar">
           {TABS.map(([id, label]) => (
             <button key={id} class={"tab-btn" + (tab === id ? " active" : "")}
-              onClick={() => setTab(id)}>{label}</button>
+              onClick={() => switchTab(id)}>{label}</button>
           ))}
         </nav>
         {tab === "routes" ? (
@@ -137,7 +157,7 @@ export function App() {
             <Trains route={route} />
             <div class="foot">
               v2 · 全部 8 个功能页已迁移 · Preact + Vite ·
-              <a href="/">经典版</a>
+              <a href="/classic">经典版</a>
             </div>
           </div>
         ) : null}

@@ -50,6 +50,39 @@ class TestParse(unittest.TestCase):
     def test_row_without_hbh_dropped(self):
         self.assertIsNone(sb._entry_from_leave({"jhsj": "2026-09-10 07:55:00"}))
 
+    def test_leave_nonstop_carries_nextsch_arrival(self):
+        # v0.32: nextschtime = destination scheduled arrival on nonstop
+        ent = sb._entry_from_leave({
+            "hbh": "CZ3746", "jhsj": "2026-09-11 10:20:00",
+            "nextschtime": "2026-09-11 12:10:00",
+            "chinese_sfcs": "杭州/萧山", "chinese_mdcs": "郑州/新郑",
+            "chinese_jtcs": []})
+        self.assertEqual(ent["dep"], "10:20")
+        self.assertEqual(ent["arr"], "12:10")
+        self.assertEqual(ent["via"], "")
+
+    def test_leave_stopover_keeps_final_arr_honest(self):
+        # stop rows: nextschtime is the STOP arrival, not the final one
+        ent = sb._entry_from_leave({
+            "hbh": "SC4766", "jhsj": "2026-09-11 10:45:00",
+            "nextschtime": "2026-09-11 12:40:00",
+            "chinese_sfcs": "杭州/萧山",
+            "chinese_mdcs": "乌鲁木齐/地窝堡",
+            "chinese_jtcs": "青岛/胶东"})
+        self.assertEqual(ent["arr"], "")
+        self.assertEqual(ent["via"], "青岛")
+        self.assertEqual(ent["via_arr"], "12:40")
+
+    def test_leave_stopover_list_field_safe(self):
+        ent = sb._entry_from_leave({
+            "hbh": "SC4766", "jhsj": "2026-09-11 10:45:00",
+            "nextschtime": "2026-09-11 12:40:00",
+            "chinese_sfcs": "杭州/萧山",
+            "chinese_mdcs": "乌鲁木齐/地窝堡",
+            "chinese_jtcs": ["青岛/胶东"]})
+        self.assertEqual(ent["arr"], "")
+        self.assertEqual(ent["via"], "青岛")
+
 
 class TestDbAndLookup(unittest.TestCase):
     def setUp(self):
@@ -481,6 +514,71 @@ class TestCityDepTimes(unittest.TestCase):
         db = self._db(("JD419", 4, "08:35", "", "杭州", "曼谷"))
         self.assertEqual(sb.city_dep_times(db, "", "2026-09-11"), [])
         self.assertEqual(sb.city_dep_times(db, "曼谷", "bad-date"), [])
+
+
+class TestHopOffArrivalAndBackfill(unittest.TestCase):
+    """v0.32: through-flight hop-off arrivals + offline cache backfill."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="sb_v032_")
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def _db(self, flights):
+        return {"updated": 1, "flights": {
+            no: {"dows": {str(dow): {
+                "dep": dep, "arr": arr, "from": frm, "to": to,
+                "via": via, "via_arr": via_arr, "src": "airport-board"}}}
+            for no, dow, dep, arr, frm, to, via, via_arr in flights}}
+
+    def test_hopoff_at_stop_city_uses_via_arr(self):
+        # GJ8281 杭州->图木舒克(经停成都): a 杭州->成都 deal hops off at
+        # the stop -> via_arr IS the passenger's arrival
+        db = self._db((
+            ("GJ8281", 4, "06:35", "", "杭州", "图木舒克",
+              "成都", "09:20"),))
+        ent, exact = sb.board_lookup_x(db, "GJ8281", "2026-09-11",
+                                      "杭州", "成都")
+        self.assertTrue(exact)
+        self.assertEqual(ent["arr"], "09:20")
+
+    def test_final_dest_lookup_stays_honest(self):
+        # asking for the FINAL dest: arr stays empty (board only carries
+        # the stop time), estimator fallback keeps handling it
+        db = self._db((
+            ("GJ8281", 4, "06:35", "", "杭州", "图木舒克",
+              "成都", "09:20"),))
+        ent, _ = sb.board_lookup_x(db, "GJ8281", "2026-09-11",
+                                   "杭州", "图木舒克")
+        self.assertEqual(ent["arr"], "")
+
+    def test_backfill_upgrades_old_db_and_idempotent(self):
+        # old-format db (leave row stored without arrival) + a cached
+        # board file carrying nextschtime -> offline upgrade, no network
+        day = "2026-09-11"  # a Friday (dow 4)
+        cache = {"ts": 1, "rows": [{
+            "hbh": "CZ3746", "main_hbh": [],
+            "jhsj": day + " 10:20:00",
+            "nextschtime": day + " 12:10:00",
+            "chinese_sfcs": "杭州/萧山", "chinese_mdcs": "郑州/新郑",
+            "chinese_jtcs": []}]}
+        with open(os.path.join(self.dir, "board_leave_" + day + ".json"),
+                  "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+        old = {"updated": 1, "flights": {"CZ3746": {"dows": {
+            "4": {"dep": "10:20", "arr": "", "from": "杭州",
+                  "to": "郑州", "src": "airport-board"}}}}}
+        with open(os.path.join(self.dir, sb.DB_NAME), "w",
+                  encoding="utf-8") as f:
+            json.dump(old, f, ensure_ascii=False)
+        st = sb.backfill_from_cache(self.dir)
+        self.assertTrue(st["changed"])
+        self.assertEqual(st["files"], 1)
+        db = sb.load_sched_db(self.dir)
+        self.assertEqual(db["flights"]["CZ3746"]["dows"]["4"]["arr"],
+                         "12:10")
+        # replay: merge rules make it a no-op
+        st2 = sb.backfill_from_cache(self.dir)
+        self.assertFalse(st2["changed"])
 
 
 if __name__ == "__main__":

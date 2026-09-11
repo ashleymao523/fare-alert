@@ -58,9 +58,15 @@ class V2HostingTests(unittest.TestCase):
         self.assertIn("max-age=31536000", cc)
 
     def test_classic_links_to_v2(self):
-        r = self.client.get("/")
+        r = self.client.get("/classic")
         self.assertEqual(r.status_code, 200)
         self.assertIn('href="/v2"', r.get_data(as_text=True))
+
+    def test_root_redirects_to_v2(self):
+        """v0.32: v2 (8/8 tabs) is the default entry."""
+        r = self.client.get("/")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.headers.get("Location"), "/v2/")
 
     def test_v2_route_registered(self):
         rules = {r.rule for r in webui.app.url_map.iter_rules()}

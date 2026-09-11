@@ -234,6 +234,15 @@ def _validate_config(body, current):
 
 @app.get("/")
 def index():
+    # v0.32: v2 (8/8 tabs migrated) is the default entry; the classic
+    # single-file UI stays reachable at /classic for A/B and rollback
+    from flask import redirect
+    return redirect("/v2/", code=302)
+
+
+@app.get("/classic")
+@app.get("/classic/")
+def classic():
     return render_template("index.html")
 
 
