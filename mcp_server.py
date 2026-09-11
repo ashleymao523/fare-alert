@@ -9,7 +9,10 @@ import datetime as dt
 import json
 import os
 import shutil
+import subprocess
 import sys
+import time
+import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -100,6 +103,20 @@ TOOLS = [
                 "max_requests": {"type": "integer", "description": "实发请求预算,默认8,硬上限15(缓存命中不耗预算)", "default": 8},
             },
             "required": ["from_city", "budget"],
+        },
+    },
+    {
+        "name": "verify_release",
+        "description": "一键跑项目验收链(单测/ui_check/前端build/面板探活), 返回 JSON 汇总(逐项 ok/耗时/尾行)。供 agent 自主验收; 默认步骤全只读, build 会重建 web/dist。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "steps": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["unittest", "ui_check", "build", "health"]},
+                    "description": "要跑的步骤, 默认 [unittest, ui_check, health]",
+                },
+            },
         },
     },
 ]
@@ -265,10 +282,73 @@ def tool_reverse_search(args):
     return _ok("\n".join(lines))
 
 
+def tool_verify_release(args):
+    """v0.37: agent 自主验收链。每步独立超时与尾行提取, 汇总 all_ok。
+    health 步骤读 config 的 webui.port 探活 /api/health(含 worker 心跳语义)。"""
+    allowed = ["unittest", "ui_check", "build", "health"]
+    steps = args.get("steps") or ["unittest", "ui_check", "health"]
+    if isinstance(steps, str):
+        steps = [steps]
+    steps = [s for s in steps if s in allowed]
+    if not steps:
+        return _err("steps 需为 %s 的非空子集" % allowed)
+    results = []
+    all_ok = True
+    for s in steps:
+        t0 = time.time()
+        try:
+            if s == "health":
+                port = 8765
+                try:
+                    cfg = load_config(CONFIG_PATH)
+                    port = int((cfg.get("webui") or {}).get("port") or 8765)
+                except Exception:
+                    pass
+                with urllib.request.urlopen(
+                        "http://127.0.0.1:%d/api/health" % port, timeout=10) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                ok = bool(body.get("ok"))
+                wk = body.get("worker") or {}
+                wstate = ("alive" if (wk.get("ok") and wk.get("age_min", 999) < 120)
+                          else ("stale" if wk else "none"))
+                tail = ["ok=%s snapshot_age_min=%s worker=%s" % (
+                    body.get("ok"), (body.get("snapshot") or {}).get("age_min"), wstate)]
+            else:
+                if s == "unittest":
+                    cmd = [sys.executable, "-X", "utf8", "-m", "unittest", "discover", "-s", "tests"]
+                    cwd = BASE_DIR
+                elif s == "ui_check":
+                    cmd = [sys.executable, "-X", "utf8", "tools/ui_check.py"]
+                    cwd = BASE_DIR
+                else:  # build
+                    npm = shutil.which("npm")
+                    if not npm:
+                        raise RuntimeError("npm not found on PATH")
+                    cmd = [npm, "run", "build"]
+                    cwd = os.path.join(BASE_DIR, "web")
+                p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
+                                   encoding="utf-8", errors="replace", timeout=300)
+                ok = p.returncode == 0
+                lines = [l for l in (p.stdout or "").strip().splitlines() if l.strip()]
+                if s == "ui_check":
+                    tail = [l for l in lines if l.startswith("FAIL")] or ["all checks passed"]
+                else:
+                    tail = lines[-3:]
+            dur = round(time.time() - t0, 1)
+        except Exception as e:
+            ok = False
+            dur = round(time.time() - t0, 1)
+            tail = [repr(e)[:160]]
+        all_ok = all_ok and ok
+        results.append({"step": s, "ok": ok, "seconds": dur, "tail": tail})
+    return _ok(json.dumps({"all_ok": all_ok, "steps": results}, ensure_ascii=False, indent=1))
+
+
 HANDLERS = {"fare_search": tool_fare_search, "train_search": tool_train_search,
             "watch_add": tool_watch_add, "watch_del": tool_watch_del,
             "snapshot_get": tool_snapshot_get,
-            "reverse_search": tool_reverse_search}
+            "reverse_search": tool_reverse_search,
+            "verify_release": tool_verify_release}
 
 
 def handle(msg):

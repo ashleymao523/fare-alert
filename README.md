@@ -162,6 +162,8 @@ fare-alert/
 - [x] **v0.35 调度心跳面板化 + 板库 API 勘探归档**: v2 数据源页新增「调度心跳」卡——/api/health 的 worker 状态(运行中脉冲/心跳过期/未启动三态 + 最近轮次成败与分钟年龄)从命令行知识变成面板可视化, 未启动时直接给出 autostart_worker.ps1 启动指引; tools/probe_hbh_date.py 归档板库 API 勘探负结论(无 date 参数, keywords 仅航班号, 只服务当天 → dow 覆盖唯一路径=worker 每日积累, v0.34 自启方向实证正确)。92 单测 + ui_check(新增 v0.35 断言) 全绿。
 - [x] **v0.36 UI 质感专项: 排版放大 + 趋势图重做**: 「不够高级」的根因之一=字号系统偏小(正文 13px/KPI 数字 22px)。v2 专属排版令牌层(--fs-body2/title2/hero2/kpi2, 正文 14/标题 16/Hero 28/KPI 30) + 趋势图重做(Catmull-Rom 平滑曲线、去掉 60 个噪声点只留信息点、最低价绿色胶囊标签、周末淡色底带、心理价位文案标签、悬浮卡片阴影升级) + tab 导航改分段控制器 + Hero 去 emoji(无照片显示城市首字、纸飞机换 SVG)。92 单测 + ui_check(新增 v0.36 断言) 全绿。
 
+- [x] **v0.37 agent 自主验收闭环: verify_release MCP 工具**: 多 agent 协作的最后一块拼图——子 agent 改完代码可自助跑验收链, 不再依赖主 agent 手工转述。新增 MCP 工具 verify_release(steps=unittest/ui_check/build/health, 默认 unittest+ui_check+health), 返回结构化 {all_ok, steps:[{step,ok,seconds,tail}]}; health 步骤读 config 探活 /api/health 并给 worker 三态语义(alive/stale/none)。mcp_selftest 扩到 10 项(含真实 tools/call verify_release), 新增 5 个全 mock 单测, 全套 97 全绿。
+
 ## 常见问题
 
 - **机票起降时刻从哪来?** 去哪儿低价日历只返回每日最低价+航班号(列表页需签名,按合规原则不破解)。v0.18 起杭州相关线路自动用机场官网公开班期板按「航班号+星期几」沉淀计划时刻(零密钥);v0.19 起目标星期未沉淀时自动借用同号航班其他班期时刻(跨日班期·参考),仅有起飞时落地按大圆估算(~ 前缀);配置 Amadeus 后优先实时刻。车次时刻/历时来自 12306, 原生即有。

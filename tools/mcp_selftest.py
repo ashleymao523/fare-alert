@@ -94,7 +94,7 @@ def main():
     r = c.req("tools/list")
     names = sorted(t["name"] for t in r["result"]["tools"])
     expect = sorted(["fare_search", "train_search", "watch_add", "watch_del",
-                     "snapshot_get", "reverse_search"])
+                     "snapshot_get", "reverse_search", "verify_release"])
     ok = names == expect and all(t.get("inputSchema") for t in r["result"]["tools"])
     print(("PASS" if ok else "FAIL") + " tools/list = %s" % names)
     if not ok:
@@ -148,6 +148,13 @@ def main():
     if not ok:
         fails.append("restore")
 
+    r = c.req("tools/call", {"name": "verify_release",
+                             "arguments": {"steps": ["ui_check"]}})
+    ok = "all_ok" in result_text(r) and not r["result"].get("isError")
+    print(("PASS" if ok else "FAIL") + " tools/call verify_release(ui_check)")
+    if not ok:
+        fails.append("verify_release")
+
     c.close()
     untouched = (open(real_cfg, "rb").read() == real_bytes) if real_bytes else True
     print(("PASS" if untouched else "FAIL") + " real config.json untouched")
@@ -155,7 +162,7 @@ def main():
         fails.append("real-config-touched")
     shutil.rmtree(home, ignore_errors=True)
     print("selftest: %s (%d checks)" % ("ALL PASS" if not fails else "FAIL " + str(fails),
-                                        9 - len(fails)))
+                                        10 - len(fails)))
     return 1 if fails else 0
 
 
