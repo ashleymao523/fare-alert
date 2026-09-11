@@ -159,6 +159,7 @@ fare-alert/
 - [x] **v0.32 落地时刻精确化 + v2 默认入口**: 出发板 nextschtime 提取为精确落地时刻(经停存 via 元数据)+ 离线回填 backfill_from_cache + 快照再富化工具 reenrich_times.py, 双时刻条目 3253→6075(重庆真实落地 22/39, 此前全 0); / 根路径 302 至 /v2/, 经典版转 /classic 维护模式; Docker HEALTHCHECK。85 单测全绿。(v0.28–v0.31 设计令牌/web 前端工程/三波 tab 迁移详见 docs/迭代路线图.md)
 - [x] **v0.33 中转/经停透明化 + CI 前端门禁**: 联程票首段到达+中转城市、经停票经停站+到达时刻从板库透传至日详情时间线(「中转 武汉 · 08:55 到」), 四线 81 天获得说明, 估算落地不再是无解释的孤数; ci.yml 新增 frontend job(npm ci+build+git diff --exit-code, dist 与提交强制同步)。87 单测全绿。
 - [x] **v0.34 部署工业化: worker 自启 + 心跳可观测**: 「时刻显示不全」的机制根因=抓取循环无人拉起、班期 dow 覆盖停在手动运行那两天。autostart_worker.ps1 单实例守卫 + install_autostart.ps1 升级双组件(-Components webui,worker); main.py 每轮写心跳、/api/health 暴露 worker 存活年龄; 无时刻文案按换季/联程段细化原因。92 单测全绿。
+- [x] **v0.35 调度心跳面板化 + 板库 API 勘探归档**: v2 数据源页新增「调度心跳」卡——/api/health 的 worker 状态(运行中脉冲/心跳过期/未启动三态 + 最近轮次成败与分钟年龄)从命令行知识变成面板可视化, 未启动时直接给出 autostart_worker.ps1 启动指引; tools/probe_hbh_date.py 归档板库 API 勘探负结论(无 date 参数, keywords 仅航班号, 只服务当天 → dow 覆盖唯一路径=worker 每日积累, v0.34 自启方向实证正确)。92 单测 + ui_check(新增 v0.35 断言) 全绿。
 
 ## 常见问题
 

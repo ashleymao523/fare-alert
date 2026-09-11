@@ -38,6 +38,7 @@ export function saveConfig(cfg) { return post("/api/config", cfg); }
 export function testPush() { return post("/api/test-push", {}); }
 
 export function fetchSchedStats() { return fetch("/api/sched-stats").then(j); }
+export function fetchHealth() { return fetch("/api/health").then(j); }
 
 export function fetchAlerts() { return fetch("/api/alerts").then(j); }
 

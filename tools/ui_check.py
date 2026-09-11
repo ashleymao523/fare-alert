@@ -194,6 +194,7 @@ if _src_list and _dist_list and _src_dirty and not _dist_dirty:
         max(map(os.path.getmtime, _dist_list)) >= max(map(os.path.getmtime, _src_list)))
 checks["v0.30 v2产物含新tab"] = ("爬虫监控" in _dist_js) and ("立即推送周报" in _dist_js) \
     and ("开启浏览器通知" in _dist_js) and ("时刻库沉淀进度" in _dist_js)
+checks["v0.35 v2产物含调度心跳"] = ("调度心跳" in _dist_js) and ("autostart_worker" in _dist_js)
 
 bad = 0
 for k, v in checks.items():

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { saveConfig, fetchSchedStats } from "../lib/api.js";
+import { saveConfig, fetchSchedStats, fetchHealth } from "../lib/api.js";
 
 const DOW_NAMES = ["一", "二", "三", "四", "五", "六", "日"]; // /api/sched-stats: 0=周一
 
@@ -17,10 +17,12 @@ function CovBar({ label, val, total, cls }) {
 // cfg/meta are lifted to App so unsaved edits survive tab switches (no cross-tab overwrite)
 export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }) {
   const [stats, setStats] = useState(null);
+  const [hb, setHb] = useState(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     fetchSchedStats().then(setStats).catch(() => {});
+    fetchHealth().then(setHb).catch(() => {});
   }, []);
   if (!cfg) return <div class="card"><div class="empty">{cfgErr || "加载中…"}</div></div>;
   const enabled = (cfg.sources && cfg.sources.enabled) || {};
@@ -53,6 +55,9 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
   });
   const dows = (stats && stats.dows) || {};
   const covered = Object.keys(dows).filter((k) => dows[k] > 0).length;
+  const wk = hb && hb.worker;
+  const alive = !!(wk && wk.ok && wk.age_min < 120);
+  const hbState = !hb ? "未知" : alive ? "运行中" : wk ? "心跳过期" : "未启动";
   return (
     <div>
       <div class="card">
@@ -96,6 +101,26 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
           {msg ? <span class="muted push-msg">{msg}</span> : null}
         </div>
       </div>
+      {hb ? (
+      <div class="card">
+        <div class="card-head">
+          <h3>🫀 调度心跳</h3>
+          <span class="sub">worker 每轮抓取后写入 /api/health</span>
+        </div>
+        <div class="hb-row">
+          <span class={"hb-dot" + (alive ? " on" : "")}></span>
+          <span class="hb-meta">
+            <b>{hbState}</b>
+            {wk ? <span> · 最近轮次 {wk.ok ? "成功" : "失败"} · {Math.round(wk.age_min)} 分钟前</span> : null}
+          </span>
+        </div>
+        <div class="muted">
+          {!wk ? "后台调度未启动: 可运行 tools/autostart_worker.ps1, 或重启后由自启项自动拉起。"
+            : covered < 7 ? "时刻板按查询日沉淀, 约 " + (7 - covered) + " 天长满, 之后全部星期拥有精确起降时刻。"
+            : "板库已长满, 换季时自动跟随新班期。"}
+        </div>
+      </div>
+      ) : null}
       <div class="card">
         <div class="card-head">
           <h3>📅 时刻库沉淀进度</h3>
