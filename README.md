@@ -164,6 +164,8 @@ fare-alert/
 
 - [x] **v0.37 agent 自主验收闭环: verify_release MCP 工具**: 多 agent 协作的最后一块拼图——子 agent 改完代码可自助跑验收链, 不再依赖主 agent 手工转述。新增 MCP 工具 verify_release(steps=unittest/ui_check/build/health, 默认 unittest+ui_check+health), 返回结构化 {all_ok, steps:[{step,ok,seconds,tail}]}; health 步骤读 config 探活 /api/health 并给 worker 三态语义(alive/stale/none)。mcp_selftest 扩到 10 项(含真实 tools/call verify_release), 新增 5 个全 mock 单测, 全套 97 全绿。
 
+- [x] **v0.38 部署硬化: worker 每日自愈机制**: 「起飞时间显示不全」的机制根因=自启只在登录时触发, 桌面数周不重登则 worker 死后无人拉活, dow 覆盖冻结(实测 2/7)。双层自愈: ① webui 进程内守护线程(每日 07:00 窗口探测 main.py --loop, 缺失则拉起; 纯 Python 跨平台, 不依赖任务计划权限——本机 Register-ScheduledTask 实测拒绝非提权会话); ② install_autostart.ps1 尽力注册每日计划任务(允许的宿主生效, 拒绝则告警不失败)。/api/health 暴露 revive 双层状态(supervisor+task), v2 数据源页心跳卡新增自愈状态行。106 单测 + ui_check(v0.38 断言) 全绿。
+
 ## 常见问题
 
 - **机票起降时刻从哪来?** 去哪儿低价日历只返回每日最低价+航班号(列表页需签名,按合规原则不破解)。v0.18 起杭州相关线路自动用机场官网公开班期板按「航班号+星期几」沉淀计划时刻(零密钥);v0.19 起目标星期未沉淀时自动借用同号航班其他班期时刻(跨日班期·参考),仅有起飞时落地按大圆估算(~ 前缀);配置 Amadeus 后优先实时刻。车次时刻/历时来自 12306, 原生即有。

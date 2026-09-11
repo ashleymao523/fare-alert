@@ -592,6 +592,12 @@ def api_health():
                       "pid": hb.get("pid")}
         except (TypeError, ValueError):
             worker = None
+    revive = None
+    try:
+        from core.revive import task_status, supervisor_snapshot
+        revive = {"supervisor": supervisor_snapshot(), "task": task_status()}
+    except Exception:
+        revive = None
     return jsonify({
         "ok": True,
         "snapshot": {"updated_at": updated, "age_min": age_min},
@@ -599,6 +605,7 @@ def api_health():
                   "weekdays_covered": sum(1 for v in dows.values() if v),
                   "dows": dows},
         "worker": worker,
+        "revive": revive,
         "push_pending": _push_pending(),
     })
 
@@ -636,6 +643,13 @@ def main():
     w = cfg.get("webui", {})
     host = os.environ.get("FAREALERT_HOST") or w.get("host", "127.0.0.1")
     port = int(os.environ.get("FAREALERT_PORT") or w.get("port", 8765))
+    try:  # v0.38: in-process daily revive (07:00 window), config-gated
+        from core.revive import start_supervisor
+        start_supervisor(
+            os.path.dirname(os.path.abspath(__file__)),
+            enabled=bool(cfg.get("deploy", {}).get("supervise_worker", True)))
+    except Exception:
+        pass  # supervisor is best-effort; the panel must still boot
     shown = "127.0.0.1" if host == "0.0.0.0" else host
     print("FareAlert Web UI: http://" + shown + ":" + str(port))
     app.run(host=host, port=port, debug=False, threaded=True)

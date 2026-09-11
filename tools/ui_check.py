@@ -204,6 +204,7 @@ _tc_src = open(os.path.join("web", "src", "components", "TrendChart.jsx"), encod
 checks["v0.36 v2排版放大+平滑趋势"] = (
     ("--fs-kpi2" in _dist_css) and ("smoothPath" in _tc_src)
     and ("t-wknd" in _dist_js) and ("t-min-tag" in _dist_css))
+checks["v0.38 v2产物含自愈任务状态"] = ("自愈" in _dist_js) and ("07:00" in _dist_js)
 
 bad = 0
 for k, v in checks.items():

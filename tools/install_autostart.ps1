@@ -22,6 +22,11 @@ $CompMap = @{
 
 if ($Uninstall) {
   $removed = @()
+  $rv = Get-ScheduledTask -TaskName "FareAlertWorkerRevive" -ErrorAction SilentlyContinue
+  if ($rv) {
+    Unregister-ScheduledTask -TaskName "FareAlertWorkerRevive" -Confirm:$false
+    $removed += "task:FareAlertWorkerRevive"
+  }
   foreach ($c in @("webui", "worker")) {   # sweep both, ignore -Components
     $name = "FareAlert" + $CompMap[$c].suffix
     $t = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
@@ -74,5 +79,29 @@ foreach ($c in $Components) {
     }
     Write-Output ("INSTALLED autostart task $name -> " + $RepoDir)
   }
+  if ($c -eq "worker") {
+    # v0.38: per-user revive task - daily 07:30 + logon triggers with
+    # missed-start catch-up. HKCU Run alone only fires at logon: on a
+    # desktop that stays logged in for weeks a dead worker stays dead.
+    # The wrapper is idempotent (skips when the loop already runs).
+    $rname = "FareAlertWorkerRevive"
+    $old = Get-ScheduledTask -TaskName $rname -ErrorAction SilentlyContinue
+    if ($old) { Unregister-ScheduledTask -TaskName $rname -Confirm:$false }
+    $rset = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
+    $reg = @{
+      TaskName = $rname
+      Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $cmdLine
+      Trigger = @((New-ScheduledTaskTrigger -Daily -At "07:30"), (New-ScheduledTaskTrigger -AtLogOn))
+      Settings = $rset
+      Principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive
+      Description = "FareAlert worker daily self-heal (idempotent wrapper)"
+    }
+    try {
+      Register-ScheduledTask @reg -ErrorAction Stop | Out-Null
+      Write-Output "INSTALLED revive task $rname (daily 07:30 + logon, missed-start catch-up)"
+    } catch {
+      Write-Output "WARN: revive task registration denied - webui supervisor remains the primary revive layer"
+    }
+  }
 }
-Write-Output "Next logon auto-starts the selected components (wrappers skip if already up)."
+Write-Output "Next logon auto-starts the selected components; worker also self-heals daily 07:30."

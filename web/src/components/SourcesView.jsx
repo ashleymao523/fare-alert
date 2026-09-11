@@ -115,10 +115,21 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
           </span>
         </div>
         <div class="muted">
-          {!wk ? "后台调度未启动: 可运行 tools/autostart_worker.ps1, 或重启后由自启项自动拉起。"
+          {!wk ? ((hb.revive && ((hb.revive.supervisor && hb.revive.supervisor.enabled)
+              || (hb.revive.task && hb.revive.task.installed)))
+              ? "后台调度未启动: 每日自愈机制将在明早 07:00 后自动拉起, 无需手动干预。"
+              : "后台调度未启动: 可运行 tools/autostart_worker.ps1, 或重启后由自启项自动拉起。")
             : covered < 7 ? "时刻板按查询日沉淀, 约 " + (7 - covered) + " 天长满, 之后全部星期拥有精确起降时刻。"
             : "板库已长满, 换季时自动跟随新班期。"}
         </div>
+        {hb.revive ? (
+          <div class="muted">
+            🛟 每日自愈: {(hb.revive.supervisor && hb.revive.supervisor.enabled)
+              ? "面板守护已启用, 每日 07:00 后自动拉活后台抓取"
+              : "面板守护未启用(config deploy.supervise_worker)"}
+            {(hb.revive.task && hb.revive.task.installed) ? " · 计划任务已装" : ""}
+          </div>
+        ) : null}
       </div>
       ) : null}
       <div class="card">
