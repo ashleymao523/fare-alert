@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { fetchSnapshot, fetchCityPhoto } from "./lib/api.js";
+import { fetchSnapshot, fetchCityPhoto, fetchConfig } from "./lib/api.js";
 import Header from "./components/Header.jsx";
 import Hero from "./components/Hero.jsx";
 import Kpis from "./components/Kpis.jsx";
@@ -11,6 +11,18 @@ import TrendChart from "./components/TrendChart.jsx";
 import Top5 from "./components/Top5.jsx";
 import Trains from "./components/Trains.jsx";
 import AlertFloat from "./components/AlertFloat.jsx";
+import CrawlView from "./components/CrawlView.jsx";
+import WeeklyView from "./components/WeeklyView.jsx";
+import SourcesView from "./components/SourcesView.jsx";
+import PushView from "./components/PushView.jsx";
+
+const TABS = [
+  ["dash", "📊 仪表盘"],
+  ["crawl", "🕷 爬虫监控"],
+  ["weekly", "📈 周报"],
+  ["sources", "🔌 数据源"],
+  ["push", "🔔 推送"],
+];
 
 export function App() {
   const [snap, setSnap] = useState(null);
@@ -19,11 +31,18 @@ export function App() {
   const [selDate, setSelDate] = useState(null);
   const [calView, setCalView] = useState("cal");
   const [photos, setPhotos] = useState({});
+  const [tab, setTab] = useState("dash");
+  const [cfg, setCfg] = useState(null);
+  const [cfgMeta, setCfgMeta] = useState({});
+  const [cfgErr, setCfgErr] = useState("");
 
   useEffect(() => {
     fetchSnapshot()
       .then((j) => setSnap(j))
       .catch((e) => setErr(String(e)));
+    fetchConfig()
+      .then((c) => { setCfg(c.config); setCfgMeta(c.sources || {}); })
+      .catch((e) => setCfgErr("配置加载失败: " + (e.message || e)));
   }, []);
 
   const routes = (snap && snap.routes) || [];
@@ -48,12 +67,25 @@ export function App() {
     <div>
       <Header snap={snap} />
       <div class="wrap">
+        <nav class="tabbar">
+          {TABS.map(([id, label]) => (
+            <button key={id} class={"tab-btn" + (tab === id ? " active" : "")}
+              onClick={() => setTab(id)}>{label}</button>
+          ))}
+        </nav>
+        {tab === "crawl" ? <CrawlView /> : null}
+        {tab === "weekly" ? <WeeklyView /> : null}
+        {tab === "sources" ? (
+          <SourcesView snap={snap} cfg={cfg} setCfg={setCfg} meta={cfgMeta} setMeta={setCfgMeta} cfgErr={cfgErr} />
+        ) : null}
+        {tab === "push" ? <PushView cfg={cfg} setCfg={setCfg} cfgErr={cfgErr} /> : null}
         {err ? <div class="card"><div class="empty">快照加载失败: {err}</div></div> : null}
-        {!snap && !err ? <div class="card"><div class="empty">加载中…</div></div> : null}
-        {routes.length > 1 && (
+        {!snap && !err && tab === "dash" ? <div class="card"><div class="empty">加载中…</div></div> : null}
+        {routes.length > 1 && tab === "dash" && (
           <div class="route-tabs">
             {routes.map((r) => (
               <button
+                key={r.id}
                 class={"rt-chip" + (route && r.id === route.id ? " active" : "")}
                 onClick={() => { setRouteId(r.id); setSelDate(null); }}
               >
@@ -62,7 +94,7 @@ export function App() {
             ))}
           </div>
         )}
-        {route ? (
+        {route && tab === "dash" ? (
           <div>
             <Hero route={route} photos={photos} />
             <Kpis route={route} />
@@ -93,12 +125,12 @@ export function App() {
             <Top5 route={route} />
             <Trains route={route} />
             <div class="foot">
-              v2 预览 · 爬虫监控/线路管理/预算找目的地/周报/数据源/推送/日志请先到
-              <a href="/">经典版</a> 操作 · 逐 tab 迁移中 · Preact + Vite
+              v2 · 线路管理/预算找目的地/日志暂在
+              <a href="/">经典版</a> · 逐 tab 迁移中 · Preact + Vite
             </div>
           </div>
         ) : null}
-        {snap && !routes.length && !err ? (
+        {snap && !routes.length && !err && tab === "dash" ? (
           <div class="card"><div class="empty">快照中暂无线路, 请先在经典版添加线路并执行查询</div></div>
         ) : null}
       </div>

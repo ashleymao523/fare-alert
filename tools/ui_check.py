@@ -153,6 +153,48 @@ for _root_dir, _sub_dirs, _fs in os.walk(os.path.join("web", "src")):
         _hex_v2 += [_p + ":" + m for m in re.findall(r"#[0-9a-fA-F]{3,8}\b", _t)]
 checks["v0.29 v2零硬编码色"] = not _hex_v2
 
+# --- v0.30: v2 wave-2 tabs (crawl / weekly / sources / push) ---
+_v2_comp_dir = os.path.join("web", "src", "components")
+_v2_wave2 = ["CrawlView.jsx", "WeeklyView.jsx", "SourcesView.jsx", "PushView.jsx"]
+checks["v0.30 v2四组件"] = all(
+    os.path.exists(os.path.join(_v2_comp_dir, f)) for f in _v2_wave2)
+_app_jsx_v2 = open(os.path.join("web", "src", "app.jsx"), encoding="utf-8").read()
+checks["v0.30 v2 tab导航"] = ("tabbar" in _app_jsx_v2) and ("CrawlView" in _app_jsx_v2)
+_dist_files = []
+for _root_dir, _sub_dirs, _fs in os.walk(os.path.join("web", "dist", "assets")):
+    _dist_files += [open(os.path.join(_root_dir, f), encoding="utf-8").read()
+                    for f in _fs if f.endswith(".js")]
+_dist_js = "".join(_dist_files)
+_src_list = [os.path.join(_root_dir, f)
+             for _root_dir, _sub_dirs, _fs in os.walk(os.path.join("web", "src"))
+             for f in _fs]
+_dist_list = [os.path.join(_root_dir, f)
+              for _root_dir, _sub_dirs, _fs in os.walk(os.path.join("web", "dist", "assets"))
+              for f in _fs if f.endswith((".js", ".css"))]
+checks["v0.30.1 dist assets present"] = bool(_dist_list)
+
+
+def _git_dirty(subpath):
+    """True/False; None when git unavailable (then skip mtime heuristic)."""
+    import subprocess as _sp
+    try:
+        _r = _sp.run(["git", "status", "--porcelain", "--", subpath],
+                     capture_output=True, text=True, timeout=10)
+        return bool(_r.stdout.strip())
+    except Exception:
+        return None
+
+
+# mtime heuristic only fires when src is dirty but dist is clean (forgot rebuild).
+# Clean trees (fresh clone/pull) and both-dirty (edited+rebuilt) skip it, because
+# git checkout write order can leave src newer than dist without any real staleness.
+_src_dirty, _dist_dirty = _git_dirty("web/src"), _git_dirty("web/dist")
+if _src_list and _dist_list and _src_dirty and not _dist_dirty:
+    checks["v0.30.1 dist freshness (src dirty, dist stale)"] = (
+        max(map(os.path.getmtime, _dist_list)) >= max(map(os.path.getmtime, _src_list)))
+checks["v0.30 v2产物含新tab"] = ("爬虫监控" in _dist_js) and ("立即推送周报" in _dist_js) \
+    and ("开启浏览器通知" in _dist_js) and ("时刻库沉淀进度" in _dist_js)
+
 bad = 0
 for k, v in checks.items():
     print(("PASS " if v else "FAIL ") + k)
