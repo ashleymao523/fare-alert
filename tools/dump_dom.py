@@ -26,15 +26,24 @@ def main():
     parts = []
     for prof, tab in TABS:
         udd = os.path.join(cwd, "data", "edge_prof_" + prof)
-        url = "http://127.0.0.1:8765/?v=21#" + tab
+        url = "http://127.0.0.1:8765/?v=22#" + tab
         cmd = [EDGE, "--headless", "--disable-gpu", "--no-first-run",
                "--user-data-dir=" + udd, "--virtual-time-budget=12000",
                "--dump-dom", url]
         # no cwd=: Edge (Store build) fails with WinError 267 on a CJK cwd
-        p = subprocess.run(cmd, capture_output=True, timeout=120)
-        parts.append(p.stdout.decode("utf-8", "replace"))
-        print(tab + " bytes " + str(len(p.stdout)), flush=True)
-        time.sleep(1)
+        out = b""
+        for attempt in (1, 2):  # headless Edge crashes (rc 21) when the
+            # previous run has not released the profile yet -> retry once
+            p = subprocess.run(cmd, capture_output=True, timeout=120)
+            out = p.stdout
+            if out:
+                break
+            print(tab + " attempt " + str(attempt) + " empty (rc " +
+                  str(p.returncode) + "), retry in 5s", flush=True)
+            time.sleep(5)
+        parts.append(out.decode("utf-8", "replace"))
+        print(tab + " bytes " + str(len(out)), flush=True)
+        time.sleep(3)
     out = os.path.join(cwd, "data", "ui_dom.html")
     with open(out, "w", encoding="utf-8") as f:
         f.write("".join(parts))

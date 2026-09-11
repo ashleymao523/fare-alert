@@ -56,6 +56,27 @@ class TestTimeCoverage(unittest.TestCase):
         self.assertEqual(cov["total"], 0)
         self.assertIn("dep_missing", cov)
 
+    def test_per_field_sources_split(self):
+        # v0.22: dep_src/arr_src classify each leg independently;
+        # missing per-field src falls back to legacy time_src.
+        cov = time_coverage([
+            deal(dep_time="08:00", dep_src="amadeus",
+                 arr_time="10:30", arr_src="airport-board-x"),
+            deal(dep_time="09:00", time_src="amadeus",
+                 arr_time="11:30"),
+        ])
+        self.assertEqual(cov["dep_exact"], 2)
+        self.assertEqual(cov["arr_borrow"], 1)
+        self.assertEqual(cov["arr_exact"], 1)
+
+    def test_dep_borrow_arr_exact_mix(self):
+        cov = time_coverage([
+            deal(dep_time="08:00", dep_src="airport-board-x",
+                 arr_time="10:30", arr_src="airport-board"),
+        ])
+        self.assertEqual(cov["dep_borrow"], 1)
+        self.assertEqual(cov["arr_exact"], 1)
+
     def test_marker_tuple(self):
         self.assertEqual(NON_REAL_SOURCES, ("nearby-ref", "interp"))
 

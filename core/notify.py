@@ -80,8 +80,13 @@ def _record_alert(title, body, url, route_id):
         if os.path.exists(_ALERTS_FILE):
             with open(_ALERTS_FILE, encoding="utf-8") as f:
                 history = json.load(f)
+        now = dt.datetime.now().isoformat(timespec="seconds")
+        last = history[-1] if history else None
+        if (last and last.get("ts") == now and last.get("title") == title
+                and last.get("body") == body):
+            return  # duplicate burst (double-click / retry): keep one row
         history.append({
-            "ts": dt.datetime.now().isoformat(timespec="seconds"),
+            "ts": now,
             "route": route_id or "",
             "title": title,
             "body": body,

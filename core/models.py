@@ -15,6 +15,8 @@ class FlightDeal:
     arr_est: str = ""         # 落地估算(hh:mm, 大圆估): 独立字段, 不与真实时刻混源
     duration_text: str = ""   # 飞行时长
     time_src: str = ""        # 时刻来源: ""=无 | amadeus | airport-board | airport-board-x
+    dep_src: str = ""         # v0.22 按字段来源: dep 时刻来源(经停时与 arr 可能不同源)
+    arr_src: str = ""         # v0.22 按字段来源: arr 时刻来源
     ref_offset: int = 0       # nearby-ref: 距参考价日期的天数(0=非参考价)
 
     @property

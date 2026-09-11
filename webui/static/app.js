@@ -882,14 +882,32 @@
     var mid = el("div", "ft-mid");
     var durBox = el("div");
     durBox.appendChild(el("span", "ft-dur", connecting ? "中转 · " + (d.duration_text || "全程时刻待查") : (d.duration_text || "飞行时长待查")));
-    if (d.time_src === "airport-board") {
-      durBox.appendChild(el("span", "badge gray ts-badge", "计划时刻·机场班期"));
-    } else if (d.time_src === "airport-board-x") {
-      var xb = el("span", "badge amber ts-badge", "跨日班期·参考");
-      xb.title = "同一航班号其他班期的时刻，同航季内通常一致，仅供参考";
-      durBox.appendChild(xb);
-    } else if (d.time_src === "amadeus") {
-      durBox.appendChild(el("span", "badge sky ts-badge", "计划时刻·Amadeus"));
+    var depSrc = d.dep_src || (d.dep_time ? d.time_src : "");
+    var arrSrc = d.arr_src || (d.arr_time ? d.time_src : "");
+    var depBadge = null, arrBadge = null;
+    if (depSrc === "airport-board") {
+      depBadge = el("span", "badge gray ts-badge", "起飞·班期精查");
+    } else if (depSrc === "airport-board-x") {
+      depBadge = el("span", "badge amber ts-badge", "起飞·跨日参考");
+      depBadge.title = "同一航班号其他班期的时刻，同航季内通常一致，仅供参考";
+    } else if (depSrc === "amadeus") {
+      depBadge = el("span", "badge sky ts-badge", "起飞·Amadeus");
+    }
+    if (arrSrc === "airport-board") {
+      arrBadge = el("span", "badge gray ts-badge", "落地·班期精查");
+    } else if (arrSrc === "airport-board-x") {
+      arrBadge = el("span", "badge amber ts-badge", "落地·跨日参考");
+      arrBadge.title = "同一航班号其他班期的时刻，同航季内通常一致，仅供参考";
+    } else if (arrSrc === "amadeus") {
+      arrBadge = el("span", "badge sky ts-badge", "落地·Amadeus");
+    }
+    if (depBadge && arrBadge && depSrc === arrSrc) {
+      depBadge.textContent = depSrc === "amadeus" ? "计划时刻·Amadeus" : "计划时刻·机场班期";
+      if (depSrc === "airport-board-x") depBadge.textContent = "跨日班期·参考";
+      durBox.appendChild(depBadge);
+    } else {
+      if (depBadge) durBox.appendChild(depBadge);
+      if (arrBadge) durBox.appendChild(arrBadge);
     }
     if (!hasDep && !hasArr) {
       var amaSrc = (S.sources || {})["amadeus-intl"] || {};
@@ -904,9 +922,8 @@
       }
       durBox.appendChild(pend);
     } else if (!hasDep || !hasArr) {
-      durBox.appendChild(el("span", "ft-pend",
-        (d.time_src === "airport-board" || d.time_src === "airport-board-x")
-          ? "另一段时刻待班期库覆盖" : "另一段时刻待补"));
+      var waitText = (depSrc || arrSrc) ? "另一段时刻待班期库覆盖" : "另一段时刻待补";
+      durBox.appendChild(el("span", "ft-pend", waitText));
     }
     mid.appendChild(durBox);
     var path = el("div", "ft-path");

@@ -298,7 +298,16 @@ def board_lookup_x(db, flight_no, date_iso, from_city, to_city):
     返回当日 -> 时刻库尚未沉淀该 dow 属常态. 同航班号时刻按航季排班,
     其他 dow 的时刻高度一致, 可作为参考借用(调用方需打 airport-board-x
     标记). 返回 (entry, exact_bool) 或 None; exact=dow 精确命中.
-    跨日时优先选双时刻(dep+arr)且城市匹配的条目, 再退 dep-only."""
+    跨日时优先选双时刻(dep+arr)且城市匹配的条目, 再退 dep-only.
+
+    v0.22 城市分层匹配(经停友好):
+    板上存的是航班最终经停点(如 杭州->克拉玛依 的 GJ8069 实际经停郑州),
+    按"最终到达城市"硬过滤会误杀经停航段. 同一航班号在同机场同 dow 只有一班,
+    出发时刻与最终终点无关 -> 城市匹配降级为分层偏好:
+      tier0 出发+到达都匹配 > tier1 仅出发侧匹配(经停/终到不同) >
+      tier2 仅到达侧匹配 > tier3 都不匹配.
+    dow 精确命中: 板是机场维数据(号+dow+机场唯一), 任何 tier 都算 exact.
+    跨 dow 借用: 只接受 tier0/tier1(出发侧必须一致, 拒绝跨航线误借)."""
     fdb = (db.get("flights") or {}).get(_norm_no(flight_no))
     if not fdb:
         return None
@@ -307,19 +316,37 @@ def board_lookup_x(db, flight_no, date_iso, from_city, to_city):
     except Exception:
         return None
 
+    def _from_ok(ent):
+        if not from_city or not ent.get("from"):
+            return True
+        return from_city in ent["from"] or ent["from"] in from_city
+
+    def _to_ok(ent):
+        if not to_city or not ent.get("to"):
+            return True
+        return to_city in ent["to"] or ent["to"] in to_city
+
+    def _tier(ent):
+        fm, tm = _from_ok(ent), _to_ok(ent)
+        if fm and tm:
+            return 0
+        if fm:
+            return 1
+        if tm:
+            return 2
+        return 3
+
     def _city_ok(ent):
-        if from_city and ent.get("from") and from_city not in ent["from"] and ent["from"] not in from_city:
-            return False
-        if to_city and ent.get("to") and to_city not in ent["to"] and ent["to"] not in to_city:
-            return False
-        return True
+        return _tier(ent) <= 1
 
     ent = fdb.get("dows", {}).get(dow)
-    if ent and _city_ok(ent):
+    if ent:
+        # 号+dow+机场 唯一确定一班, 城市不匹配只是经停终点不同 -> 仍算精确
         return ent, True
     cands = [e for e in (fdb.get("dows") or {}).values() if e and _city_ok(e)]
     if not cands:
         return None
+    cands.sort(key=lambda e: _tier(e))
     dual = [e for e in cands if e.get("dep") and e.get("arr")]
     # dual-time rows carry the most info; otherwise prefer an entry that
     # at least has a dep time so the caller can still render the departure

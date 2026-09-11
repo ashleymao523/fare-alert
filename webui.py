@@ -402,7 +402,8 @@ def api_run():
 def api_test_push():
     cfg = load_config(CONFIG_PATH)
     results = push_all(cfg, _log, "✈️ FareAlert 测试推送",
-                       "推送通道配置成功!这是一条测试消息。", url="")
+                       "推送通道配置成功!这是一条测试消息。", url="",
+                       route_id="test-push")
     return jsonify({"ok": True, "results": results})
 
 

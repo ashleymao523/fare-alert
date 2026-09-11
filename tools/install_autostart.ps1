@@ -30,7 +30,8 @@ if ($Uninstall) {
   exit 0
 }
 
-# autostart_webui.ps1 self-guards: skips launch when 8765 is listening.
+# autostart_webui.ps1 self-guards: skips launch when the configured
+# webui port (config.json webui.port, default 8765) is listening.
 $wrapper = Join-Path $RepoDir "tools\autostart_webui.ps1"
 $cmdLine = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $wrapper
 
@@ -56,7 +57,7 @@ if ($Mode -eq "registry") {
     -LogonType Interactive
   Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Settings $settings -Principal $principal `
-    -Description "FareAlert low-fare monitor Web UI (http://127.0.0.1:8765)" | Out-Null
+    -Description "FareAlert low-fare monitor Web UI (port from config.json)" | Out-Null
   $check = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
   if ($check) {
     Write-Output ("INSTALLED autostart task $TaskName -> " + $RepoDir)

@@ -155,21 +155,39 @@ class TestLookupX(unittest.TestCase):
         self.assertIsNone(sb.board_lookup_x(self._db({}), "CA9999",
                                             "2026-09-10", "杭州", "重庆"))
 
-    def test_exact_dow_city_mismatch_falls_to_cross(self):
-        # exact dow exists but for another city pair -> borrow cross-dow
+    def test_exact_dow_stopover_city_still_exact(self):
+        # v0.22: 板按号+dow+机场唯一定位一班, 终点城市不同多为经停
+        # 最终点记录差异(杭州->克拉玛依 实际经停郑州), 仍算精确命中
         db = self._db({
             "3": {"dep": "09:00", "arr": "", "from": "北京", "to": "重庆"},
             "1": {"dep": "07:55", "arr": "", "from": "杭州", "to": "重庆"},
         })
         hit = sb.board_lookup_x(db, "GJ8888", "2026-09-10", "杭州", "重庆")
-        self.assertEqual(hit[1], False)
-        self.assertEqual(hit[0]["dep"], "07:55")
+        self.assertEqual(hit[1], True)
+        self.assertEqual(hit[0]["dep"], "09:00")
 
     def test_bad_date_returns_none(self):
         db = self._db({"2": {"dep": "07:55", "arr": "",
                              "from": "杭州", "to": "重庆"}})
         self.assertIsNone(sb.board_lookup_x(db, "GJ8888", "not-a-date",
                                             "杭州", "重庆"))
+
+    def test_cross_dow_stopover_final_city_borrows(self):
+        # v0.22: cross-dow borrow also allows stopover legs when the
+        # departure side matches (杭州->克拉玛依 actually stops at 郑州)
+        db = self._db({"2": {"dep": "06:35", "arr": "",
+                             "from": "杭州", "to": "克拉玛依"}})
+        hit = sb.board_lookup_x(db, "GJ8888", "2026-09-10", "杭州", "郑州")
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit[1], False)
+        self.assertEqual(hit[0]["dep"], "06:35")
+
+    def test_cross_dow_origin_mismatch_rejected(self):
+        # v0.22: neither side matches -> tier3, refuse to borrow cross-dow
+        db = self._db({"2": {"dep": "06:35", "arr": "",
+                             "from": "北京", "to": "克拉玛依"}})
+        self.assertIsNone(sb.board_lookup_x(db, "GJ8888", "2026-09-10",
+                                            "杭州", "郑州"))
 
 
 class _FakeResp:

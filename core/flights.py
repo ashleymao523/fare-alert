@@ -130,13 +130,16 @@ def time_coverage(deals):
         if (getattr(d, "source", "") or "") in NON_REAL_SOURCES:
             continue
         cov["total"] += 1
-        exact_src = getattr(d, "time_src", "") in ("amadeus", "airport-board")
+        dep_src = getattr(d, "dep_src", "") or getattr(d, "time_src", "")
+        arr_src = getattr(d, "arr_src", "") or getattr(d, "time_src", "")
         if getattr(d, "dep_time", ""):
-            cov["dep_borrow" if not exact_src else "dep_exact"] += 1
+            cov["dep_borrow" if dep_src not in ("amadeus", "airport-board")
+                else "dep_exact"] += 1
         else:
             cov["dep_missing"] += 1
         if getattr(d, "arr_time", ""):
-            cov["arr_borrow" if not exact_src else "arr_exact"] += 1
+            cov["arr_borrow" if arr_src not in ("amadeus", "airport-board")
+                else "arr_exact"] += 1
         elif getattr(d, "arr_est", ""):
             cov["arr_est"] += 1
         else:

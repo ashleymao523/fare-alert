@@ -103,6 +103,8 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "arr_est": deal.arr_est,
         "duration_text": deal.duration_text,
         "time_src": deal.time_src,
+        "dep_src": deal.dep_src,
+        "arr_src": deal.arr_src,
         "source": deal.source,
         "ref_offset": deal.ref_offset if deal.source == "nearby-ref" else 0,
     }
@@ -296,6 +298,14 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
             return
         d.time_src = "airport-board" if exact else "airport-board-x"
 
+    def _mark_dep_src(d, exact):
+        if not d.dep_src or d.dep_src == "airport-board-x":
+            d.dep_src = "airport-board" if exact else "airport-board-x"
+
+    def _mark_arr_src(d, exact):
+        if not d.arr_src or d.arr_src == "airport-board-x":
+            d.arr_src = "airport-board" if exact else "airport-board-x"
+
     fc, tc = route.get("from_city", ""), route.get("to_city", "")
     fi = (route.get("from_iata") or "").strip().upper() or city_iata(fc)
     ti = (route.get("to_iata") or "").strip().upper() or city_iata(tc)
@@ -331,15 +341,18 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
             if seg_rows and seg_rows[0] and seg_rows[0].get("dep"):
                 d.dep_time = seg_rows[0]["dep"]
                 d.time_src = "amadeus"
+                d.dep_src = "amadeus"
             if seg_rows and seg_rows[-1] and seg_rows[-1].get("arr"):
                 d.arr_time = seg_rows[-1]["arr"]
                 d.time_src = "amadeus"
+                d.arr_src = "amadeus"
             if not d.dep_time and segs:
                 hit = board_lookup_x(bdb, segs[0], d.date, fc, "")
                 if hit and hit[0].get("dep"):
                     ent, exact = hit
                     d.dep_time = ent["dep"]
                     _mark_time_src(d, exact)  # weakest mark wins across segs
+                    _mark_dep_src(d, exact)
                     n_board += 1
                     if not exact:
                         n_x += 1
@@ -349,6 +362,7 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                     ent, exact = hit
                     d.arr_time = ent["arr"]
                     _mark_time_src(d, exact)
+                    _mark_arr_src(d, exact)
                     n_board += 1
                     if not exact:
                         n_x += 1
@@ -365,6 +379,8 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
             d.duration_text = row.get("dur") or d.duration_text
             if d.dep_time or d.arr_time:
                 d.time_src = "amadeus"
+                d.dep_src = "amadeus" if d.dep_time else d.dep_src
+                d.arr_src = "amadeus" if d.arr_time else d.arr_src
         if no and not (d.dep_time and d.arr_time):
             hit = board_lookup_x(bdb, no, d.date, fc, tc)
             if hit:
@@ -373,9 +389,11 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                 if not d.dep_time and ent.get("dep"):
                     d.dep_time = ent["dep"]
                     got = True
+                    _mark_dep_src(d, exact)
                 if not d.arr_time and ent.get("arr"):
                     d.arr_time = ent["arr"]
                     got = True
+                    _mark_arr_src(d, exact)
                 if got:
                     n_board += 1
                     _mark_time_src(d, exact)
