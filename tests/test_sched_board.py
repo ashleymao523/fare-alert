@@ -430,6 +430,7 @@ class TestRoutePriors(unittest.TestCase):
             ("河内机场", "03:40", "06:45")))
         self.assertIn("河内", priors)
 
+
     def test_prefix_lookup_prefers_busiest_airport(self):
         priors = {
             "曼谷素万那普": {"minutes": 240, "n": 12},
@@ -437,6 +438,49 @@ class TestRoutePriors(unittest.TestCase):
         }
         self.assertEqual(sb.prior_minutes_for(priors, "曼谷"), 240)
         self.assertEqual(sb.prior_minutes_for(priors, "重庆"), None)
+
+
+class TestCityDepTimes(unittest.TestCase):
+    def _db(self, *rows):
+        flights = {}
+        for no, dow, dep, arr, frm, to in rows:
+            flights.setdefault(no, {"dows": {}})["dows"][str(dow)] = {
+                "dep": dep, "arr": arr, "from": frm, "to": to}
+        return {"updated": 1, "flights": flights}
+
+    def test_exact_dow_and_city_prefix_match(self):
+        # 2026-09-11 is a Friday (dow=4)
+        db = self._db(
+            ("JD419", 4, "08:35", "", "杭州", "曼谷素万那普机场"),
+            ("FD497", 4, "18:10", "", "杭州", "曼谷素万那普机场"),
+            ("CA1234", 4, "09:00", "", "北京", "曼谷素万那普机场"))
+        out = sb.city_dep_times(db, "曼谷", "2026-09-11")
+        self.assertEqual([e["no"] for e in out], ["JD419", "FD497"])
+        self.assertTrue(all(e["exact"] for e in out))
+
+    def test_cross_dow_borrow_flagged_not_exact(self):
+        db = self._db(("GJ8021", 2, "13:00", "", "杭州", "曼谷"))
+        out = sb.city_dep_times(db, "曼谷", "2026-09-11")
+        self.assertEqual(out[0]["no"], "GJ8021")
+        self.assertFalse(out[0]["exact"])
+
+    def test_codeshare_same_slot_deduped_and_limit(self):
+        db = self._db(
+            ("CZ7117", 4, "06:20", "", "杭州", "重庆"),
+            ("GJ8691", 4, "06:20", "", "杭州", "重庆"),
+            ("NS8471", 4, "07:00", "", "杭州", "重庆"),
+            ("CA1759", 4, "07:30", "", "杭州", "重庆"),
+            ("G58826", 4, "08:05", "", "杭州", "重庆"),
+            ("MF5294", 4, "09:10", "", "杭州", "重庆"))
+        out = sb.city_dep_times(db, "重庆", "2026-09-11")
+        self.assertEqual([e["dep"] for e in out],
+                         ["06:20", "07:00", "07:30", "08:05"])
+
+
+    def test_empty_city_or_bad_date(self):
+        db = self._db(("JD419", 4, "08:35", "", "杭州", "曼谷"))
+        self.assertEqual(sb.city_dep_times(db, "", "2026-09-11"), [])
+        self.assertEqual(sb.city_dep_times(db, "曼谷", "bad-date"), [])
 
 
 if __name__ == "__main__":

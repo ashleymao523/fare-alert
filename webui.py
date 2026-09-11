@@ -235,7 +235,16 @@ def index():
 
 @app.get("/api/snapshot")
 def api_snapshot():
-    return jsonify({"snapshot": _read_json(SNAPSHOT_PATH, None)})
+    return jsonify({"snapshot": _read_json(SNAPSHOT_PATH, None),
+                    "push_pending": _push_pending()})
+
+
+def _push_pending():
+    """True when weekly push is on but no channel key is configured."""
+    push = load_config(CONFIG_PATH).get("push", {})
+    has_ch = bool((push.get("bark_key") or "").strip()
+                  or (push.get("serverchan_sendkey") or "").strip())
+    return bool(push.get("weekly_enabled")) and not has_ch
 
 
 @app.get("/api/crawl-status")
@@ -395,7 +404,8 @@ def api_run():
         except Exception as e:
             _log.error("manual run failed: %s", e)
             return jsonify({"ok": False, "error": str(e)}), 500
-    return jsonify({"ok": True, "snapshot": snapshot})
+    return jsonify({"ok": True, "snapshot": snapshot,
+                    "push_pending": _push_pending()})
 
 
 @app.post("/api/test-push")

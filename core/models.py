@@ -18,6 +18,7 @@ class FlightDeal:
     dep_src: str = ""         # v0.22 按字段来源: dep 时刻来源(经停时与 arr 可能不同源)
     arr_src: str = ""         # v0.22 按字段来源: arr 时刻来源
     ref_offset: int = 0       # nearby-ref: 距参考价日期的天数(0=非参考价)
+    alt_times: list = field(default_factory=list)  # v0.26 无号deal参考班次 [{no,dep,exact}]
 
     @property
     def airline_code(self):

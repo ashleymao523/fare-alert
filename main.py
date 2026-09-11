@@ -25,7 +25,7 @@ from core.models import FlightDeal
 from core.notify import has_channel, push_all
 from core.report import write_report
 from core.sched_board import (board_lookup_x, build_route_priors,
-                              load_sched_db, prior_minutes_for,
+                              city_dep_times, load_sched_db, prior_minutes_for,
                               touches_hangzhou, update_sched_db)
 from core.state import load_state, save_state
 from core.trains import refresh_train_info
@@ -108,6 +108,9 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "arr_src": deal.arr_src,
         "source": deal.source,
         "ref_offset": deal.ref_offset if deal.source == "nearby-ref" else 0,
+        "alt_times": [{"no": a.get("no"), "dep": a.get("dep"),
+                       "exact": bool(a.get("exact"))}
+                      for a in (deal.alt_times or [])][:4],
     }
 
 
@@ -340,6 +343,7 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
     # truth than the great-circle guess. Direct flights only: connecting
     # legs keep the +2.5h layover model.
     priors = build_route_priors(bdb)
+    alt_cache = {}  # v0.26: per-date city reference departures (numberless deals)
     for d in deals:
         no = (d.flight_no or "").strip()
         if "/" in no:  # connecting itinerary: estimate with layover
@@ -406,6 +410,12 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                     _mark_time_src(d, exact)
                     if not exact:
                         n_x += 1
+        if not (d.flight_no or "").strip() and not d.dep_time:
+            # intl calendar deals carry price+date only: give them the
+            # board's known HGH->city departures for that dow as reference
+            if d.date not in alt_cache:
+                alt_cache[d.date] = city_dep_times(bdb, tc, d.date)
+            d.alt_times = alt_cache[d.date]
         prior_min = prior_minutes_for(priors, tc)
         if not d.duration_text:
             d.duration_text = estimate_duration_text(fi, ti,

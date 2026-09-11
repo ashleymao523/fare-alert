@@ -2,11 +2,12 @@ services:
   fare-alert:
     build: .
     container_name: fare-alert
+    restart: unless-stopped
     ports:
       - "8765:8765"
     volumes:
-      # 数据缓存/快照/日志落宿主机, 容器随便重建
-      - ./data:/app/data
-      # 密钥配置不入镜像, 挂载本地文件(首次从 config.example.json 复制)
-      - ./config.json:/app/config.json
-    restart: unless-stopped
+      - ./data:/app/data        # snapshot/cache/sched-db persist on host
+      - ./config.json:/app/config.json   # edit config on host, restart to apply
+    environment:
+      - FAREALERT_HOST=0.0.0.0
+      - FAREALERT_PORT=8765

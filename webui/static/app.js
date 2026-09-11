@@ -633,6 +633,22 @@
       sub: "窗口 " + route.window[0] + " ~ " + route.window[1],
       cls: route.days_below > 0 ? "good" : "warn"
     });
+    var ds = route.deals || [];
+    var depN = 0, altN = 0;
+    ds.forEach(function (x) {
+      if ((x.dep_time || "").trim()) depN++;
+      else if ((x.alt_times || []).length) altN++;
+    });
+    if (ds.length) {
+      items.push({
+        label: "起飞时刻覆盖",
+        value: Math.round(100 * depN / ds.length) + "%",
+        sub: altN
+          ? "另有 " + altN + " 天附当日参考班次 · 班期库每日自动沉淀"
+          : "班期库每日自动沉淀, 约 7 天长满",
+        cls: ""
+      });
+    }
     items.push({
       label: isRT ? "心理价位(往返合计)" : "心理价位(含税)",
       value: fmtMoney(route.threshold_total), sub: "低于即推送提醒"
@@ -910,17 +926,34 @@
       if (arrBadge) durBox.appendChild(arrBadge);
     }
     if (!hasDep && !hasArr) {
-      var amaSrc = (S.sources || {})["amadeus-intl"] || {};
-      var amaOk = amaSrc.status === "可用";
-      var pend = el("span", "ft-pend" + (amaOk ? "" : " link"), amaOk ? "时刻待接入" : "配置时刻源 →");
-      if (!amaOk) {
-        pend.title = "配置 Amadeus 免费测试密钥后, 显示航班真实起降时刻";
-        pend.onclick = function () {
-          gotoTab("sources");
-          setTimeout(function () { var f = $("amaId"); if (f) f.focus(); }, 80);
-        };
+      var alts = d.alt_times || [];
+      if (alts.length) {
+        // v0.26: numberless intl calendar deal -> show the board's known
+        // HGH->city departures for that dow as reference chips
+        var altBox = el("span", "ft-alts");
+        altBox.appendChild(el("span", "ft-alts-label", "当日参考班次"));
+        alts.forEach(function (a) {
+          var chip = el("span", "ft-alt" + (a.exact ? "" : " x"),
+            a.no + " " + a.dep);
+          chip.title = a.exact
+            ? "萧山出发板该星期实测时刻"
+            : "同一航班其他班期时刻, 同航季通常一致, 仅供参考";
+          altBox.appendChild(chip);
+        });
+        durBox.appendChild(altBox);
+      } else {
+        var amaSrc = (S.sources || {})["amadeus-intl"] || {};
+        var amaOk = amaSrc.status === "可用";
+        var pend = el("span", "ft-pend" + (amaOk ? "" : " link"), amaOk ? "时刻待接入" : "配置时刻源 →");
+        if (!amaOk) {
+          pend.title = "配置 Amadeus 免费测试密钥后, 显示航班真实起降时刻";
+          pend.onclick = function () {
+            gotoTab("sources");
+            setTimeout(function () { var f = $("amaId"); if (f) f.focus(); }, 80);
+          };
+        }
+        durBox.appendChild(pend);
       }
-      durBox.appendChild(pend);
     } else if (!hasDep || !hasArr) {
       var waitText = (depSrc || arrSrc) ? "另一段时刻待班期库覆盖" : "另一段时刻待补";
       durBox.appendChild(el("span", "ft-pend", waitText));
@@ -970,7 +1003,9 @@
     }
     if (!hasTime) {
       var hint = el("span", "dd-hint");
-      hint.textContent = "起降时刻以下单页为准 · 配置Amadeus密钥后国际线自动显示真实时刻";
+      hint.textContent = (d.alt_times || []).length
+        ? "该日为无航班号日历价 · 以上班次来自萧山出发板(当日星期实测/同航季参考) · 以购票页为准"
+        : "起降时刻以下单页为准 · 配置Amadeus密钥后国际线自动显示真实时刻";
       note.appendChild(hint);
       if (!isRT) note.appendChild(document.createTextNode(" "));
     }
@@ -2273,6 +2308,7 @@
       startCrawlPolling();
       post("/api/run", { push: true }).then(function (resp) {
         S.snap = resp.snapshot;
+        applyPushPending(resp.push_pending);
         S.routeId = S.snap.routes && S.snap.routes.length ? (curRoute() || S.snap.routes[0]).id : null;
         renderRouteTabs();
         renderDash();
@@ -2387,6 +2423,7 @@
     Promise.all([api("/api/config"), api("/api/snapshot")]).then(function (rs) {
       applyConfigResp(rs[0]);
       S.snap = rs[1].snapshot;
+      applyPushPending(rs[1].push_pending);
       if (S.snap && S.snap.routes && S.snap.routes.length) S.routeId = S.snap.routes[0].id;
       renderRouteTabs();
       renderDash();
@@ -2398,6 +2435,17 @@
     }).catch(function (e) {
       toast("初始化失败: " + e.message);
     });
+  }
+
+  function applyPushPending(pending) {
+    S.pushPending = !!pending;
+    var pb = $("pushBadge");
+    if (!pb) return;
+    pb.style.display = S.pushPending ? "" : "none";
+    pb.onclick = function (ev) {
+      ev.preventDefault();
+      gotoTab("push");
+    };
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

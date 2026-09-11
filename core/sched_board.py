@@ -454,3 +454,50 @@ def prior_minutes_for(priors, city):
         return None
     cands.sort(reverse=True)
     return cands[0][1]
+
+
+def city_dep_times(db, to_city, date_iso, limit=4):
+    """v0.26 numberless-deal helper: known HGH->to_city departures for the
+    date's dow, so intl calendar deals (price-only, no flight number) can
+    still show real departure times. Board rows store the final destination
+    ('曼谷素万那普机场'), so match by city substring; cross-dow borrowed
+    entries are flagged exact=False (same flight number, same season ->
+    the time is a strong reference, the UI badges it). Pure over db dict."""
+    city = (to_city or "").strip()
+    if not city:
+        return []
+    try:
+        dow = str(_dt.date.fromisoformat(date_iso).weekday())
+    except Exception:
+        return []
+    out = []
+    for no, fdb in (db.get("flights") or {}).items():
+        dows = fdb.get("dows") or {}
+        if not dows:
+            continue
+        exact = dows.get(dow) or {}
+        ent = exact
+        if not (ent or {}).get("dep"):
+            # cross-dow: any day's dep for the same flight number
+            ent = next((e for e in dows.values()
+                        if (e or {}).get("dep")), {})
+        if not ent.get("dep"):
+            continue
+        if "杭州" not in (ent.get("from") or ""):
+            continue
+        if city not in (ent.get("to") or ""):
+            continue
+        dep = str(ent["dep"])[:5]
+        out.append({"no": no, "dep": dep,
+                    "exact": bool((exact or {}).get("dep"))})
+    out.sort(key=lambda x: (not x["exact"], x["dep"]))
+    # codeshare rows repeat one physical flight under several numbers:
+    # keep one entry per time slot (exact-first sort makes the exact one
+    # survive), so the UI list stays readable
+    seen_dep, dedup = set(), []
+    for e in out:
+        if e["dep"] in seen_dep:
+            continue
+        seen_dep.add(e["dep"])
+        dedup.append(e)
+    return dedup[:limit]
