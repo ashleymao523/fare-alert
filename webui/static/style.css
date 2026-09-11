@@ -121,6 +121,9 @@ a:hover { text-decoration: underline; }
 }
 .top-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .updated { color: var(--faint); font-size: 12px; }
+.updated.fresh { color: #2e7d32; }
+.updated.stale { color: #8a5a00; }
+.updated.old { color: #c62828; }
 
 .wrap { max-width: 1160px; margin: 0 auto; padding: var(--sp-4) var(--sp-4) 56px; }
 

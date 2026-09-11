@@ -390,6 +390,7 @@ def api_post_config():
         "config": _mask(cfg),
         "secrets_set": _secrets_set(cfg),
         "sources": _sources_meta(cfg),
+        "push_pending": _push_pending(),
     })
 
 
@@ -548,6 +549,35 @@ def api_sched_stats():
     from core.sched_board import load_sched_db, sched_stats
     db = load_sched_db(DATA_DIR)
     return jsonify({"ok": True, **sched_stats(db)})
+
+
+@app.get("/api/health")
+def api_health():
+    """v0.27: one-shot deployment observability.
+
+    Freshness + board buildup + push readiness in one call, so a deployed
+    box (docker/windows/mac) can be checked at a glance or polled by any
+    external uptime monitor."""
+    from core.sched_board import load_sched_db, sched_stats
+    snap = _read_json(SNAPSHOT_PATH, None)
+    updated = (snap or {}).get("updated_at")
+    age_min = None
+    if updated:
+        try:
+            t = datetime.datetime.fromisoformat(str(updated))
+            age_min = round((datetime.datetime.now() - t).total_seconds() / 60.0, 1)
+        except Exception:
+            updated = None
+    sched = sched_stats(load_sched_db(DATA_DIR))
+    dows = sched.get("dows") or {}
+    return jsonify({
+        "ok": True,
+        "snapshot": {"updated_at": updated, "age_min": age_min},
+        "board": {"flights": sched.get("flights"),
+                  "weekdays_covered": sum(1 for v in dows.values() if v),
+                  "dows": dows},
+        "push_pending": _push_pending(),
+    })
 
 
 @app.get("/api/log")

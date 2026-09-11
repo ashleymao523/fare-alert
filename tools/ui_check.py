@@ -115,6 +115,9 @@ checks = {
 "v0.17时刻空态样式": ".ft-pend.link" in open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read(),
 "v0.17时刻跳转绑定": 'gotoTab("sources")' in appjs,
 "v0.17排班缓存14天": "14 * 86400" in open(os.path.join("core", "intl.py"), encoding="utf-8").read(),
+    "v0.27健康端点": '"/api/health"' in open("webui.py", encoding="utf-8").read(),
+    "v0.27新鲜度相对时间": "分钟前" in appjs,
+    "v0.27保存即刷新推送徽标": "applyPushPending(resp.push_pending)" in appjs,
 }
 bad = 0
 for k, v in checks.items():

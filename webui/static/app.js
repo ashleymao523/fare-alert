@@ -642,9 +642,9 @@
     if (ds.length) {
       items.push({
         label: "起飞时刻覆盖",
-        value: Math.round(100 * depN / ds.length) + "%",
+        value: Math.round(100 * (depN + altN) / ds.length) + "%",
         sub: altN
-          ? "另有 " + altN + " 天附当日参考班次 · 班期库每日自动沉淀"
+          ? "精确 " + depN + " 天 · 参考 " + altN + " 天 · 班期库每日自动沉淀"
           : "班期库每日自动沉淀, 约 7 天长满",
         cls: ""
       });
@@ -1394,7 +1394,16 @@
 
   function renderDash() {
     var route = curRoute();
-    $("updatedAt").textContent = S.snap ? ("更新于 " + String(S.snap.updated_at || "").replace("T", " ")) : "";
+    var upd = $("updatedAt");
+    if (S.snap && S.snap.updated_at) {
+      var ts = String(S.snap.updated_at);
+      var mins = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
+      upd.textContent = "更新于 " + ts.replace("T", " ") +
+        (mins >= 0 ? " · " + (mins < 1 ? "刚刚" : mins + " 分钟前") : "");
+      upd.className = "updated " + (mins < 60 ? "fresh" : mins < 100 ? "stale" : "old");
+    } else {
+      upd.textContent = "";
+    }
     renderHero(route);
     renderKpis(route);
     renderVerdict(route);
@@ -1877,6 +1886,7 @@
     }
     post("/api/config", payload).then(function (resp) {
       applyConfigResp(resp);
+      applyPushPending(resp.push_pending);  // v0.27.1: badge refreshes right after saving push keys
       toast("已保存 ✓ (查询类设置下次查询生效)");
     }).catch(function (e) { toast("保存失败: " + e.message); });
   }
