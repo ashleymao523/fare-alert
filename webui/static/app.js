@@ -1061,6 +1061,18 @@
     s.push("<svg id=\"" + ids.svg + "\" viewBox=\"0 0 " + W + " " + H + "\" xmlns=\"http://www.w3.org/2000/svg\">");
 
     var stepX = pts.length > 1 ? (W - L - R) / (pts.length - 1) : 0;
+    s.push("<g font-size=\"10.5\" fill=\"#667085\">" +
+      "<circle cx=\"" + (L + 6) + "\" cy=\"13\" r=\"3.2\" fill=\"#0a8550\"/>" +
+      "<text x=\"" + (L + 14) + "\" y=\"16.5\">低于心理价位</text>" +
+      "<circle cx=\"" + (L + 106) + "\" cy=\"13\" r=\"3\" fill=\"#98a2b3\"/>" +
+      "<text x=\"" + (L + 114) + "\" y=\"16.5\">高于价位</text>" +
+      "<line x1=\"" + (L + 186) + "\" y1=\"13\" x2=\"" + (L + 206) + "\" y2=\"13\" stroke=\"#0062e3\" stroke-width=\"2\"/>" +
+      "<text x=\"" + (L + 211) + "\" y=\"16.5\">含税总价</text>" +
+      "<line x1=\"" + (L + 278) + "\" y1=\"13\" x2=\"" + (L + 298) + "\" y2=\"13\" stroke=\"#9aa0a6\" stroke-width=\"1\" stroke-dasharray=\"1.5 4.5\"/>" +
+      "<text x=\"" + (L + 303) + "\" y=\"16.5\">30日均价</text>" +
+      "<circle cx=\"" + (L + 386) + "\" cy=\"13\" r=\"3\" fill=\"#ffffff\" stroke=\"#d97706\" stroke-width=\"1.6\" stroke-dasharray=\"2.4 1.8\"/>" +
+      "<text x=\"" + (L + 394) + "\" y=\"16.5\">插值估算</text>" +
+      "</g>");
     for (var w = 0; w < pts.length; w++) {
       var wd = weekday(pts[w].date);
       if (wd === "周六" || wd === "周日") {
@@ -1074,7 +1086,7 @@
       var v = lo + (hi - lo) * g / 4;
       var y = Y(v);
       s.push("<line x1=\"" + L + "\" y1=\"" + y.toFixed(1) + "\" x2=\"" + (W - R) + "\" y2=\"" + y.toFixed(1) + "\" stroke=\"rgba(23,32,64,0.08)\" stroke-width=\"1\"" + (g === 0 ? "" : " stroke-dasharray=\"2 5\"") + "/>");
-      s.push("<text x=\"" + (L - 8) + "\" y=\"" + (y + 4).toFixed(1) + "\" fill=\"#66708a\" font-size=\"11\" text-anchor=\"end\">¥" + Math.round(v) + "</text>");
+      s.push("<text x=\"" + (L - 8) + "\" y=\"" + (y + 4).toFixed(1) + "\" fill=\"#98a2b3\" font-size=\"11\" text-anchor=\"end\">¥" + Math.round(v) + "</text>");
     }
 
     s.push("<rect x=\"" + L + "\" y=\"" + T + "\" width=\"" + (W - L - R) + "\" height=\"" + Math.max(0, Y(th) - T).toFixed(1) + "\" fill=\"rgba(220,38,38,0.04)\"/>");
@@ -1089,12 +1101,14 @@
     s.push("<g><line x1=\"" + L + "\" y1=\"" + Y(avg).toFixed(1) + "\" x2=\"" + (W - R) + "\" y2=\"" + Y(avg).toFixed(1) +
            "\" stroke=\"#9aa0a6\" stroke-width=\"1\" stroke-dasharray=\"1.5 4.5\" stroke-linecap=\"round\"/>" +
            "<text x=\"" + (W - R - 4) + "\" y=\"" + (Y(avg) - 6).toFixed(1) + "\" fill=\"#5f6368\" font-size=\"10.5\" font-weight=\"600\" text-anchor=\"end\">均价 ¥" + Math.round(avg) + "</text></g>");
-    s.push("<path d=\"" + linePath + "\" fill=\"none\" stroke=\"#4f46e5\" stroke-width=\"2.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+    var areaPath = linePath ? linePath + " L " + P[P.length - 1].x.toFixed(1) + " " + (H - B) + " L " + P[0].x.toFixed(1) + " " + (H - B) + " Z" : "";
+    s.push("<path d=\"" + areaPath + "\" fill=\"rgba(0,98,227,0.07)\" stroke=\"none\"/>");
+    s.push("<path d=\"" + linePath + "\" fill=\"none\" stroke=\"#0062e3\" stroke-width=\"2.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
 
     var lstep = Math.max(1, Math.ceil(pts.length / 8));
     for (var j = 0; j < pts.length; j++) {
       if (j % lstep === 0 || j === pts.length - 1) {
-        s.push("<text x=\"" + X(j).toFixed(1) + "\" y=\"" + (H - 12) + "\" fill=\"#66708a\" font-size=\"10\" text-anchor=\"middle\">" + fmtMD(pts[j].date) + "</text>");
+        s.push("<text x=\"" + X(j).toFixed(1) + "\" y=\"" + (H - 12) + "\" fill=\"#98a2b3\" font-size=\"10.5\" text-anchor=\"middle\">" + fmtMD(pts[j].date) + "</text>");
       }
     }
 
@@ -1108,9 +1122,9 @@
                p.date + " " + weekday(p.date) + " ≈" + fmtMoney(p.total_price) + " 插值估算</title></circle>");
         continue;
       }
-      if (below) s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) + "\" r=\"5\" fill=\"rgba(24,128,56,0.12)\"/>");
+      if (below) s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) + "\" r=\"6.5\" fill=\"rgba(10,133,80,0.10)\"/>");
       s.push("<circle cx=\"" + X(k).toFixed(1) + "\" cy=\"" + Y(p.total_price).toFixed(1) +
-             "\" r=\"" + (below ? 3.2 : 2.2) + "\" fill=\"" + (below ? "#188038" : "#9aa0a6") + "\" stroke=\"#ffffff\" stroke-width=\"1.2\"><title>" +
+             "\" r=\"" + (below ? 3.2 : 2.2) + "\" fill=\"" + (below ? "#0a8550" : "#98a2b3") + "\" stroke=\"#ffffff\" stroke-width=\"1.2\"><title>" +
              p.date + " " + weekday(p.date) + " " + fmtMoney(p.total_price) + " " +
              (p.source === "nearby-ref" ? "临近日参考" : "") + " " + (p.flight_no || "") + "</title></circle>");
     }
@@ -1119,12 +1133,14 @@
     var mx = X(minIdx), my = Y(mp.total_price);
     var mLabel = (combined ? "最低合计 ¥" : "最低 ¥") + Math.round(mp.total_price) + " · " + fmtMD(mp.date);
     var mLx = Math.min(Math.max(mx, L + 40), W - R - 40);
+    var mW2 = mLabel.length * 7.0 + 14;
     s.push("<g>" +
-           "<circle cx=\"" + mx.toFixed(1) + "\" cy=\"" + my.toFixed(1) + "\" r=\"4\" fill=\"#188038\" stroke=\"#ffffff\" stroke-width=\"1.5\"/>" +
-           "<text x=\"" + mLx.toFixed(1) + "\" y=\"" + (my - 12).toFixed(1) + "\" fill=\"#188038\" font-size=\"11\" font-weight=\"700\" text-anchor=\"middle\">" + mLabel + "</text></g>");
+           "<circle cx=\"" + mx.toFixed(1) + "\" cy=\"" + my.toFixed(1) + "\" r=\"4\" fill=\"#0a8550\" stroke=\"#ffffff\" stroke-width=\"1.5\"/>" +
+           "<rect x=\"" + (mLx - mW2 / 2).toFixed(1) + "\" y=\"" + (my - 26).toFixed(1) + "\" width=\"" + mW2.toFixed(1) + "\" height=\"18\" rx=\"9\" fill=\"#0a8550\"/>" +
+           "<text x=\"" + mLx.toFixed(1) + "\" y=\"" + (my - 13).toFixed(1) + "\" fill=\"#ffffff\" font-size=\"10.5\" font-weight=\"600\" text-anchor=\"middle\">" + mLabel + "</text></g>");
 
     s.push("<line id=\"" + ids.cross + "\" x1=\"0\" y1=\"" + T + "\" x2=\"0\" y2=\"" + (H - B) + "\" stroke=\"rgba(23,32,64,0.35)\" stroke-width=\"1\" stroke-dasharray=\"3 3\" visibility=\"hidden\"/>");
-    s.push("<circle id=\"" + ids.dot + "\" r=\"5\" fill=\"#0ea5e9\" stroke=\"#ffffff\" stroke-width=\"1.5\" visibility=\"hidden\"/>");
+    s.push("<circle id=\"" + ids.dot + "\" r=\"4.5\" fill=\"#0062e3\" stroke=\"#ffffff\" stroke-width=\"1.5\" visibility=\"hidden\"/>");
     s.push("</svg>");
     box.innerHTML = s.join("");
 
