@@ -9,9 +9,18 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from core.alerts import evaluate, tax_amount, total_price
 from core.flights import estimate_arrival_time
 from core.models import FlightDeal, TrainFare
-from main import NON_REAL_SOURCES, _fill_reference_deals, _flight_dict
+from main import (NON_REAL_SOURCES, _attach_alt_times, _fill_reference_deals,
+                  _flight_dict)
 
 TAX = {"airport_fee": 70, "fuel_surcharge": 50}  # 120, current default
+
+
+def _alt_db(*rows):
+    flights = {}
+    for no, dow, dep, frm, to in rows:
+        flights.setdefault(no, {"dows": {}})["dows"][str(dow)] = {
+            "dep": dep, "arr": "", "from": frm, "to": to}
+    return {"updated": 1, "flights": flights}
 
 
 def test_tax_total():
@@ -101,6 +110,36 @@ def test_evaluate_dedup_and_realert():
     d2 = FlightDeal("2026-09-02", 380, "MU5100")
     a3, _ = evaluate(route, [d2], state, {"tax": TAX, "alert": {}}, t0 + 1e5)
     assert len(a3) == 1  # dropped >= 5 and cooldown passed: re-alert
+
+
+def test_attach_alt_times_fills_gap_deals():
+    # v0.26.1: nearby-ref deals appended after enrich get board reference
+    # departures; a numbered deal with a real time stays untouched
+    db = _alt_db(("JD419", 4, "08:35", "杭州", "曼谷素万那普机场"),
+                 ("FD497", 4, "18:10", "杭州", "曼谷素万那普机场"))
+    deals = [
+        FlightDeal(date="2026-09-25", bare_price=900, flight_no="",
+                   source="nearby-ref", ref_offset=2),
+        FlightDeal(date="2026-09-25", bare_price=800, flight_no="JD419",
+                   dep_time="08:35", source="qunar-intl"),
+    ]
+    out = _attach_alt_times(deals, "曼谷", db)
+    got = [(a['no'], a['dep'], a['exact']) for a in out[0].alt_times]
+    assert got == [('JD419', '08:35', True), ('FD497', '18:10', True)]
+    assert out[1].alt_times == []
+
+
+def test_attach_alt_times_idempotent_and_empty_city():
+    db = _alt_db(("JD419", 4, "08:35", "杭州", "曼谷"))
+    d = FlightDeal(date="2026-09-25", bare_price=900, flight_no="",
+                   source="nearby-ref")
+    d.alt_times = [{"no": "XX", "dep": "00:00", "exact": False}]
+    _attach_alt_times([d], "曼谷", db)
+    assert d.alt_times == [{"no": "XX", "dep": "00:00", "exact": False}]
+    e = FlightDeal(date="2026-09-25", bare_price=900, flight_no="",
+                   source="nearby-ref")
+    _attach_alt_times([e], "", db)
+    assert e.alt_times == []
 
 
 def run_all():

@@ -179,6 +179,25 @@ def _fill_reference_deals(deals, date_from, date_to, fc, tc,
     return deals + refs
 
 
+def _attach_alt_times(deals, to_city, db):
+    """v0.26.1: reference departures for numberless gap-filled deals.
+
+    nearby-ref/interp deals are appended AFTER _enrich_flight_times ran,
+    so the v0.26 mount inside the enrich loop never saw them (Bangkok:
+    48/50 deals are nearby-ref -> alt_times stayed empty in snapshots).
+    Idempotent: skips deals that already carry a number, a departure
+    time or alt_times. Outbound only: the board holds HGH departures,
+    return legs have no matching rows."""
+    cache = {}
+    for d in deals:
+        if (d.flight_no or "").strip() or d.dep_time or d.alt_times:
+            continue
+        if d.date not in cache:
+            cache[d.date] = city_dep_times(db, to_city, d.date)
+        d.alt_times = cache[d.date]
+    return deals
+
+
 def _cached_amadeus_fill(session, net, cfg, ama_cfg, fi, ti,
                          date_from, date_to, data_dir):
     """Amadeus cheapest-calendar with a 24h file cache to protect quota."""
@@ -521,6 +540,8 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 deals = _fill_reference_deals(
                     deals, date_from, date_to,
                     route.get("from_city", ""), route.get("to_city", ""))
+                deals = _attach_alt_times(
+                    deals, route.get("to_city", ""), load_sched_db(DATA_DIR))
                 rec.step(flight_key, route_snap["id"], "fetch calendar", "ok",
                          (time.time() - t0) * 1000, count=len(deals))
             except Exception as e:
@@ -541,6 +562,8 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                     return_deals = _fill_reference_deals(
                         return_deals, date_from, date_to,
                         route.get("to_city", ""), route.get("from_city", ""))
+                    # no alt_times on return legs: the board is HGH-departure
+                    # only, return flights depart from the destination city
                     rec.step(flight_key, route_snap["id"], "fetch return calendar",
                              "ok", (time.time() - t0r) * 1000, count=len(return_deals))
                 except Exception as e:
