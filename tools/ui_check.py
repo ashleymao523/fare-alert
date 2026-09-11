@@ -22,6 +22,7 @@ checks = {
     "趋势均价参考线": "均价 ¥" in h,
     "趋势扁平无渐变": ("areaGrad" not in h) and ("feDropShadow" not in h) and ("<animate" not in h),
     "v0.23趋势图例行": ("低于心理价位" in h) and ("插值估算" in h) and ("30日均价" in h),
+    "v0.24覆盖ETA": (("预计" in h) and ("全覆盖" in h)) or ("已覆盖全部" in h),
     "v0.23主线品牌蓝面积": ('fill="rgba(0,98,227,0.07)"' in h) and ('stroke="#0062e3"' in h),
     "v0.23最低价胶囊": ("<rect" in h) and ("最低 ¥" in h.replace("&yen;", "¥")),
     "趋势最低价标签": re.search(r"最低 ¥\d+ · ", h) is not None,

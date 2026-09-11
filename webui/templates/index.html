@@ -12,14 +12,14 @@
 <link rel="icon" href="/static/icon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 <title>FareAlert · 低价出行提醒</title>
-<link rel="stylesheet" href="/static/style.css?v=23">
+<link rel="stylesheet" href="/static/style.css?v=24">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
     <span class="logo">✈️</span>
     <span class="brand-name">FareAlert</span>
-<span class="ver">v0.23</span>
+<span class="ver">v0.24</span>
   </div>
   <nav id="routeTabs" class="route-tabs"></nav>
   <div class="top-actions">
@@ -121,10 +121,7 @@
         <span class="muted">每日指标自动归档 · 每个数字可从历史重算 · 推送开关在「提醒推送」页(7天一次)</span>
       </div>
       <div id="wkText" class="wk-text"></div>
-      <div id="wkPushWarn" class="wk-warn" style="display:none">
-        ⚠️ 尚未配置推送渠道,点击「立即推送周报」不会送达。请先到
-        <a href="#push" id="wkGotoPush">提醒推送</a> 页填写 Bark Key(iPhone)或 ServerChan(微信)。
-      </div>
+      <div id="wkPushWarn" class="wk-warn" style="display:none"></div>
       <div class="row-btns">
         <button id="btnWeeklyRefresh" class="btn">刷新</button>
         <button id="btnWeeklyPush" class="btn primary">立即推送周报</button>
@@ -257,6 +254,6 @@
 <div id="alertFloat" class="alert-float"></div>
 
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=23"></script>
+<script src="/static/app.js?v=24"></script>
 </body>
 </html>

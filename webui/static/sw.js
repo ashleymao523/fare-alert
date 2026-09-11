@@ -1,4 +1,4 @@
-/* v0.23 FareAlert service worker: offline shell.
+/* v0.24 FareAlert service worker: offline shell.
    /static/* cache-first (URLs carry ?v= busting); /api/* GET network-first
    with cache fallback so the last data stays readable offline. */
 var CACHE = "fare-alert-v22";

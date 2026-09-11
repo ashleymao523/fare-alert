@@ -494,6 +494,7 @@ def api_weekly_report():
     cfg = load_config(CONFIG_PATH)
     report = build_weekly(os.path.join(DATA_DIR, "history.json"))
     report["push_enabled"] = (cfg.get("push") or {}).get("weekly_enabled", False)
+    report["channel_ready"] = any(_secrets_set(cfg).values())
     report["push_due"] = should_push(
         cfg, os.path.join(DATA_DIR, "weekly_push.json"))
     return jsonify(report)

@@ -1750,20 +1750,37 @@
     box.appendChild(head);
     var row = el("div", "dow-row");
     var covered = 0;
+    var pyToday = (new Date().getDay() + 6) % 7;  // JS 0=Sun -> py 0=Mon
+    var etaMax = 0;
     names.forEach(function (n, i) {
       var c = (s.dows && s.dows[i]) || 0;
-      if (c) covered++;
+      if (c) { covered++; }
+      else {
+        var diff = (i - pyToday + 7) % 7;  // days until this dow arrives
+        if (diff > etaMax) etaMax = diff;
+      }
       var d = el("div", "dow-dot" + (c ? " has" : ""));
       d.appendChild(el("span", "dow-k", "周" + n));
       d.appendChild(el("span", "dow-v", c ? String(c) : "—"));
-      d.title = c
-        ? "周" + n + ":已沉淀 " + c + " 个航班时刻"
-        : "周" + n + ":尚未沉淀,由跨日借用+估算补齐";
+      if (c) {
+        d.title = "周" + n + ":已沉淀 " + c + " 个航班时刻";
+      } else {
+        var eta = new Date(Date.now() + ((i - pyToday + 7) % 7) * 86400000);
+        d.title = "周" + n + ":尚未沉淀,预计 " + (eta.getMonth() + 1) + "/" +
+                  eta.getDate() + " 自动入库;在此之前由跨日借用+估算补齐";
+      }
       row.appendChild(d);
     });
     box.appendChild(row);
-    box.appendChild(el("div", "muted sched-tip",
-      "覆盖 " + covered + "/7 天 · 跑满一周后精确时刻全覆盖;缺口由跨日借用 + 估算补齐(带参考标记,不触发提醒)。"));
+    var tipText;
+    if (covered >= 7) {
+      tipText = "已覆盖全部 7 天,60 天窗口内各航班精确时刻全量可用。";
+    } else {
+      var etaD = new Date(Date.now() + etaMax * 86400000);
+      tipText = "覆盖 " + covered + "/7 天 · 预计 " + (etaD.getMonth() + 1) + "/" +
+                etaD.getDate() + " 全覆盖(还有 " + etaMax + " 天);缺口由跨日借用 + 估算补齐(带参考标记,不触发提醒)。";
+    }
+    box.appendChild(el("div", "muted sched-tip", tipText));
   }
 
   function renderPush() {
@@ -2188,8 +2205,26 @@
       S.secrets = rs[1].secrets_set;
       S.sources = rs[1].sources || S.sources;
       var hasCh = (S.secrets && (S.secrets.bark_key || S.secrets.serverchan_sendkey));
+      var enabled = !!rs[0].push_enabled;
       var warn = $("wkPushWarn");
-      if (warn) warn.style.display = hasCh ? "none" : "";
+      if (warn) {
+        var steps = [];
+        if (!hasCh) steps.push("① 填写 Bark Key(iPhone 免费 App)或 ServerChan SendKey(微信)");
+        if (!enabled) steps.push((hasCh ? "①" : "②") + " 勾选「每 7 天推送一次价格周报」并保存");
+        if (steps.length) {
+          steps.push((hasCh ? "②" : "③") + " 回到此页点「立即推送周报」验证送达");
+          warn.innerHTML = "⚠️ 周报推送尚未就绪,按顺序完成:<br>" +
+            steps.join("<br>") +
+            ' · <a href="#push" id="wkGotoPush">前往「提醒推送」页 →</a>';
+          warn.style.display = "";
+          var g = $("wkGotoPush");
+          if (g) g.addEventListener("click", function (ev) {
+            ev.preventDefault(); gotoTab("push");
+          });
+        } else {
+          warn.style.display = "none";
+        }
+      }
       var btn = $("btnWeeklyPush");
       if (btn) {  // v0.21: gate the button up-front instead of failing on click
         btn.disabled = !hasCh;
@@ -2252,10 +2287,6 @@
     });
 
     $("btnWeeklyRefresh").addEventListener("click", initWeekly);
-    $("wkGotoPush").addEventListener("click", function (ev) {
-      ev.preventDefault();
-      gotoTab("push");
-    });
     $("btnWeeklyPush").addEventListener("click", function () {
       var btn = $("btnWeeklyPush");
       btn.disabled = true;

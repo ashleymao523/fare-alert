@@ -1,4 +1,8 @@
 :root {
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 14px;
+  --sp-4: 20px;
   --bg: #f2f5fa;
   --card: #ffffff;
   --card2: #f7f9fd;
@@ -40,7 +44,7 @@ a { color: var(--accent); text-decoration: none; }
 .sched-stats { display: flex; flex-direction: column; gap: 12px; }
 .sched-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .sched-n { font-weight: 650; color: var(--text-2); }
-.dow-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.dow-row { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 .dow-dot {
   flex: 1 1 0; min-width: 58px; text-align: center;
   padding: 10px 6px 8px; border-radius: var(--r-sm);
@@ -54,7 +58,7 @@ a { color: var(--accent); text-decoration: none; }
 .dow-v { display: block; font-weight: 700; font-size: 15px; margin-top: 2px; }
 .sched-tip { font-size: 12px; }
 
-.tc-box { display: flex; flex-direction: column; gap: 8px; }
+.tc-box { display: flex; flex-direction: column; gap: var(--sp-2); }
 .tc-row { display: grid; grid-template-columns: 130px 1fr 44px; align-items: center; gap: 10px; }
 .tc-k { font-size: 12px; color: var(--ink-soft, #5a6b84); }
 .tc-bar { height: 8px; border-radius: 999px; background: rgba(16, 24, 40, 0.07); overflow: hidden; }
@@ -111,7 +115,7 @@ a:hover { text-decoration: underline; }
 .top-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .updated { color: var(--faint); font-size: 12px; }
 
-.wrap { max-width: 1100px; margin: 0 auto; padding: 20px 20px 48px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding: var(--sp-4) var(--sp-4) 56px; }
 
 /* ---------- segmented tabs ---------- */
 .tabs {
@@ -163,7 +167,7 @@ input::placeholder { color: var(--faint); }
 /* ---------- cards ---------- */
 .card {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
-  padding: 18px; margin-bottom: 16px; box-shadow: var(--sh-1);
+  padding: var(--sp-4); margin-bottom: var(--sp-4); box-shadow: var(--sh-1);
 }
 .card-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -175,7 +179,7 @@ input::placeholder { color: var(--faint); }
 }
 
 /* ---------- KPI ---------- */
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-4); }
 .kpi {
   position: relative; overflow: hidden;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
