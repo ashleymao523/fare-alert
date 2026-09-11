@@ -10,12 +10,23 @@ IATA = {'重庆': 'CKG', '成都': 'CTU', '郑州': 'CGO', '曼谷': 'BKK'}
 db = load_sched_db(str(ROOT / 'data'))
 priors = build_route_priors(db)
 print('priors cities:', len(priors))
+
+
+def _bucket(city):
+    if city in priors:
+        return priors[city]
+    for k, v in priors.items():
+        if k.startswith(city):
+            return v
+    return None
+
+
 for city, code in IATA.items():
-    mins = prior_minutes_for(priors, city)
-    if not mins:
+    b = _bucket(city)
+    if not b:
         print(city, 'NO PRIOR')
         continue
-    p = {'minutes': mins, 'n': 0}
+    p = {'minutes': b['minutes'], 'n': b['n']}
     gc = estimate_arrival_time('08:00', 'HGH', code)
     pr = estimate_arrival_time('08:00', 'HGH', '', prior_minutes=p['minutes'])
     print(city, 'prior_min=', p['minutes'], 'n=', p['n'], 'arr_prior=', pr, 'arr_gc=', gc)

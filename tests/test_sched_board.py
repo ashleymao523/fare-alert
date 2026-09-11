@@ -343,21 +343,23 @@ class TestRoutePriors(unittest.TestCase):
 
     def test_red_eye_wraps_midnight(self):
         priors = sb.build_route_priors(self._db(
-            ("乌鲁木齐", "23:30", "01:40"),
-            ("乌鲁木齐", "22:00", "00:10"),
-            ("乌鲁木齐", "21:00", "23:20")))
-        self.assertEqual(priors["乌鲁木齐"]["minutes"], 130)
+            ("乌鲁木齐", "23:30", "04:25"),
+            ("乌鲁木齐", "22:00", "03:00"),
+            ("乌鲁木齐", "21:00", "01:55")))
+        self.assertEqual(priors["乌鲁木齐"]["minutes"], 295)
 
     def test_garbage_rows_rejected(self):
-        # 20min / 12h rows are dropped, the 3 valid ~120min rows still
-        # yield a clean prior (median not dragged by garbage).
+        # rows outside the 45min..17h window are dropped by the gate
+        # (20min row, 12h row, >17h next-day row); the 3 valid ~120min
+        # rows still yield a clean prior (median not dragged by garbage).
         priors = sb.build_route_priors(self._db(
             ("哈尔滨", "08:00", "08:20"),
             ("哈尔滨", "08:00", "20:00"),
-            ("哈尔滨", "09:00", "11:00"),
-            ("哈尔滨", "10:00", "12:00"),
-            ("哈尔滨", "11:00", "13:00")))
-        self.assertEqual(priors["哈尔滨"]["minutes"], 120)
+            ("哈尔滨", "08:00", "02:00"),
+            ("哈尔滨", "09:00", "12:00"),
+            ("哈尔滨", "10:00", "13:00"),
+            ("哈尔滨", "11:00", "14:00")))
+        self.assertEqual(priors["哈尔滨"]["minutes"], 180)
 
     def test_codeshare_rows_deduped(self):
         # one physical flight sold under several codeshare numbers is
@@ -383,6 +385,39 @@ class TestRoutePriors(unittest.TestCase):
             ("阿克苏", "10:00", "14:50")))
         self.assertEqual(priors["阿克苏"]["minutes"], 290)
         self.assertEqual(priors["阿克苏"]["n"], 3)
+
+    def test_stopover_only_city_dropped_by_floor(self):
+        # Lhasa has no nonstop from HGH: every row is a stopover and its
+        # 150min last-leg cluster is below the great-circle floor (~215min
+        # @900km/h+30), so the fake prior is dropped (v0.25.1 review P2)
+        priors = sb.build_route_priors(self._db(
+            ("拉萨", "07:00", "09:30"),
+            ("拉萨", "09:00", "11:30"),
+            ("拉萨", "11:00", "13:30")))
+        self.assertNotIn("拉萨", priors)
+
+    def test_all_clusters_below_min_samples_dropped(self):
+        # two stopover rows + two nonstop rows: no cluster reaches
+        # min_samples=3, the city falls back to the geometric estimate
+        priors = sb.build_route_priors(self._db(
+            ("银川", "07:00", "08:40"),
+            ("银川", "09:00", "10:40"),
+            ("银川", "08:00", "10:30"),
+            ("银川", "09:30", "12:00")))
+        self.assertNotIn("银川", priors)
+
+    def test_three_clusters_pick_biggest_median(self):
+        priors = sb.build_route_priors(self._db(
+            ("兰州", "07:00", "08:40"),
+            ("兰州", "09:00", "10:40"),
+            ("兰州", "11:00", "12:40"),
+            ("兰州", "07:00", "10:20"),
+            ("兰州", "09:00", "12:20"),
+            ("兰州", "11:00", "14:20"),
+            ("兰州", "07:00", "12:50"),
+            ("兰州", "09:00", "14:50"),
+            ("兰州", "11:00", "16:50")))
+        self.assertEqual(priors["兰州"]["minutes"], 350)
 
     def test_min_samples_gate(self):
         priors = sb.build_route_priors(self._db(("拉萨", "08:00", "10:00")))

@@ -932,7 +932,7 @@
     var arrEnd = el("div", "ft-endpoint");
     var arrTime = el("div", "ft-time" + (hasArr ? "" : (hasEst ? " est" : " unknown")),
       hasArr ? d.arr_time : (hasEst ? "~" + d.arr_est : "--:--"));
-    if (hasEst) arrTime.title = "落地时刻按同航线真实飞行时长推算(机场到达板实测中位数)，以购票页为准";
+    if (hasEst) arrTime.title = "落地时刻按同航线真实飞行时长推算(萧山机场到达板实测中位数)，以购票页为准";
     arrEnd.appendChild(arrTime);
     arrEnd.appendChild(el("div", "ft-code", route.to_iata || route.to_city || "到达"));
     tl.appendChild(depEnd); tl.appendChild(mid); tl.appendChild(arrEnd);
@@ -996,6 +996,7 @@
     var link = el("a", "btn small book-link");
     link.href = d.url;
     link.target = "_blank";
+    link.rel = "noopener";
     link.textContent = "去哪儿购票页 →";
     box.appendChild(link);
   }
@@ -2209,10 +2210,11 @@
       var warn = $("wkPushWarn");
       if (warn) {
         var steps = [];
-        if (!hasCh) steps.push("① 填写 Bark Key(iPhone 免费 App)或 ServerChan SendKey(微信)");
-        if (!enabled) steps.push((hasCh ? "①" : "②") + " 勾选「每 7 天推送一次价格周报」并保存");
+        var CIRC = ["①", "②", "③"];
+        if (!hasCh) steps.push(CIRC[steps.length] + " 填写 Bark Key(iPhone 免费 App)或 ServerChan SendKey(微信)");
+        if (!enabled) steps.push(CIRC[steps.length] + " 勾选「每 7 天推送一次价格周报」并保存");
         if (steps.length) {
-          steps.push((hasCh ? "②" : "③") + " 回到此页点「立即推送周报」验证送达");
+          steps.push(CIRC[steps.length] + " 回到此页点「立即推送周报」验证送达");
           warn.innerHTML = "⚠️ 周报推送尚未就绪,按顺序完成:<br>" +
             steps.join("<br>") +
             ' · <a href="#push" id="wkGotoPush">前往「提醒推送」页 →</a>';

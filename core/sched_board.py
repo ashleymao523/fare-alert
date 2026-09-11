@@ -394,7 +394,7 @@ def build_route_priors(db, min_samples=3):
             # codeshare rows repeat one physical flight under several
             # numbers (same dep+arr): count each time pair once or the
             # duplicate mass flips the median (v0.25 review P1)
-            key = (city, ent["dep"], ent["arr"])
+            key = (city, d, a)  # parsed minutes: "8:00"/"08:00" dedupe too
             if key in seen:
                 continue
             seen.add(key)
@@ -418,8 +418,22 @@ def build_route_priors(db, min_samples=3):
         good = [c for c in clusters if len(c) >= min_samples]
         if good:
             best = max(good, key=lambda c: statistics.median(c))
-            out[city] = {"minutes": int(statistics.median(best)),
-                         "n": len(best)}
+            med = int(statistics.median(best))
+            # stopover-only city guard (v0.25.1): when EVERY row of a city
+            # is a stopover trip, its last-leg cluster masquerades as a
+            # full-trip prior (Lhasa 150min vs real ~280min). A real
+            # nonstop can never beat great-circle @900km/h + 30min taxi,
+            # so drop the prior when the median is below that floor.
+            try:
+                from core.intl import city_iata
+                from core.flights import AIRPORT_COORDS, _haversine_km
+                b = AIRPORT_COORDS.get((city_iata(city) or "").upper())
+                a = AIRPORT_COORDS.get("HGH")
+                if a and b and med < _haversine_km(a, b) / 900.0 * 60 + 30:
+                    continue
+            except Exception:
+                pass  # unresolvable city: keep prior (old behavior)
+            out[city] = {"minutes": med, "n": len(best)}
     return out
 
 

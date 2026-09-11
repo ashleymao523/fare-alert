@@ -200,7 +200,7 @@ def gate_g6():
     guide = open("使用指南.md", encoding="utf-8").read(400)
     html = open("webui/templates/index.html", encoding="utf-8").read()
     import re as _re
-    m = _re.search(r'class="ver">(v\d+\.\d+)<', html)
+    m = _re.search(r'class="ver">(v\d+\.\d+(?:\.\d+)?)<', html)
     ver = m.group(1) if m else ""
     rec("G6", "version badge sync", bool(ver) and ver in guide,
         "html %s guide %s=%s" % (ver or "?", ver or "?", ver in guide))

@@ -700,6 +700,8 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                                         "(timer consumed): " + "; ".join(failed))
                         mark_pushed(wk_path)
                         log.info("weekly report pushed")
+                else:
+                    log.debug("weekly report skipped: " + report.get("error", "no history"))
     except Exception:
         log.exception("weekly history/report failed")
     return snapshot
