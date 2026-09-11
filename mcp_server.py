@@ -356,82 +356,15 @@ def tool_verify_release(args):
     return _ok(json.dumps({"all_ok": all_ok, "steps": results}, ensure_ascii=False, indent=1))
 
 
-class _PatrolLog:
-    """Silent logger seam: push_all only needs .info/.warning to exist."""
-
-    def info(self, *a):
-        pass
-
-    def warning(self, *a):
-        pass
-
-
 def tool_patrol_run(args):
-    """v0.39: one-shot system patrol for any agent / scheduled caller.
-    Aggregates health + push readiness into a verdict, archives it to
-    data/patrol_last.json and (only when notify=true AND something is wrong)
-    pushes a short reminder through the configured channel."""
-    from core.notify import has_channel, push_all
-    port = 8765
-    try:
-        cfg = load_config(CONFIG_PATH)
-        port = int((cfg.get("webui") or {}).get("port") or 8765)
-    except Exception:
-        cfg = {}
-    with urllib.request.urlopen(
-            "http://127.0.0.1:%d/api/health" % port, timeout=10) as resp:
-        body = json.loads(resp.read().decode("utf-8"))
-
-    checks = []
-
-    def add(name, ok, detail):
-        checks.append({"name": name, "status": "ok" if ok else "warn",
-                       "detail": detail})
-
-    snap_age = (body.get("snapshot") or {}).get("age_min")
-    add("snapshot-fresh", snap_age is not None and snap_age < 1500,
-        "age_min=%s" % snap_age)
-    wk = body.get("worker") or {}
-    wstate = ("alive" if (wk.get("ok") and wk.get("age_min", 999) < 120)
-              else ("stale" if wk else "none"))
-    add("worker-heartbeat", wstate == "alive", "state=%s" % wstate)
-    rv = body.get("revive") or {}
-    sup = (rv.get("supervisor") or {}).get("enabled")
-    add("daily-revive", bool(sup), "supervisor=%s" % sup)
-    covered = ((body.get("board") or {}).get("weekdays_covered"))
-    add("board-dow-coverage", covered == 7, "covered=%s/7" % covered)
-    push_cfg = cfg.get("push") or {}
-    ch = {"bark": bool((push_cfg.get("bark_key") or "").strip()),
-          "serverchan": bool((push_cfg.get("serverchan_sendkey") or "").strip())}
-    weekly_on = bool(push_cfg.get("weekly_enabled"))
-    add("push-channel", any(ch.values()),
-        "bark=%s serverchan=%s weekly_enabled=%s"
-        % (ch["bark"], ch["serverchan"], weekly_on))
-
-    verdict = "healthy" if all(c["status"] == "ok" for c in checks) else "warn"
-    notified = False
-    if args.get("notify") and verdict != "healthy" and has_channel(cfg):
-        bad = [c["name"] for c in checks if c["status"] != "ok"]
-        push_all(cfg, _PatrolLog(), "FareAlert 巡检异常",
-                 "以下检查未通过: " + ", ".join(bad), url="")
-        notified = True
-    doc = {"ts": dt.datetime.now().isoformat(timespec="seconds"),
-           "verdict": verdict, "checks": checks, "notified": notified,
-           "health": {"ok": body.get("ok"),
-                      "snapshot_age_min": snap_age,
-                      "worker": wstate,
-                      "dows_covered": covered}}
-    patrol_path = os.path.join(BASE_DIR, "data", "patrol_last.json")
-    try:
-        os.makedirs(os.path.dirname(patrol_path), exist_ok=True)
-        with open(patrol_path, "w", encoding="utf-8") as f:
-            json.dump(doc, f, ensure_ascii=False, indent=1)
-    except Exception as e:
-        doc["archive_error"] = repr(e)[:160]
-    doc["notified"] = notified
-    lines = ["巡检结论: " + verdict]
+    """v0.40: one-shot system patrol for any agent / scheduled caller.
+    Delegates to core.patrol.run_patrol (shared with the daily 09:00
+    schedule) and renders the doc as readable text."""
+    from core.patrol import run_patrol
+    doc = run_patrol(BASE_DIR, notify=bool(args.get("notify")))
+    lines = ["巡检结论: " + doc.get("verdict", "?")]
     lines += ["  [%s] %s (%s)" % (c["status"], c["name"], c["detail"])
-              for c in checks]
+              for c in doc.get("checks", [])]
     return _ok(json.dumps(doc, ensure_ascii=False, indent=1) + "\n" +
                "\n".join(lines))
 

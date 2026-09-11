@@ -14,7 +14,7 @@ import time
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 EDGE = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-TABS = [("p1", "crawl"), ("p2", "reverse"), ("p3", "weekly"),
+TABS = [("p0", "dash"), ("p1", "crawl"), ("p2", "reverse"), ("p3", "weekly"),
         ("p4", "sources"), ("p5", "push")]
 
 

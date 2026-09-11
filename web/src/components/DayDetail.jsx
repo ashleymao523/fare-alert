@@ -45,6 +45,7 @@ export default function DayDetail({ route, date }) {
   const connecting = (d.flight_no || "").indexOf("/") >= 0;
   const warn = /不含|确认/.test(d.baggage || "") ? " ⚠️" : " 🧳";
   const alts = d.alt_times || [];
+  const isRef = d.source === "nearby-ref" || d.source === "interp";
   const shownArr = hasArr ? d.arr_time : (hasEst ? d.arr_est : "");
   const SEASON_SWITCH = "2026-10-25"; // winter schedule rollover
   let midBadges = null;
@@ -74,7 +75,7 @@ export default function DayDetail({ route, date }) {
       </div>
       <div class="ft-line">
         <div class="ft-endpoint">
-          <div class={"ft-time" + (hasDep ? "" : " unknown")}>{d.dep_time || "--:--"}</div>
+          <div class={"ft-time" + (hasDep ? "" : " unknown")}>{d.dep_time || (isRef ? "参考价" : "--:--")}</div>
           <div class="ft-code">{route.from_iata || route.from_city}</div>
         </div>
         <div class="ft-mid">
@@ -106,9 +107,11 @@ export default function DayDetail({ route, date }) {
           )}
           {!hasDep && !hasArr && alts.length === 0 && (
             <div class="ft-pend">
-              {d.date >= SEASON_SWITCH
-                ? "换季班期待收录 · 持续运行自动补全"
-                : "班期库暂未覆盖 · 持续运行自动补全"}
+              {isRef
+                ? "参考价 · 非当日可售航班, 无对应时刻"
+                : d.date >= SEASON_SWITCH
+                  ? "换季班期待收录 · 持续运行自动补全"
+                  : "班期库暂未覆盖 · 持续运行自动补全"}
             </div>
           )}
           {hasDep !== hasArr && (

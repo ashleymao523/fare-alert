@@ -130,6 +130,16 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
             {(hb.revive.task && hb.revive.task.installed) ? " · 计划任务已装" : ""}
           </div>
         ) : null}
+        {(hb.revive && hb.revive.supervisor && hb.revive.supervisor.patrol) ? (
+          <div class="muted">
+            🔎 每日巡检: {hb.revive.supervisor.patrol.enabled
+              ? "已启用, 每日 09:00 后自动体检, 异常时经配置渠道提醒"
+              : "未启用(config deploy.patrol_daily)"}
+            {(hb.revive.supervisor.patrol.last
+              && hb.revive.supervisor.patrol.last.verdict)
+              ? " · 最近结论: " + hb.revive.supervisor.patrol.last.verdict : ""}
+          </div>
+        ) : null}
       </div>
       ) : null}
       <div class="card">

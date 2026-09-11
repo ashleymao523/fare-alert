@@ -1,24 +1,19 @@
 # -*- coding: utf-8 -*-
-"""v0.39 patrol_run MCP tool tests: fully mocked HTTP, isolated BASE_DIR.
-Zero real requests (red line #1), zero real pushes."""
+"""v0.40 patrol core tests: seams (config/health/push) fully mocked.
+Zero real requests (red line #1), zero real pushes. Plus the MCP
+delegation contract (transport failures stay tool-errors, not crashes)."""
 import json
 import os
 import sys
 import tempfile
 import unittest
 import unittest.mock as mock
-from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+from core import patrol  # noqa: E402
 import mcp_server  # noqa: E402
-
-
-def _fake_resp(obj):
-    resp = MagicMock()
-    resp.read.return_value = json.dumps(obj).encode("utf-8")
-    resp.__enter__ = MagicMock(return_value=resp)
-    resp.__exit__ = MagicMock(return_value=False)
-    return resp
 
 
 def _health(age=5, worker=True, covered=7, revive_on=True):
@@ -32,26 +27,23 @@ def _health(age=5, worker=True, covered=7, revive_on=True):
     }
 
 
-class PatrolTests(unittest.TestCase):
+class PatrolCoreTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self._orig_base = mcp_server.BASE_DIR
-        mcp_server.BASE_DIR = self._tmp.name
-        self._orig_load = mcp_server.load_config
         self._cfg = {"webui": {"port": 8765},
                      "push": {"bark_key": "", "serverchan_sendkey": "",
                               "weekly_enabled": True}}
-        mcp_server.load_config = lambda p=None: dict(self._cfg)
+        self._push = mock.MagicMock(return_value=True)
 
     def tearDown(self):
-        mcp_server.BASE_DIR = self._orig_base
-        mcp_server.load_config = self._orig_load
         self._tmp.cleanup()
 
-    def _run(self, health, args=None):
-        with mock.patch.object(mcp_server.urllib.request, "urlopen",
-                               return_value=_fake_resp(health)):
-            return mcp_server.tool_patrol_run(args or {})
+    def _run(self, health, notify=False, cfg=None):
+        return patrol.run_patrol(
+            self._tmp.name, notify=notify,
+            config_loader=lambda p: dict(cfg or self._cfg),
+            health_fetch=lambda port: health,
+            push=self._push)
 
     def _archive(self):
         with open(os.path.join(self._tmp.name, "data", "patrol_last.json"),
@@ -60,36 +52,47 @@ class PatrolTests(unittest.TestCase):
 
     def test_healthy_patrol_archives_report(self):
         self._cfg["push"]["bark_key"] = "k"  # healthy needs a ready channel
-        r = self._run(_health())
-        self.assertFalse(r.get("isError"))
-        text = r["content"][0]["text"]
-        self.assertIn("healthy", text)
-        doc = self._archive()
+        doc = self._run(_health())
         self.assertEqual(doc["verdict"], "healthy")
         self.assertEqual(len(doc["checks"]), 5)
         self.assertFalse(doc["notified"])
+        arch = self._archive()
+        self.assertEqual(arch["verdict"], "healthy")
+        self.assertEqual(arch["health"]["worker"], "alive")
 
     def test_warn_verdict_on_stale_worker_and_thin_board(self):
-        r = self._run(_health(worker=False, covered=2))
-        text = r["content"][0]["text"]
-        self.assertIn("warn", text)
-        doc = self._archive()
+        doc = self._run(_health(worker=False, covered=2))
+        self.assertEqual(doc["verdict"], "warn")
         names = [c["name"] for c in doc["checks"] if c["status"] != "ok"]
         self.assertIn("worker-heartbeat", names)
         self.assertIn("board-dow-coverage", names)
 
     def test_notify_default_off_never_pushes(self):
-        with mock.patch("core.notify.push_all") as pa:
-            self._run(_health(worker=False))
-        pa.assert_not_called()
+        self._run(_health(worker=False))
+        self._push.assert_not_called()
 
     def test_notify_true_pushes_only_when_unhealthy(self):
         self._cfg["push"]["bark_key"] = "k"
-        with mock.patch("core.notify.push_all") as pa:
-            self._run(_health(), {"notify": True})
-            pa.assert_not_called()
-            self._run(_health(worker=False), {"notify": True})
-        pa.assert_called_once()
+        self._run(_health(), notify=True)
+        self._push.assert_not_called()
+        self._run(_health(worker=False), notify=True)
+        self._push.assert_called_once()
+
+    def test_default_fetch_is_loopback_only(self):
+        """Contract: the default health seam may only ever talk to
+        127.0.0.1, so patrol can never become an external requester."""
+        src = open(patrol.__file__, encoding="utf-8").read()
+        self.assertIn("127.0.0.1", src)
+
+
+class PatrolMcpDelegationTests(unittest.TestCase):
+    def test_mcp_tool_delegates_to_core(self):
+        with mock.patch.object(patrol, "run_patrol") as rp:
+            rp.return_value = {"verdict": "healthy", "checks": [], "notified": False}
+            r = mcp_server.tool_patrol_run({"notify": True})
+        rp.assert_called_once_with(mcp_server.BASE_DIR, notify=True)
+        self.assertFalse(r.get("isError"))
+        self.assertIn("healthy", r["content"][0]["text"])
 
     def test_transport_failure_is_tool_error_not_crash(self):
         msg = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",

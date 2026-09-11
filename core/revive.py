@@ -15,6 +15,10 @@ departure-time backfill that depends on it. Two revive layers:
    install_autostart.ps1 where the host allows it) running the same
    idempotent wrapper daily at 07:30.
 
+v0.40 adds a second daily duty on the same supervisor thread: a 09:00
+one-shot patrol (core.patrol) that health-checks the whole system and
+reminds through the push channel only when something is wrong.
+
 Both layers only ever LAUNCH the loop inside the morning window, so a
 midday webui restart never adds extra fetch cycles beyond the normal
 production cadence. /api/health surfaces both states so the dashboard
@@ -30,6 +34,7 @@ import time
 
 TASK_NAME = "FareAlertWorkerRevive"
 REVIVE_HOUR = 7          # launch window = 07:00-07:59 local time
+PATROL_HOUR = 9          # patrol window = 09:00-09:59 local time
 CHECK_INTERVAL_S = 300   # supervisor probe cadence
 
 _PS_TASK_QUERY = (
@@ -45,7 +50,9 @@ _PS_PROC_QUERY = """(Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'"
 
 _state = {"enabled": False, "thread": None, "last_check": None,
           "last_start": None, "last_probe": None, "started_pid": None,
-          "last_error": None}
+          "last_error": None,
+          "patrol_enabled": False, "patrol_done_day": None,
+          "patrol_last": None, "patrol_last_error": None}
 
 
 def _query_task():
@@ -124,16 +131,49 @@ def supervise_once(repo_dir, now=None):
     return "started"
 
 
-def start_supervisor(repo_dir, enabled=True, interval_s=CHECK_INTERVAL_S):
+def patrol_once(repo_dir, now=None):
+    """v0.40: one patrol pass inside the 09:00 window, once per day.
+
+    A failed pass still marks the day done: the supervisor probes every
+    5 minutes, and retrying a broken transport on every probe would turn
+    a diagnostic into a request storm. Errors surface via
+    supervisor_snapshot() instead.
+    """
+    from core.patrol import run_patrol
+    now = now or datetime.datetime.now()
+    if not _state.get("patrol_enabled"):
+        return "disabled"
+    if now.hour != PATROL_HOUR:
+        return "out-of-window"
+    day = now.date().isoformat()
+    if _state.get("patrol_done_day") == day:
+        return "already-done"
+    try:
+        doc = run_patrol(repo_dir, notify=True)
+        _state["patrol_last"] = {"ts": doc.get("ts"),
+                                 "verdict": doc.get("verdict"),
+                                 "notified": doc.get("notified")}
+        _state["patrol_done_day"] = day
+        return "ran:" + (doc.get("verdict") or "?")
+    except Exception as e:
+        _state["patrol_last_error"] = str(e)
+        _state["patrol_done_day"] = day
+        return "error"
+
+
+def start_supervisor(repo_dir, enabled=True, interval_s=CHECK_INTERVAL_S,
+                     patrol=True):
     """Daemon thread driving supervise_once; idempotent, never raises."""
     if not enabled or _state["thread"]:
         return
     _state["enabled"] = True
+    _state["patrol_enabled"] = bool(patrol)
 
     def _run():
         while True:
             try:
                 supervise_once(repo_dir)
+                patrol_once(repo_dir)
                 # v0.39: first pass runs immediately, so /api/health shows
                 # a real last_check right after a webui restart instead of
                 # a 5-minute observability blind spot.
@@ -152,4 +192,8 @@ def supervisor_snapshot():
             "last_check": _state["last_check"],
             "last_start": _state["last_start"],
             "last_probe": _state["last_probe"],
-            "started_pid": _state["started_pid"]}
+            "started_pid": _state["started_pid"],
+            "patrol": {"enabled": bool(_state.get("patrol_enabled")),
+                       "window": "09:00-09:59",
+                       "last": _state.get("patrol_last"),
+                       "last_error": _state.get("patrol_last_error")}}

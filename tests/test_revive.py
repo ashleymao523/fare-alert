@@ -18,7 +18,9 @@ from core import revive  # noqa: E402
 class ReviveSupervisorTests(unittest.TestCase):
     def setUp(self):
         for k in ("last_check", "last_start", "last_probe",
-                  "started_pid", "last_error"):
+                  "started_pid", "last_error",
+                  "patrol_enabled", "patrol_done_day", "patrol_last",
+                  "patrol_last_error"):
             revive._state[k] = None
 
     def test_out_of_window_never_starts(self):
@@ -76,11 +78,46 @@ class ReviveSupervisorTests(unittest.TestCase):
             raise SystemExit  # BaseException: ends the daemon loop cleanly
 
         with mock.patch.object(revive, "supervise_once", side_effect=fake_supervise):
-            revive.start_supervisor("/repo", enabled=True, interval_s=300)
+            revive.start_supervisor("/repo", enabled=True, interval_s=300,
+                                    patrol=True)
             self.assertTrue(done.wait(timeout=2), "first check never ran")
         revive._state["thread"] = None
         revive._state["enabled"] = False
+        revive._state["patrol_enabled"] = False
         self.assertEqual(calls, ["check"])
+
+    def test_patrol_runs_once_per_day_in_window(self):
+        with mock.patch("core.patrol.run_patrol") as rp:
+            rp.return_value = {"verdict": "healthy", "notified": False,
+                               "ts": "2026-09-12T09:05:00"}
+            revive._state["patrol_enabled"] = True
+            rv1 = revive.patrol_once(
+                "/repo", now=datetime.datetime(2026, 9, 12, 9, 5))
+            rv2 = revive.patrol_once(
+                "/repo", now=datetime.datetime(2026, 9, 12, 9, 45))
+            rv3 = revive.patrol_once(
+                "/repo", now=datetime.datetime(2026, 9, 12, 15, 0))
+        self.assertEqual(rv1, "ran:healthy")
+        self.assertEqual(rv2, "already-done")
+        self.assertEqual(rv3, "out-of-window")
+        rp.assert_called_once()
+        snap = revive.supervisor_snapshot()["patrol"]
+        self.assertTrue(snap["enabled"])
+        self.assertEqual(snap["last"]["verdict"], "healthy")
+
+    def test_patrol_error_marks_day_done_no_retry_storm(self):
+        with mock.patch("core.patrol.run_patrol",
+                        side_effect=OSError("webui down")) as rp:
+            revive._state["patrol_enabled"] = True
+            rv1 = revive.patrol_once(
+                "/repo", now=datetime.datetime(2026, 9, 12, 9, 10))
+            rv2 = revive.patrol_once(
+                "/repo", now=datetime.datetime(2026, 9, 12, 9, 40))
+        self.assertEqual(rv1, "error")
+        self.assertEqual(rv2, "already-done")
+        rp.assert_called_once()
+        self.assertIn("webui down",
+                      revive.supervisor_snapshot()["patrol"]["last_error"])
 
 
 class ReviveTaskTests(unittest.TestCase):
@@ -133,7 +170,9 @@ class ReviveHealthTests(unittest.TestCase):
         fake_task = {"installed": False, "supported": True}
         p1 = mock.patch("core.revive.task_status", return_value=fake_task)
         p2 = mock.patch("core.revive.supervisor_snapshot",
-                        return_value={"enabled": True, "window": "07:00-07:59"})
+                        return_value={"enabled": True, "window": "07:00-07:59",
+                                      "patrol": {"enabled": True,
+                                                 "window": "09:00-09:59"}})
         with p1, p2:
             with webui.app.test_client() as c:
                 r = c.get("/api/health")
@@ -141,6 +180,7 @@ class ReviveHealthTests(unittest.TestCase):
         rv = r.get_json().get("revive")
         self.assertEqual(rv["task"], fake_task)
         self.assertTrue(rv["supervisor"]["enabled"])
+        self.assertTrue(rv["supervisor"]["patrol"]["enabled"])
 
 
 if __name__ == "__main__":

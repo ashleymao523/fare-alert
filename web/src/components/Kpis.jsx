@@ -45,19 +45,22 @@ export default function Kpis({ route }) {
     cls: route.days_below > 0 ? "good" : "warn"
   }];
   const ds = route.deals || [];
+  const real = ds.filter((x) => x.source !== "nearby-ref" && x.source !== "interp");
   let depN = 0;
   let altN = 0;
-  ds.forEach((x) => {
+  real.forEach((x) => {
     if ((x.dep_time || "").trim()) depN++;
     else if ((x.alt_times || []).length) altN++;
   });
-  if (ds.length) {
+  const refN = ds.length - real.length;
+  if (real.length) {
     items.push({
-      label: "起飞时刻覆盖",
-      value: Math.round(100 * (depN + altN) / ds.length) + "%",
-      sub: altN
-        ? "精确 " + depN + " 天 · 参考 " + altN + " 天 · 班期库每日自动沉淀"
-        : "班期库每日自动沉淀, 约7天长滑窗",
+      label: "真实票时刻覆盖",
+      value: Math.round(100 * (depN + altN) / real.length) + "%",
+      sub: (altN
+        ? "精确 " + depN + " 天 · 参考 " + altN + " 天 · 班期库每日沉淀"
+        : "班期库每日自动沉淀, 约7天长滑窗")
+        + (refN ? " · 另参考价 " + refN + " 天(无时刻)" : ""),
       cls: ""
     });
   }

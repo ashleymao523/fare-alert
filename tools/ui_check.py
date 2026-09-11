@@ -215,6 +215,15 @@ checks["v0.39 MCP巡检工具"] = "patrol_run" in open(
     "mcp_server.py", encoding="utf-8").read()
 checks["v0.39 v2 DOM推送状态卡"] = (("推送状态" in _all)
     and ("Bark 未配置" in _all) and ("推送渠道未就绪" in _all))
+checks["v0.40 v2产物真实票口径"] = ("真实票时刻覆盖" in _dist_js) and ("参考价" in _dist_js)
+checks["v0.40 v2产物每日巡检"] = "每日巡检" in _dist_js
+_patrol_src = (open(os.path.join("core", "patrol.py"), encoding="utf-8").read()
+               if os.path.exists(os.path.join("core", "patrol.py")) else "")
+checks["v0.40 巡检核心抽取"] = (("run_patrol" in _patrol_src)
+    and ("config_loader" in _patrol_src) and ("127.0.0.1" in _patrol_src))
+checks["v0.40 巡检定时化"] = "patrol_once" in open(
+    os.path.join("core", "revive.py"), encoding="utf-8").read()
+checks["v0.40 v2 DOM真实票口径"] = "真实票时刻覆盖" in _all
 
 bad = 0
 for k, v in checks.items():

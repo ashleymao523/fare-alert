@@ -672,7 +672,8 @@ def main():
         from core.revive import start_supervisor
         start_supervisor(
             os.path.dirname(os.path.abspath(__file__)),
-            enabled=bool(cfg.get("deploy", {}).get("supervise_worker", True)))
+            enabled=bool(cfg.get("deploy", {}).get("supervise_worker", True)),
+            patrol=bool(cfg.get("deploy", {}).get("patrol_daily", True)))
     except Exception:
         pass  # supervisor is best-effort; the panel must still boot
     shown = "127.0.0.1" if host == "0.0.0.0" else host
