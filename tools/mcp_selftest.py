@@ -94,7 +94,8 @@ def main():
     r = c.req("tools/list")
     names = sorted(t["name"] for t in r["result"]["tools"])
     expect = sorted(["fare_search", "train_search", "watch_add", "watch_del",
-                     "snapshot_get", "reverse_search", "verify_release"])
+                     "snapshot_get", "reverse_search", "verify_release",
+                     "patrol_run"])
     ok = names == expect and all(t.get("inputSchema") for t in r["result"]["tools"])
     print(("PASS" if ok else "FAIL") + " tools/list = %s" % names)
     if not ok:
@@ -162,7 +163,7 @@ def main():
         fails.append("real-config-touched")
     shutil.rmtree(home, ignore_errors=True)
     print("selftest: %s (%d checks)" % ("ALL PASS" if not fails else "FAIL " + str(fails),
-                                        10 - len(fails)))
+                                        11 - len(fails)))
     return 1 if fails else 0
 
 

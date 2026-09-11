@@ -51,6 +51,16 @@ class ApiV1AliasTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("channel_ready", r.get_json())
 
+    def test_v1_weekly_report_push_observability(self):
+        """v0.39: per-channel readiness + weekly timer state surfaced."""
+        r = self.client.get("/api/v1/weekly-report")
+        self.assertEqual(r.status_code, 200)
+        d = r.get_json()
+        for k in ("channels", "retry_waiting", "last_push_at", "next_push_at"):
+            self.assertIn(k, d)
+        self.assertIn("bark", d["channels"])
+        self.assertIn("serverchan", d["channels"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -521,6 +521,31 @@ def api_weekly_report():
     report["channel_ready"] = any(_secrets_set(cfg).values())
     report["push_due"] = should_push(
         cfg, os.path.join(DATA_DIR, "weekly_push.json"))
+    # v0.39: push observability closure - surface per-channel readiness and
+    # the weekly timer state so the push tab can show an actionable status
+    # card instead of a silent "push_pending" flag in /api/health.
+    sec = _secrets_set(cfg)
+    wk_state = _read_json(os.path.join(DATA_DIR, "weekly_push.json"), {}) or {}
+    last_ts = float(wk_state.get("ts") or 0)
+    retry_after = float(wk_state.get("retry_after") or 0)
+    now = time.time()
+    retrying = bool(retry_after and retry_after > now)
+    if retrying:
+        next_ts = retry_after
+    elif last_ts:
+        next_ts = last_ts + 7 * 86400
+    else:
+        next_ts = None
+
+    def _iso(t):
+        return (datetime.datetime.fromtimestamp(t)
+                .isoformat(timespec="seconds")) if t else None
+
+    report["channels"] = {"bark": bool(sec.get("bark_key")),
+                          "serverchan": bool(sec.get("serverchan_sendkey"))}
+    report["retry_waiting"] = retrying
+    report["last_push_at"] = _iso(last_ts)
+    report["next_push_at"] = _iso(next_ts)
     return jsonify(report)
 
 

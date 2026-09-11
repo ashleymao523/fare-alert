@@ -2,7 +2,12 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
-  background: var(--bg);
+  /* v0.39: layered ambient gradients instead of a flat wash - depth without noise */
+  background:
+    radial-gradient(1100px 520px at 85% -90px, rgba(0, 98, 227, 0.07), transparent 70%),
+    radial-gradient(900px 430px at -70px 12%, rgba(10, 133, 80, 0.05), transparent 70%),
+    var(--bg);
+  background-attachment: fixed;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
@@ -52,6 +57,9 @@ button { font: inherit; cursor: pointer; }
   display: inline-flex; align-items: center; gap: var(--sp-sm);
 }
 .btn:hover { border-color: var(--line-strong); box-shadow: var(--sh-1); }
+.btn:focus-visible, .rt-chip:focus-visible, .seg button:focus-visible {
+  outline: none; box-shadow: var(--ring);
+}
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .btn.primary:hover { background: var(--accent-2); box-shadow: var(--sh-2); }
 .btn.small { padding: var(--sp-xs) var(--sp-md); font-size: var(--fs-sm); }
@@ -75,7 +83,10 @@ button { font: inherit; cursor: pointer; }
   background: var(--card); border: 1px solid var(--line-soft);
   border-radius: var(--r-md); box-shadow: var(--sh-1);
   padding: var(--sp-4); margin-top: var(--sp-2xl);
+  transition: box-shadow var(--dur-base) var(--ease-out),
+              border-color var(--dur-base) var(--ease-out);
 }
+.card:hover { box-shadow: var(--sh-2); border-color: var(--line); }
 .card-head {
   display: flex; align-items: baseline; justify-content: space-between;
   gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-md);
@@ -133,7 +144,7 @@ button { font: inherit; cursor: pointer; }
 }
 a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transform: translateY(-1px); }
 .k-label { font-size: var(--fs-sm); color: var(--muted); }
-.k-value { font-size: var(--fs-kpi2); font-weight: 700; font-variant-numeric: tabular-nums; margin: var(--sp-xs) 0; }
+.k-value { font-size: var(--fs-kpi2); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; margin: var(--sp-xs) 0; }
 .k-sub { font-size: var(--fs-sm); color: var(--muted); }
 .kpi.good .k-value { color: var(--green); }
 .kpi.warn .k-value { color: var(--amber); }
@@ -160,7 +171,7 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   padding: var(--sp-xs) var(--sp-md); font-weight: 600;
 }
 .v-title { font-size: var(--fs-md); color: var(--text-2); }
-.v-price { font-size: var(--fs-kpi2); font-weight: 700; font-variant-numeric: tabular-nums; margin: var(--sp-xs) 0; }
+.v-price { font-size: var(--fs-kpi2); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; margin: var(--sp-xs) 0; }
 .vcard.best .v-price { color: var(--green-d); }
 .v-sub { font-size: var(--fs-sm); color: var(--muted); }
 .v-link { display: inline-block; margin-top: var(--sp-md); font-size: var(--fs-md); font-weight: 600; }
@@ -419,6 +430,11 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 
 /* 推送设置 */
 .push-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--sp-md); margin: var(--sp-md) 0; }
+.push-status {
+  display: flex; flex-wrap: wrap; gap: var(--sp-sm); align-items: center;
+  margin: var(--sp-2) 0 var(--sp-md);
+}
+.push-status .chip2 { font-size: var(--fs-sm); }
 .field2 { display: flex; flex-direction: column; gap: var(--sp-2); }
 .f-label2 { font-size: var(--fs-sm); color: var(--muted); font-weight: 600; }
 .field2 input, .field2 select {

@@ -10,6 +10,7 @@ _raw = open("data/ui_dom.html", encoding="utf-8").read()
 _docs = _raw.split("<html")  # dump_dom may concatenate several tab dumps
 h = ("<html" + _docs[1]) if len(_docs) > 1 else _raw  # first doc only
 _all = _raw  # content assertions may span all dumps
+v1_dom = "data-tab=" in _raw  # v1 时代 DOM 快照标志(根路径现已同源托管 v2)
 appjs = open(os.path.join("webui", "static", "app.js"), encoding="utf-8").read()
 css = open(os.path.join("webui", "static", "style.css"), encoding="utf-8").read()
 checks = {
@@ -122,6 +123,7 @@ checks = {
     "v0.28设计令牌色板": all(t in css for t in ("--fs-2xs", "--r-pill", "--green-bg", "--on-accent", "--r-flag")),
     "v0.28令牌接线量": css.count("var(--") > 600,
 }
+legacy_keys = set(checks)  # 字典字面量里的 v1 DOM 断言, 依赖已退役的 v1 快照
 # --- v0.29: v2 frontend (web/, Preact+Vite, hosted same-origin at /v2) ---
 _web_dist_idx = os.path.join("web", "dist", "index.html")
 if os.path.exists(_web_dist_idx):
@@ -205,15 +207,29 @@ checks["v0.36 v2排版放大+平滑趋势"] = (
     ("--fs-kpi2" in _dist_css) and ("smoothPath" in _tc_src)
     and ("t-wknd" in _dist_js) and ("t-min-tag" in _dist_css))
 checks["v0.38 v2产物含自愈任务状态"] = ("自愈" in _dist_js) and ("07:00" in _dist_js)
+checks["v0.39 v2产物含推送状态卡"] = ("推送状态" in _dist_js) and ("下次推送" in _dist_js)
+checks["v0.39 v2质感微升级"] = (("focus-visible" in _dist_css)
+    and bool(re.search(r"letter-spacing:\s*-0?\.5px", _dist_css))
+    and ("radial-gradient(" in _dist_css))
+checks["v0.39 MCP巡检工具"] = "patrol_run" in open(
+    "mcp_server.py", encoding="utf-8").read()
+checks["v0.39 v2 DOM推送状态卡"] = (("推送状态" in _all)
+    and ("Bark 未配置" in _all) and ("推送渠道未就绪" in _all))
 
 bad = 0
 for k, v in checks.items():
+    if not v1_dom and k in legacy_keys:
+        print("SKIP " + k + " (v1 DOM 快照缺失, v2 快照不适用)")
+        continue
     print(("PASS " if v else "FAIL ") + k)
     bad += 0 if v else 1
 days = len(re.findall("class=.day ", h))
-print("day cells:", days)
-m = re.findall("当前最优[^。<]{0,20}", h)
-print("verdict:", m[0] if m else "MISSING")
+if v1_dom:
+    print("day cells:", days)
+    m = re.findall("当前最优[^。<]{0,20}", h)
+    print("verdict:", m[0] if m else "MISSING")
+else:
+    print("(v2 快照: v1 日历/最优断言不适用, 已整体 SKIP)")
 # --- structural: every data-tab button maps to exactly one panel; ids unique ---
 import collections
 tabs = set(re.findall(r'data-tab=[\'"]([a-z]+)[\'"]', h))
@@ -230,7 +246,10 @@ for s in struct_bad:
     print("FAIL STRUCT " + s)
     bad += 1
 if not struct_bad:
-    print("PASS STRUCT %d tabs 1:1 panels, ids unique" % len(tabs))
+    if tabs:
+        print("PASS STRUCT %d tabs 1:1 panels, ids unique" % len(tabs))
+    else:
+        print("SKIP STRUCT tabs 1:1 panels (v2 快照无 data-tab)")
 css_body = css[css.index("}", css.index(":root")) + 1:]
 _hex_left = re.findall(r"#[0-9a-fA-F]{3,8}\b", css_body)
 _fs_left = re.findall(r"font-size:\s*[\d.]+px", css_body)
@@ -247,4 +266,4 @@ elif not _old_tokens <= _new_tokens:
     bad += 1
 else:
     print("PASS STRUCT v0.29 v2 frontend: tokens synced, zero hardcoded hex (%d tokens)" % len(_new_tokens))
-sys.exit(1 if (bad or days < 30) else 0)
+sys.exit(1 if (bad or (v1_dom and days < 30)) else 0)

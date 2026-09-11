@@ -2,6 +2,7 @@
 """v0.38 revive tests: supervisor window logic + task probe + health."""
 import datetime
 import os
+import threading
 import sys
 import tempfile
 import unittest
@@ -61,6 +62,25 @@ class ReviveSupervisorTests(unittest.TestCase):
                 "/repo", now=datetime.datetime(2026, 9, 12, 7, 30))
         self.assertEqual(rv, "probe-error")
         sl.assert_not_called()
+
+    def test_supervisor_first_check_immediate(self):
+        """v0.39: the daemon thread must run its first pass right away,
+        so /api/health shows a real last_check after a webui restart
+        (no 5-minute observability blind spot)."""
+        calls = []
+        done = threading.Event()
+
+        def fake_supervise(repo):
+            calls.append("check")
+            done.set()
+            raise SystemExit  # BaseException: ends the daemon loop cleanly
+
+        with mock.patch.object(revive, "supervise_once", side_effect=fake_supervise):
+            revive.start_supervisor("/repo", enabled=True, interval_s=300)
+            self.assertTrue(done.wait(timeout=2), "first check never ran")
+        revive._state["thread"] = None
+        revive._state["enabled"] = False
+        self.assertEqual(calls, ["check"])
 
 
 class ReviveTaskTests(unittest.TestCase):

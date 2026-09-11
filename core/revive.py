@@ -132,11 +132,14 @@ def start_supervisor(repo_dir, enabled=True, interval_s=CHECK_INTERVAL_S):
 
     def _run():
         while True:
-            time.sleep(interval_s)
             try:
                 supervise_once(repo_dir)
+                # v0.39: first pass runs immediately, so /api/health shows
+                # a real last_check right after a webui restart instead of
+                # a 5-minute observability blind spot.
             except Exception as e:      # never kill the thread
                 _state["last_error"] = str(e)
+            time.sleep(interval_s)
 
     th = threading.Thread(target=_run, daemon=True, name="fare-revive")
     th.start()
