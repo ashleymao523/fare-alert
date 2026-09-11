@@ -8,6 +8,26 @@ const PR = 64;
 const PT = 16;
 const PB = 28;
 
+// Catmull-Rom -> cubic bezier: 平滑但不越过数据点
+function smoothPath(pp) {
+  if (pp.length < 3) {
+    return pp.map((q, k) => (k ? "L" : "M") + q.x.toFixed(1) + "," + q.y.toFixed(1)).join(" ");
+  }
+  let d = "M" + pp[0].x.toFixed(1) + "," + pp[0].y.toFixed(1);
+  for (let i = 0; i < pp.length - 1; i++) {
+    const p0 = pp[Math.max(0, i - 1)], p1 = pp[i], p2 = pp[i + 1], p3 = pp[Math.min(pp.length - 1, i + 2)];
+    d += " C" + (p1.x + (p2.x - p0.x) / 6).toFixed(1) + "," + (p1.y + (p2.y - p0.y) / 6).toFixed(1) +
+      " " + (p2.x - (p3.x - p1.x) / 6).toFixed(1) + "," + (p2.y - (p3.y - p1.y) / 6).toFixed(1) +
+      " " + p2.x.toFixed(1) + "," + p2.y.toFixed(1);
+  }
+  return d;
+}
+
+const isWknd = (ds) => {
+  const w = new Date(ds + "T00:00:00").getDay();
+  return w === 0 || w === 6;
+};
+
 export default function TrendChart({ route, dealsKey, title, hint }) {
   const [hover, setHover] = useState(null);
   const days = dayList(route);
@@ -53,7 +73,8 @@ export default function TrendChart({ route, dealsKey, title, hint }) {
   if (seg.length) segs.push(seg);
   const base = H - PB;
   segs.forEach((s) => {
-    const d = s.map((q, k) => (k ? "L" : "M") + x(q.i).toFixed(1) + "," + y(q.p.t).toFixed(1)).join(" ");
+    const pp = s.map((q) => ({ x: x(q.i), y: y(q.p.t) }));
+    const d = smoothPath(pp);
     line += d + " ";
     area += "M" + x(s[0].i).toFixed(1) + "," + base + " " +
       d.replace("M", "L") + " L" + x(s[s.length - 1].i).toFixed(1) + "," + base + " Z ";
@@ -99,6 +120,9 @@ export default function TrendChart({ route, dealsKey, title, hint }) {
               <stop offset="100%" style={{ stopColor: "var(--chart-area-b)" }} />
             </linearGradient>
           </defs>
+          {days.map((ds, i) => isWknd(ds) ? (
+            <rect class="t-wknd" x={x(i) - step / 2} y={PT} width={step} height={H - PT - PB} />
+          ) : null)}
           {gridTs.map((gv) => (
             <g>
               <line class="t-grid" x1={PL} x2={W - PR} y1={y(gv)} y2={y(gv)} />
@@ -111,20 +135,25 @@ export default function TrendChart({ route, dealsKey, title, hint }) {
             ) : null
           )}
           <line class="t-th" x1={PL} x2={W - PR} y1={y(th)} y2={y(th)} />
-          <text class="trend-th-label" x={W - PR + 6} y={y(th) + 3}>¥{Math.round(th)}</text>
+          <text class="trend-th-label" x={W - PR + 6} y={y(th) + 3}>心理价位 ¥{Math.round(th)}</text>
           {area ? <path class="t-area" d={area} /> : null}
           {line ? <path class="t-line" d={line} /> : null}
           {minPt && minPt.t != null ? (
             <g>
               <circle cx={x(pts.indexOf(minPt))} cy={y(minPt.t)} r="5" style={{ fill: "var(--card)", stroke: "var(--green)", strokeWidth: 2 }} />
               <circle cx={x(pts.indexOf(minPt))} cy={y(minPt.t)} r="2" style={{ fill: "var(--green)" }} />
+              <g class="t-min-tag" transform={"translate(" + x(pts.indexOf(minPt)).toFixed(1) + "," + y(minPt.t).toFixed(1) + ")"}>
+                <rect x={-24} y={-34} width={48} height={19} rx={9.5} />
+                <text x={0} y={-20.5} text-anchor="middle">¥{Math.round(minPt.t)}</text>
+              </g>
             </g>
           ) : null}
-          {pts.map((p, i) =>
-            p.t == null ? null : (
-              <circle class="t-dot" cx={x(i)} cy={y(p.t)} r="2.6" style={{ fill: dotFill(p) }} />
-            )
-          )}
+          {pts.map((p, i) => {
+            if (p.t == null || p === minPt) return null;
+            // 只画信息点(低于阈值/参考/插值), 普通点由平滑曲线自身表达
+            if (p.t >= th && p.d.source !== "nearby-ref" && p.d.source !== "interp") return null;
+            return <circle class="t-dot" cx={x(i)} cy={y(p.t)} r={p.t < th ? 3.2 : 2.6} style={{ fill: dotFill(p) }} />;
+          })}
           {hp && hp.t != null ? (
             <g>
               <line class="t-cross" x1={x(hover)} x2={x(hover)} y1={PT} y2={H - PB} />

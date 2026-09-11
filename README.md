@@ -160,6 +160,7 @@ fare-alert/
 - [x] **v0.33 中转/经停透明化 + CI 前端门禁**: 联程票首段到达+中转城市、经停票经停站+到达时刻从板库透传至日详情时间线(「中转 武汉 · 08:55 到」), 四线 81 天获得说明, 估算落地不再是无解释的孤数; ci.yml 新增 frontend job(npm ci+build+git diff --exit-code, dist 与提交强制同步)。87 单测全绿。
 - [x] **v0.34 部署工业化: worker 自启 + 心跳可观测**: 「时刻显示不全」的机制根因=抓取循环无人拉起、班期 dow 覆盖停在手动运行那两天。autostart_worker.ps1 单实例守卫 + install_autostart.ps1 升级双组件(-Components webui,worker); main.py 每轮写心跳、/api/health 暴露 worker 存活年龄; 无时刻文案按换季/联程段细化原因。92 单测全绿。
 - [x] **v0.35 调度心跳面板化 + 板库 API 勘探归档**: v2 数据源页新增「调度心跳」卡——/api/health 的 worker 状态(运行中脉冲/心跳过期/未启动三态 + 最近轮次成败与分钟年龄)从命令行知识变成面板可视化, 未启动时直接给出 autostart_worker.ps1 启动指引; tools/probe_hbh_date.py 归档板库 API 勘探负结论(无 date 参数, keywords 仅航班号, 只服务当天 → dow 覆盖唯一路径=worker 每日积累, v0.34 自启方向实证正确)。92 单测 + ui_check(新增 v0.35 断言) 全绿。
+- [x] **v0.36 UI 质感专项: 排版放大 + 趋势图重做**: 「不够高级」的根因之一=字号系统偏小(正文 13px/KPI 数字 22px)。v2 专属排版令牌层(--fs-body2/title2/hero2/kpi2, 正文 14/标题 16/Hero 28/KPI 30) + 趋势图重做(Catmull-Rom 平滑曲线、去掉 60 个噪声点只留信息点、最低价绿色胶囊标签、周末淡色底带、心理价位文案标签、悬浮卡片阴影升级) + tab 导航改分段控制器 + Hero 去 emoji(无照片显示城市首字、纸飞机换 SVG)。92 单测 + ui_check(新增 v0.36 断言) 全绿。
 
 ## 常见问题
 

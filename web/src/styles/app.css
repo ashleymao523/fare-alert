@@ -6,7 +6,7 @@ body {
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  font-size: var(--fs-base);
+  font-size: var(--fs-body2);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
@@ -72,15 +72,15 @@ button { font: inherit; cursor: pointer; }
 /* ---- 布局与卡片 ---- */
 .wrap { max-width: 1180px; margin: 0 auto; padding: 0 var(--sp-4) var(--sp-3xl); }
 .card {
-  background: var(--card); border: 1px solid var(--line);
+  background: var(--card); border: 1px solid var(--line-soft);
   border-radius: var(--r-md); box-shadow: var(--sh-1);
-  padding: var(--sp-3); margin-top: var(--sp-2xl);
+  padding: var(--sp-4); margin-top: var(--sp-2xl);
 }
 .card-head {
   display: flex; align-items: baseline; justify-content: space-between;
   gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-md);
 }
-.card-head h3 { margin: 0; font-size: var(--fs-xl); }
+.card-head h3 { margin: 0; font-size: var(--fs-title2); letter-spacing: 0.2px; }
 .card-head .sub { font-size: var(--fs-sm); color: var(--muted); }
 .badge {
   display: inline-block; border-radius: var(--r-pill);
@@ -108,7 +108,8 @@ button { font: inherit; cursor: pointer; }
   display: flex; align-items: center; justify-content: center;
   font-size: var(--fs-5xl);
 }
-.hc-name { font-size: var(--fs-4xl); font-weight: 700; }
+.hc-initial { font-size: var(--fs-6xl); font-weight: 700; color: var(--accent-ink); }
+.hc-name { font-size: var(--fs-hero2); font-weight: 700; }
 .hc-iata { font-size: var(--fs-sm); color: var(--muted); letter-spacing: 1px; }
 .hero-mid { text-align: center; color: var(--muted); }
 .hero-plane { font-size: var(--fs-4xl); color: var(--accent); }
@@ -132,7 +133,7 @@ button { font: inherit; cursor: pointer; }
 }
 a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transform: translateY(-1px); }
 .k-label { font-size: var(--fs-sm); color: var(--muted); }
-.k-value { font-size: var(--fs-5xl); font-weight: 700; font-variant-numeric: tabular-nums; margin: var(--sp-xs) 0; }
+.k-value { font-size: var(--fs-kpi2); font-weight: 700; font-variant-numeric: tabular-nums; margin: var(--sp-xs) 0; }
 .k-sub { font-size: var(--fs-sm); color: var(--muted); }
 .kpi.good .k-value { color: var(--green); }
 .kpi.warn .k-value { color: var(--amber); }
@@ -159,7 +160,7 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   padding: var(--sp-xs) var(--sp-md); font-weight: 600;
 }
 .v-title { font-size: var(--fs-md); color: var(--text-2); }
-.v-price { font-size: var(--fs-4xl); font-weight: 700; font-variant-numeric: tabular-nums; margin: var(--sp-xs) 0; }
+.v-price { font-size: var(--fs-kpi2); font-weight: 700; font-variant-numeric: tabular-nums; margin: var(--sp-xs) 0; }
 .vcard.best .v-price { color: var(--green-d); }
 .v-sub { font-size: var(--fs-sm); color: var(--muted); }
 .v-link { display: inline-block; margin-top: var(--sp-md); font-size: var(--fs-md); font-weight: 600; }
@@ -222,21 +223,24 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 /* ---- 趋势图 ---- */
 .trend-box { position: relative; }
 .trend-svg { width: 100%; height: auto; display: block; }
-.trend-axis { font-size: var(--fs-xs); fill: var(--faint); }
-.trend-th-label { font-size: var(--fs-xs); fill: var(--amber-d); }
+.trend-axis { font-size: var(--fs-sm); fill: var(--faint); }
+.trend-th-label { font-size: var(--fs-sm); fill: var(--amber-d); font-weight: 600; }
 .trend-tip {
   position: absolute; pointer-events: none; z-index: 10;
-  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-xs);
-  box-shadow: var(--sh-2); padding: var(--sp-sm) var(--sp-md);
+  background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+  box-shadow: var(--sh-3); padding: var(--sp-sm) var(--sp-lg);
   font-size: var(--fs-sm); white-space: nowrap; transform: translate(-50%, -110%);
 }
 .trend-tip b { font-variant-numeric: tabular-nums; }
-.t-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.t-line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .t-area { fill: url(#trendGrad); }
-.t-grid { stroke: var(--chart-grid); stroke-width: 1; }
+.t-grid { stroke: var(--chart-grid); stroke-width: 1; stroke-dasharray: 2 4; }
 .t-th { stroke: var(--amber); stroke-width: 1.5; stroke-dasharray: 5 4; }
 .t-dot { stroke: var(--card); stroke-width: 1; }
 .t-cross { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 3; }
+.t-wknd { fill: var(--card2); }
+.t-min-tag rect { fill: var(--green); }
+.t-min-tag text { fill: var(--on-accent); font-size: var(--fs-sm); font-weight: 700; }
 
 /* ---- 日期明细 ---- */
 .dd-title { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
@@ -339,18 +343,18 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 
 /* ---- v0.30: tab 导航 + 爬虫/周报/数据源/推送 ---- */
 .tabbar {
-  display: flex; gap: var(--sp-2); flex-wrap: wrap;
-  background: var(--card); border: 1px solid var(--line);
-  border-radius: var(--r-md); padding: var(--sp-2);
-  margin-bottom: var(--sp-md); box-shadow: var(--sh-1);
+  display: flex; gap: var(--sp-xs); flex-wrap: wrap; width: fit-content;
+  background: var(--card2); border: 1px solid var(--line-soft);
+  border-radius: var(--r-pill); padding: var(--sp-1);
+  margin-bottom: var(--sp-md);
 }
 .tab-btn {
   border: 0; background: transparent; color: var(--muted);
-  padding: var(--sp-xs) var(--sp-md); border-radius: var(--r-sm);
-  font-size: var(--fs-md); cursor: pointer; transition: all var(--dur-fast) var(--ease-out);
+  padding: var(--sp-sm) var(--sp-xl); border-radius: var(--r-pill);
+  font-size: var(--fs-body2); cursor: pointer; transition: all var(--dur-fast) var(--ease-out);
 }
-.tab-btn:hover { background: var(--card2); color: var(--text); }
-.tab-btn.active { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { background: var(--card); color: var(--accent-ink); font-weight: 600; box-shadow: var(--sh-1); }
 
 /* 数据源健康 */
 .hl-row { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-xs) 0; flex-wrap: wrap; }

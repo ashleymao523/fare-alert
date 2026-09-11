@@ -59,4 +59,9 @@
   --hero-grad-b: rgba(168, 192, 240, 0.16);
   --log-bg: #0d1424;
   --log-ink: #c8d6f0;
+  /* ---- v0.36 v2 排版放大层 (旧版无对应, v2 专属) ---- */
+  --fs-body2: 14px;  /* v2 正文 */
+  --fs-title2: 16px; /* v2 卡片标题 */
+  --fs-hero2: 28px;  /* v2 Hero 城市名 */
+  --fs-kpi2: 30px;   /* v2 KPI/最优价大数字 */
 }

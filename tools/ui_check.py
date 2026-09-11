@@ -195,6 +195,15 @@ if _src_list and _dist_list and _src_dirty and not _dist_dirty:
 checks["v0.30 v2产物含新tab"] = ("爬虫监控" in _dist_js) and ("立即推送周报" in _dist_js) \
     and ("开启浏览器通知" in _dist_js) and ("时刻库沉淀进度" in _dist_js)
 checks["v0.35 v2产物含调度心跳"] = ("调度心跳" in _dist_js) and ("autostart_worker" in _dist_js)
+_dist_css = ""
+for _root_dir, _sub_dirs, _fs in os.walk(os.path.join("web", "dist", "assets")):
+    for f in _fs:
+        if f.endswith(".css"):
+            _dist_css += open(os.path.join(_root_dir, f), encoding="utf-8").read()
+_tc_src = open(os.path.join("web", "src", "components", "TrendChart.jsx"), encoding="utf-8").read()
+checks["v0.36 v2排版放大+平滑趋势"] = (
+    ("--fs-kpi2" in _dist_css) and ("smoothPath" in _tc_src)
+    and ("t-wknd" in _dist_js) and ("t-min-tag" in _dist_css))
 
 bad = 0
 for k, v in checks.items():
