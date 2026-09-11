@@ -252,6 +252,7 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 .ft-time.est { color: var(--amber); }
 .ft-code { font-size: var(--fs-sm); color: var(--muted); margin-top: var(--sp-xs); }
 .ft-nextday { margin-left: var(--sp-xs); font-size: var(--fs-xs); color: var(--muted); font-weight: 600; }
+.ft-stop { font-size: var(--fs-xs); color: var(--muted); margin-top: var(--sp-xs); }
 .ft-mid { text-align: center; }
 .ft-dur { font-size: var(--fs-md); color: var(--text-2); }
 .ft-path { position: relative; height: 1px; background: var(--line-strong); margin: var(--sp-sm) var(--sp-3); }

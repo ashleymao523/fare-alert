@@ -1,0 +1,7 @@
+* text=auto
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+web/dist/** -text

@@ -45,6 +45,7 @@ export default function DayDetail({ route, date }) {
   const connecting = (d.flight_no || "").indexOf("/") >= 0;
   const warn = /不含|确认/.test(d.baggage || "") ? " ⚠️" : " 🧳";
   const alts = d.alt_times || [];
+  const shownArr = hasArr ? d.arr_time : (hasEst ? d.arr_est : "");
   let midBadges = null;
   if (hasDep || hasArr) {
     if (depSrc && depSrc === arrSrc) {
@@ -81,6 +82,12 @@ export default function DayDetail({ route, date }) {
               {connecting ? "中转 · " + (d.duration_text || "全程时刻待查") : (d.duration_text || "飞行时长待查")}
             </span>
             {midBadges}
+            {d.stop_kind && (d.stop_city || d.stop_arr) ? (
+              <div class="ft-stop">
+                {(d.stop_kind === "transfer" ? "中转 " : "经停 ") + (d.stop_city || "中转城市")}
+                {d.stop_arr ? " · " + d.stop_arr + " 到" : ""}
+              </div>
+            ) : null}
           </div>
           <div class="ft-path"><span class="ft-plane">✈</span></div>
           {!hasDep && !hasArr && alts.length > 0 && (
@@ -107,7 +114,7 @@ export default function DayDetail({ route, date }) {
             title={hasEst ? "按同航线真实飞行时长推算(到达板实测中位数)" : ""}
           >
             {hasArr ? d.arr_time : (hasEst ? "~" + d.arr_est : "--:--")}
-            {hasArr && d.dep_time && d.arr_time < d.dep_time ? (
+            {shownArr && d.dep_time && shownArr < d.dep_time ? (
               <span class="ft-nextday" title="跨零点航班 · 次日到达">+1d</span>
             ) : null}
           </div>

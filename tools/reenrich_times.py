@@ -21,7 +21,8 @@ sys.path.insert(0, ROOT)
 import main as app_main  # noqa: E402
 
 TIME_FIELDS = ("dep_time", "arr_time", "arr_est", "duration_text",
-               "time_src", "dep_src", "arr_src", "alt_times")
+               "time_src", "dep_src", "arr_src", "alt_times",
+               "stop_kind", "stop_city", "stop_arr")
 
 
 def _reset_time_fields(d):
@@ -37,6 +38,9 @@ def _reset_time_fields(d):
     d.dep_src = ""
     d.arr_src = ""
     d.duration_text = ""
+    d.stop_kind = ""
+    d.stop_city = ""
+    d.stop_arr = ""
 
 
 def main():

@@ -111,6 +111,9 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "alt_times": [{"no": a.get("no"), "dep": a.get("dep"),
                        "exact": bool(a.get("exact"))}
                       for a in (deal.alt_times or [])][:4],
+        "stop_kind": deal.stop_kind,
+        "stop_city": deal.stop_city,
+        "stop_arr": deal.stop_arr,
     }
 
 
@@ -372,20 +375,33 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                 d.dep_time = seg_rows[0]["dep"]
                 d.time_src = "amadeus"
                 d.dep_src = "amadeus"
+                # v0.33: first-leg arrival is the layover-city landing
+                if seg_rows[0].get("arr") and not d.stop_kind:
+                    d.stop_kind = "transfer"
+                    d.stop_arr = seg_rows[0]["arr"]
             if seg_rows and seg_rows[-1] and seg_rows[-1].get("arr"):
                 d.arr_time = seg_rows[-1]["arr"]
                 d.time_src = "amadeus"
                 d.arr_src = "amadeus"
-            if not d.dep_time and segs:
+            if segs:
                 hit = board_lookup_x(bdb, segs[0], d.date, fc, "")
                 if hit and hit[0].get("dep"):
                     ent, exact = hit
-                    d.dep_time = ent["dep"]
-                    _mark_time_src(d, exact)  # weakest mark wins across segs
-                    _mark_dep_src(d, exact)
-                    n_board += 1
-                    if not exact:
-                        n_x += 1
+                    if not d.dep_time:
+                        d.dep_time = ent["dep"]
+                        _mark_time_src(d, exact)  # weakest mark wins across segs
+                        _mark_dep_src(d, exact)
+                        n_board += 1
+                        if not exact:
+                            n_x += 1
+                    # v0.33: transfer info regardless of which source gave
+                    # the dep -- the board row deliberately overrides an
+                    # amadeus-only stop_arr: same flight, but it also
+                    # carries the layover city name (board wins on city)
+                    if ent.get("arr") and ent.get("to"):
+                        d.stop_kind = "transfer"
+                        d.stop_city = ent["to"]
+                        d.stop_arr = ent["arr"]
             if not d.arr_time and segs:
                 hit = board_lookup_x(bdb, segs[-1], d.date, "", tc)
                 if hit and hit[0].get("arr"):
@@ -429,6 +445,14 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                     _mark_time_src(d, exact)
                     if not exact:
                         n_x += 1
+                # v0.33: through-flight stop info (dep-only rows store the
+                # stop city + stop arrival from nextschtime). Hop-off rows
+                # (via city == this deal's destination) are suppressed:
+                # the traveller lands there, "still flying on" copy lies.
+                if ent.get("via") and not d.stop_kind and ent["via"] != tc:
+                    d.stop_kind = "via"
+                    d.stop_city = ent["via"]
+                    d.stop_arr = ent.get("via_arr") or ""
         if not (d.flight_no or "").strip() and not d.dep_time:
             # intl calendar deals carry price+date only: give them the
             # board's known HGH->city departures for that dow as reference

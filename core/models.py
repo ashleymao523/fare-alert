@@ -19,6 +19,9 @@ class FlightDeal:
     arr_src: str = ""         # v0.22 按字段来源: arr 时刻来源
     ref_offset: int = 0       # nearby-ref: 距参考价日期的天数(0=非参考价)
     alt_times: list = field(default_factory=list)  # v0.26 无号deal参考班次 [{no,dep,exact}]
+    stop_kind: str = ""       # v0.33 中转/经停透明化: ""=无 | transfer=中转(联程首段) | via=经停
+    stop_city: str = ""       # 中转城市(首段 to)或经停城市(ent.via)
+    stop_arr: str = ""        # 到达中转/经停城市的时刻(首段 arr 或 via_arr)
 
     @property
     def airline_code(self):
