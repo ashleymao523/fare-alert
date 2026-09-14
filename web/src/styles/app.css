@@ -443,6 +443,8 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 .wk2-hl-row b { font-weight: 600; }
 .wk2-hl-nums { color: var(--muted); }
 .wk2-hl-note { font-size: var(--fs-sm); }
+.wk2-push-prev { border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: var(--sp-md); margin-top: var(--sp-md); background: var(--card2); }
+.wk2-push-cap { font-size: var(--fs-sm); color: var(--muted); margin-bottom: var(--sp-sm); }
 
 /* 推送设置 */
 .push-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--sp-md); margin: var(--sp-md) 0; }

@@ -1016,7 +1016,7 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
     try:  # M4: daily KPI archive + optional weekly digest push
         from core.history import append_history
         from core.weekly import (build_weekly, mark_failed, mark_pushed,
-                                 should_push)
+                                 push_text, should_push)
         hist_path = os.path.join(DATA_DIR, "history.json")
         append_history(snapshot, hist_path)
         # v0.55: day-over-day window-min drop watch. A sharp drop (both
@@ -1062,7 +1062,7 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 report = build_weekly(hist_path)
                 if report.get("ok"):
                     results = push_all(cfg, log, "📈 FareAlert 价格周报",
-                                       report["text"], url="")
+                                       push_text(report), url="")
                     failed = [x for x in results if ":ERR" in x]
                     if len(failed) == len(results):
                         # every channel failed: retry in 6h, no 45min storm

@@ -27,6 +27,7 @@ export default function WeeklyView() {
   const [err, setErr] = useState("");
   const [pushMsg, setPushMsg] = useState("");
   const [pushing, setPushing] = useState(false);
+  const [showPush, setShowPush] = useState(false);
   const load = () => fetchWeekly()
     .then((r) => { setRep(r); setErr(""); })
     .catch((e) => setErr(String(e.message || e)));
@@ -58,12 +59,21 @@ export default function WeeklyView() {
         <div class="wk2-text">{rep.text || ""}</div>
         <div class="row-btns">
           <button class="btn" onClick={load}>刷新</button>
+          <button class="btn" onClick={() => setShowPush(!showPush)}>
+            {showPush ? "收起推送预览" : "预览推送正文"}
+          </button>
           <button class="btn primary" disabled={!hasCh || pushing} onClick={doPush}
             title={hasCh ? "" : "请先在「推送」页配置 Bark 或 ServerChan"}>
             {pushing ? "推送中…" : "立即推送周报"}
           </button>
           {pushMsg ? <span class="muted push-msg">{pushMsg}</span> : null}
         </div>
+        {showPush ? (
+          <div class="wk2-push-prev">
+            <div class="wk2-push-cap">📱 手机实际收到的推送正文</div>
+            <div class="wk2-text">{rep.push_text || rep.text || ""}</div>
+          </div>
+        ) : null}
       </div>
       {hl ? (
         <div class="card wk2-card">

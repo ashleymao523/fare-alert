@@ -11,7 +11,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from core.history import append_history, load_history
 from core.weekly import (PUSH_INTERVAL, build_weekly, mark_failed,
-                        mark_pushed, should_push, week_highlights)
+                        mark_pushed, push_text, should_push, week_highlights)
 
 
 def _snap(cheapest_total, days_below=0):
@@ -161,15 +161,17 @@ class TestWeekHighlights(unittest.TestCase):
                 "days_below": days_below, "best_date": "2026-10-01",
                 "n_deals": 30}
 
-    def _path(self, prev, week, days_below=0):
+    @staticmethod
+    def _path(prev, week, days_below=0):
         path = os.path.join(os.path.dirname(__file__), "_wkhl_test.json")
         days = {}
         for i, v in enumerate(prev):
             day = "2026-08-{:02d}".format(10 + i)
-            days[day] = {"routes": {"r1": self._m(v)}}
+            days[day] = {"routes": {"r1": TestWeekHighlights._m(v)}}
         for i, v in enumerate(week):
             day = "2026-09-{:02d}".format(1 + i)
-            days[day] = {"routes": {"r1": self._m(v, days_below=days_below)}}
+            days[day] = {"routes": {
+                "r1": TestWeekHighlights._m(v, days_below=days_below)}}
         with open(path, "w", encoding="utf-8") as f:
             json.dump({"days": days}, f, ensure_ascii=False)
         return path
@@ -220,6 +222,45 @@ class TestWeekHighlights(unittest.TestCase):
         self.assertEqual(hl["sharp_drops"], [])
         self.assertEqual(hl["below_threshold"], [])
         self.assertIn("平稳", hl["text"])
+
+
+class TestPushText(unittest.TestCase):
+    """v0.58: the pushed body leads with the highlights line."""
+
+    def test_highlights_line_under_head(self):
+        rep = {"text": "📊 价格周报（09-01~09-07）\n杭州→重庆：本周最低 ¥440。",
+               "highlights": {"text": "⭐ 本周值得关注：最大降幅 杭州→重庆。"}}
+        out = push_text(rep)
+        lines = out.split("\n")
+        self.assertTrue(lines[0].startswith("📊"))
+        self.assertEqual(lines[1], "⭐ 本周值得关注：最大降幅 杭州→重庆。")
+        self.assertIn("杭州→重庆：本周最低", out)
+
+    def test_calm_week_still_announced(self):
+        rep = {"text": "📊 价格周报（09-01~09-07）\n杭州→重庆：本周最低 ¥440。",
+               "highlights": {"text": "本周价格平稳：无破阈值路线、无骤降。"}}
+        out = push_text(rep)
+        self.assertIn("本周价格平稳", out.split("\n")[1])
+
+    def test_no_highlights_passthrough(self):
+        rep = {"text": "📊 价格周报\n正文"}
+        self.assertEqual(push_text(rep), "📊 价格周报\n正文")
+
+    def test_no_head_prepends(self):
+        rep = {"text": "暂无历史数据",
+               "highlights": {"text": "本周价格平稳。"}}
+        out = push_text(rep)
+        self.assertTrue(out.startswith("本周价格平稳。"))
+
+    def test_build_weekly_exposes_push_text(self):
+        path = TestWeekHighlights._path(
+            prev=[650] * 7, week=[520, 380, 500, 490, 480, 470, 460])
+        try:
+            rep = build_weekly(path)
+            self.assertIn("本周值得关注", rep["push_text"])
+            self.assertIn("价格周报", rep["push_text"])
+        finally:
+            os.remove(path)
 
 
 if __name__ == "__main__":

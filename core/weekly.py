@@ -90,6 +90,7 @@ def build_weekly(path, today=None):
     }
     doc["highlights"] = week_highlights(history)
     doc["text"] = _summary_text(doc)
+    doc["push_text"] = push_text(doc)
     return doc
 
 
@@ -220,6 +221,23 @@ def _highlights_text(biggest, sharps, below, pct, abs_yuan):
     if sharps:
         parts.append("本周 {} 次骤降".format(len(sharps)))
     return "⭐ 本周值得关注：" + "；".join(parts) + "。"
+
+
+def push_text(report):
+    """v0.58: the exact body a weekly push sends. The highlights line
+    rides right under the head so the phone digest leads with what is
+    worth watching; a calm week still gets its reassurance line.
+    build_weekly.text stays the UI digest - this is the wire format."""
+    body = (report or {}).get("text") or ""
+    hl = (report or {}).get("highlights") or {}
+    line = (hl.get("text") or "").strip()
+    if not line or line in body:
+        return body
+    lines = body.split("\n")
+    if lines and lines[0].startswith("📊"):
+        head, rest = lines[0], "\n".join(lines[1:])
+        return head + "\n" + line + ("\n" + rest if rest else "")
+    return line + "\n" + body
 
 
 def _summary_text(doc):

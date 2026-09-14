@@ -669,7 +669,7 @@ def api_weekly_report():
 @app.post("/api/weekly-push")
 def api_weekly_push():
     """M4: send the current weekly digest now (also resets the 7d timer)."""
-    from core.weekly import build_weekly, mark_failed, mark_pushed
+    from core.weekly import build_weekly, mark_failed, mark_pushed, push_text
     cfg = load_config(CONFIG_PATH)
     report = build_weekly(os.path.join(DATA_DIR, "history.json"))
     if not report.get("ok"):
@@ -678,7 +678,7 @@ def api_weekly_push():
         return jsonify({"ok": False,
                         "error": "未配置推送渠道:请先在「提醒推送」页填写 Bark Key 或 ServerChan SendKey"}), 400
     results = push_all(cfg, _log, "📈 FareAlert 价格周报",
-                       report["text"], url="")
+                       push_text(report), url="")
     failed = [x for x in results if ":ERR" in x]
     wk_path = os.path.join(DATA_DIR, "weekly_push.json")
     if len(failed) == len(results):

@@ -378,6 +378,13 @@ checks["v0.57 weekly highlights"] = (
     and ("sharp_drops" in _weekly_view_src)
     and ("本周值得关注" in _dist_js))
 
+checks["v0.58 weekly push_text wiring"] = (
+    ("def push_text" in _weekly_src)
+    and ("push_text(report)" in _main_src)
+    and ("push_text(report)" in _webui_src)
+    and ("推送正文" in _weekly_view_src)
+    and ("推送正文" in _dist_js))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:
