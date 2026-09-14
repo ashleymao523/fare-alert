@@ -146,6 +146,9 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 .k-label { font-size: var(--fs-sm); color: var(--muted); }
 .k-value { font-size: var(--fs-kpi2); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; margin: var(--sp-xs) 0; }
 .k-sub { font-size: var(--fs-sm); color: var(--muted); }
+.d-delta { font-weight: 700; font-variant-numeric: tabular-nums; }
+.d-delta.down { color: var(--green-d); }
+.d-delta.up { color: var(--amber-d); }
 .kpi.good .k-value { color: var(--green); }
 .kpi.warn .k-value { color: var(--amber); }
 

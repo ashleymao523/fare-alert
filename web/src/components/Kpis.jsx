@@ -5,16 +5,22 @@ function Kpi({ it }) {
   const props = it.url
     ? { href: it.url, target: "_blank", rel: "noopener", title: "点击直达购票/查票页" }
     : {};
+  const d = it.delta;
+  const dchip = (d && typeof d.delta === "number") ? (
+    <span class={"d-delta " + (d.delta < 0 ? "down" : "up")}>
+      {"较昨日 " + (d.delta < 0 ? "▼" : "▲") + " ¥" + Math.abs(Math.round(d.delta)) + " (" + d.pct + "%)"}
+    </span>
+  ) : null;
   return (
     <Tag class={"kpi" + (it.cls ? " " + it.cls : "")} {...props}>
       <div class="k-label">{it.label}</div>
       <div class="k-value">{it.value}</div>
-      <div class="k-sub">{it.sub}</div>
+      <div class="k-sub">{dchip} {it.sub}</div>
     </Tag>
   );
 }
 
-export default function Kpis({ route }) {
+export default function Kpis({ route, drop }) {
   if (!route || !route.deals || !route.deals.length) {
     return (
       <div class="kpis">
@@ -29,13 +35,18 @@ export default function Kpis({ route }) {
   const f = cheapestFlight(route);
   const isRT = !!(route.trip_type === "roundtrip" && route.combined);
   const tr = trainBest(route);
+  // v0.55: day-over-day window-min change from the KPI archive; the
+  // chip makes "is today cheaper than yesterday" glanceable and a
+  // sharp drop has already gone through the push pipeline.
+  const dlt = drop && typeof drop.delta === "number" ? drop : null;
   const items = [{
     label: isRT ? "往返合计最低" : "最低机票总价",
     value: fmtMoney(isRT ? route.combined.total : f.total_price),
-    sub: isRT
+    sub: (isRT
       ? "去 " + fmtMD(route.combined.out_date) + " · 返 " + fmtMD(route.combined.ret_date) + " · 最优组合(去+返)"
       : f.date + " " + weekday(f.date) + " · " + (f.flight_no || f.airline) +
-        (f.source === "amadeus-fill" ? " · Amadeus补" : ""),
+        (f.source === "amadeus-fill" ? " · Amadeus补" : "")),
+    delta: dlt,
     cls: (isRT ? route.combined.total : f.total_price) < route.threshold_total ? "good" : "",
     url: isRT ? (route.combined.url || f.url) : f.url
   }, {

@@ -216,6 +216,9 @@ def _validate_config(body, current):
     al["top_n"] = min(10, max(1, int(al.get("top_n", 5))))
     al["realert_drop"] = max(0.0, float(al.get("realert_drop", 5)))
     al["cooldown_hours"] = max(0.0, float(al.get("cooldown_hours", 6)))
+    # v0.55: sharp-drop alerting gates (both must clear to fire)
+    al["drop_pct"] = min(90.0, max(1.0, float(al.get("drop_pct", 15))))
+    al["drop_abs"] = min(5000.0, max(0.0, float(al.get("drop_abs", 50))))
     cfg["alert"] = al
 
     cwt = cfg.get("cabin_watch") or {}
@@ -555,6 +558,19 @@ def api_history():
     """M4: daily KPI archive (price trend source for the weekly tab)."""
     from core.history import load_history
     return jsonify({"history": load_history(os.path.join(DATA_DIR, "history.json"))})
+
+
+@app.get("/api/drops")
+def api_drops():
+    """v0.55: day-over-day window-min drops (latest two archived days).
+    Feeds the dashboard delta chips; sharp ones already went through
+    the push pipeline in main.run_once."""
+    from core.history import day_drops, load_history
+    al = load_config(CONFIG_PATH).get("alert") or {}
+    drops = day_drops(load_history(os.path.join(DATA_DIR, "history.json")),
+                      pct=float(al.get("drop_pct") or 15.0),
+                      abs_yuan=float(al.get("drop_abs") or 50.0))
+    return jsonify({"ok": True, "drops": drops})
 
 
 @app.get("/api/amadeus-usage")

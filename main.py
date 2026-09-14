@@ -1019,6 +1019,40 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                                  should_push)
         hist_path = os.path.join(DATA_DIR, "history.json")
         append_history(snapshot, hist_path)
+        # v0.55: day-over-day window-min drop watch. A sharp drop (both
+        # -drop_pct% and -drop_abs yuan) pushes even while still above
+        # the threshold - the threshold line alone stays silent through
+        # e.g. 600->400 slides. Deduped per route+day so re-runs never
+        # re-alert; state re-saved here because it was persisted before
+        # the history block ran.
+        try:
+            from core.history import day_drops, load_history
+            al = cfg.get("alert") or {}
+            drops = day_drops(load_history(hist_path),
+                              pct=float(al.get("drop_pct") or 15.0),
+                              abs_yuan=float(al.get("drop_abs") or 50.0))
+            st_drop = state.setdefault("_drop", {})
+            fired = False
+            for d0 in drops:
+                if not d0["sharp"]:
+                    continue
+                key = d0["route_id"] + "@" + d0["date"]
+                if st_drop.get(key):
+                    continue
+                if push_enabled:
+                    push_all(cfg, log,
+                             "骤降提醒 {fc}到{tc}".format(
+                                 fc=d0["from_city"], tc=d0["to_city"]),
+                             "窗口最低 ¥{t} 较昨日 {p}% (¥{d})".format(
+                                 t=int(d0["today"]), p=d0["pct"],
+                                 d=int(d0["delta"])),
+                             route_id=d0["route_id"])
+                st_drop[key] = True
+                fired = True
+            if fired:
+                save_state(os.path.join(DATA_DIR, "state.json"), state)
+        except Exception:
+            log.warning("drop watch failed", exc_info=True)
         wk_path = os.path.join(DATA_DIR, "weekly_push.json")
         if push_enabled and should_push(cfg, wk_path):
             if not has_channel(cfg):

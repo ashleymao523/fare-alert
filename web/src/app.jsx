@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { fetchSnapshot, fetchCityPhoto, fetchConfig } from "./lib/api.js";
+import { fetchSnapshot, fetchCityPhoto, fetchConfig, fetchDrops } from "./lib/api.js";
 import Header from "./components/Header.jsx";
 import Hero from "./components/Hero.jsx";
 import Kpis from "./components/Kpis.jsx";
@@ -49,6 +49,7 @@ export function App() {
   const [cfg, setCfg] = useState(null);
   const [cfgMeta, setCfgMeta] = useState({});
   const [cfgErr, setCfgErr] = useState("");
+  const [drops, setDrops] = useState([]);
 
   useEffect(() => {
     fetchSnapshot()
@@ -57,6 +58,9 @@ export function App() {
     fetchConfig()
       .then((c) => { setCfg(c.config); setCfgMeta(c.sources || {}); })
       .catch((e) => setCfgErr("配置加载失败: " + (e.message || e)));
+    fetchDrops()
+      .then((d) => setDrops(d.drops || []))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -129,7 +133,7 @@ export function App() {
         {route && tab === "dash" ? (
           <div>
             <Hero route={route} photos={photos} />
-            <Kpis route={route} />
+            <Kpis route={route} drop={drops.find((d) => d.route_id === route.id)} />
             <Verdict route={route} />
             <DestIntel route={route} />
             <CalendarView

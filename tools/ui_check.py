@@ -354,6 +354,15 @@ checks["v0.54 board explorer ui"] = (("班期查询" in _sources_src)
     and ("searchBoard" in _sources_src)
     and ("dow-mini" in _sources_src)
     and ("班期查询" in _dist_js))
+_kpis_src = open(os.path.join("web", "src", "components",
+                              "Kpis.jsx"), encoding="utf-8").read()
+checks["v0.55 drop watch core"] = (("day_drops" in _hist_src)
+    and ("drop watch failed" in _main_src)
+    and ("drop_pct" in _webui_src))
+checks["v0.55 drops api+ui"] = (("/api/drops" in _webui_src)
+    and ("fetchDrops" in _app_jsx_v2)
+    and ("d-delta" in _kpis_src)
+    and ("较昨日" in _dist_js))
 
 bad = 0
 for k, v in checks.items():

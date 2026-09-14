@@ -79,6 +79,38 @@ def coverage_trend(history, days=30):
     return out[-days:] if days else out
 
 
+def day_drops(history, pct=15.0, abs_yuan=50.0):
+    """v0.55: per-route window-min change between the two most recent
+    archived days (pure, CI-testable).
+
+    A drop is "sharp" only when it clears BOTH gates - relative -pct%
+    and absolute -abs_yuan - so a ¥20 dip on a ¥150 ticket never fires
+    and a 16% dip on an ¥80 ticket never fires either. Same-day re-runs
+    are idempotent (append_history overwrites the day)."""
+    days = sorted((history.get("days") or {}).items())
+    if len(days) < 2:
+        return []
+    (d0, r0), (d1, r1) = days[-2], days[-1]
+    out = []
+    for rid, m in (r1.get("routes") or {}).items():
+        pm = (r0.get("routes") or {}).get(rid)
+        if not pm:
+            continue
+        t, p = m.get("cheapest_total"), pm.get("cheapest_total")
+        if not all(isinstance(x, (int, float)) and x > 0 for x in (t, p)):
+            continue
+        delta = round(float(t) - float(p), 1)
+        rel = round((float(t) - float(p)) * 100.0 / float(p), 1)
+        out.append({"route_id": rid, "date": d1, "prev_date": d0,
+                    "from_city": m.get("from_city") or "",
+                    "to_city": m.get("to_city") or "",
+                    "today": round(float(t), 1), "prev": round(float(p), 1),
+                    "delta": delta, "pct": rel,
+                    "sharp": (delta < 0 and -rel >= float(pct)
+                              and -delta >= float(abs_yuan))})
+    return out
+
+
 def append_history(snapshot, path):
     """Archive today's per-route KPIs (same day + route id overwrites)."""
     day = dt.date.today().isoformat()

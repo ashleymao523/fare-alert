@@ -43,6 +43,7 @@ export function searchBoard(params) {
 }
 export function fetchAmaUsage() { return fetch("/api/amadeus-usage").then(j); }
 export function fetchCovTrend() { return fetch("/api/coverage-trend").then(j); }
+export function fetchDrops() { return fetch("/api/drops").then(j); }
 export function fetchHealth() { return fetch("/api/health").then(j); }
 export function fetchLanInfo() { return fetch("/api/lan-info").then(j); }
 
