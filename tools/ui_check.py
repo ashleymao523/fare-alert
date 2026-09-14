@@ -324,12 +324,19 @@ _ver_src = open(os.path.join("core", "version.py"),
 _sources_src = open(os.path.join("web", "src", "components",
                                  "SourcesView.jsx"),
                     encoding="utf-8").read()
-checks["v0.51 version stamp"] = (('CODE_VERSION = "0.51"' in _ver_src)
+checks["v0.51+ version stamp"] = (
+    bool(re.search(r'CODE_VERSION = "\d+\.\d+"', _ver_src))
     and ("code_ver" in _main_src))
 checks["v0.51 stale hot-swap core"] = (("restarted-stale-code" in _revive_src)
     and ("stale_code_running" in _revive_src))
 checks["v0.51 skew warn health+ui"] = (("code_synced" in _webui_src)
     and ("code_synced" in _sources_src))
+checks["v0.52 cabin record-low core"] = (
+    ("record_alert_candidate" in _cabin_src)
+    and ('"record"' in _cabin_src))
+checks["v0.52 record-low api+ui"] = (("alert_record_low" in _webui_src)
+    and ("alertRecordLow" in _cabin_card_src)
+    and ("新低" in _cabin_card_src))
 
 bad = 0
 for k, v in checks.items():

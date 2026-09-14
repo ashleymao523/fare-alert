@@ -25,6 +25,8 @@ class CabinApiTests(unittest.TestCase):
         # defaults echo even when disabled
         self.assertIn("default_to_city", j["config"])
         self.assertEqual(j["config"]["default_to_city"], "杭州")
+        # v0.52: record-low alerting toggle echoes (default on)
+        self.assertTrue(j["config"]["alert_record_low"])
         # v0.47: destination list + refresh cadence + collected routes
         self.assertEqual(j["config"]["to_cities"], ["杭州"])
         self.assertIn("interval_minutes", j["refresh"])

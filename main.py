@@ -27,6 +27,7 @@ from core.cabin_monitor import (
     record_low as cabin_record_low, route_qualifies as cabin_route_qualifies,
     cabin_leg as cabin_watch_leg,
     evaluate_alert as cabin_evaluate_alert, cooldown_ok as cabin_cooldown_ok,
+    record_alert_candidate as cabin_record_candidate,
     _atomic_write as cabin_atomic_write,
 )
 from core.models import FlightDeal
@@ -892,28 +893,66 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                        if leg["mode"] == "direct" else mirror_cabin)
                 hid = (route_snap["id"] if leg["mode"] == "direct"
                        else route_snap["id"] + "-rev")
+                new_records = []
                 for d in biz:
-                    cabin_record_low(
+                    ob = cabin_record_low(
                         ch, hid,
                         leg["from_city"], leg["to_city"], "business",
                         d.date, total_price(d.bare_price, tax_cfg))
+                    if ob.get("record"):
+                        new_records.append(ob)
                 if biz:
                     cabin_atomic_write(
                         os.path.join(DATA_DIR, "cabin_history.json"), ch)
                 hits = cabin_evaluate_alert(ch, cw)
                 st = state.setdefault("_cabin", {})
                 prev = st.get("last_alert_ts")
-                if hits and push_enabled and cabin_cooldown_ok(prev, cw):
-                    h = hits[0]
-                    push_all(cfg, log,
-                             "公务舱低价 {fn}{fc}到{tc}".format(
-                                 fn="", fc=h["from_city"], tc=h["to_city"]),
-                             "{d} 公务舱 ¥{p} (阈值 ¥{t})".format(
-                                 d=h["date"], p=int(h["price"]),
-                                 t=int(cw.get("threshold_total") or 0)),
-                             route_id=h["route_id"])
+                # v0.52: a fresh all-time low alerts even above the
+                # threshold; alerted_low[hid] makes each successive
+                # record alert exactly once (same price never twice).
+                rec_hit = None
+                if cw.get("alert_record_low", True) and new_records:
+                    rec_hit = cabin_record_candidate(
+                        new_records,
+                        st.setdefault("alerted_low", {}).get(hid))
+                if ((rec_hit or hits) and push_enabled
+                        and cabin_cooldown_ok(prev, cw)):
+                    if rec_hit is not None:
+                        under = (" · 已低于阈值 ¥{t}".format(
+                            t=int(cw.get("threshold_total") or 0))
+                            if rec_hit["price"]
+                            <= (cw.get("threshold_total") or 0) else "")
+                        push_all(cfg, log,
+                                 "公务舱历史新低 {fc}到{tc}".format(
+                                     fc=leg["from_city"],
+                                     tc=leg["to_city"]),
+                                 "{d} 公务舱 ¥{p} 历史新低(前低 ¥{q}){x}".format(
+                                     d=rec_hit["date"],
+                                     p=int(rec_hit["price"]),
+                                     q=int(rec_hit.get("record_prev")
+                                           or rec_hit["price"]), x=under),
+                                 route_id=hid)
+                        st.setdefault("alerted_low", {})[hid] = \
+                            rec_hit["price"]
+                        st["last_hit"] = {
+                            "route_id": hid,
+                            "from_city": leg["from_city"],
+                            "to_city": leg["to_city"],
+                            "date": rec_hit["date"],
+                            "price": rec_hit["price"],
+                            "kind": "record"}
+                    else:
+                        h = hits[0]
+                        push_all(cfg, log,
+                                 "公务舱低价 {fn}{fc}到{tc}".format(
+                                     fn="", fc=h["from_city"],
+                                     tc=h["to_city"]),
+                                 "{d} 公务舱 ¥{p} (阈值 ¥{t})".format(
+                                     d=h["date"], p=int(h["price"]),
+                                     t=int(cw.get("threshold_total") or 0)),
+                                 route_id=h["route_id"])
+                        st["last_hit"] = h
                     st["last_alert_ts"] = dt.datetime.now().isoformat()
-                    st["last_hit"] = h
             except Exception as e:
                 log.warning("cabin monitor failed [{}]: {}".format(
                     route_snap["id"], e))

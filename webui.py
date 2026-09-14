@@ -221,6 +221,8 @@ def _validate_config(body, current):
     if not isinstance(cwt, dict):
         raise ValueError("cabin_watch必须是对象")
     cwt["enabled"] = bool(cwt.get("enabled", False))
+    # v0.52: record-low alerting toggle (default on)
+    cwt["alert_record_low"] = bool(cwt.get("alert_record_low", True))
     cabins = cwt.get("cabins")
     if not (isinstance(cabins, list) and cabins
             and all(c in ("business", "first") for c in cabins)):

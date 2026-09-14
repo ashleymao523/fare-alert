@@ -11,6 +11,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from core.cabin_monitor import (
     HISTORY_CAP, cooldown_ok, default_config, evaluate_alert,
     load_config, record_low, route_qualifies, cabin_leg,
+    record_alert_candidate,
 )
 
 
@@ -30,6 +31,59 @@ class CabinMonitorTests(unittest.TestCase):
         self.assertEqual(len(obs), 1)
         self.assertEqual(obs[0]["price"], 1650)
         self.assertEqual(h["routes"]["cq-hgh"]["lowest"], 1650)
+
+    def test_record_low_tags_fresh_all_time_low(self):
+        # v0.52: first sample is never a record (bootstrap must not
+        # alert); an undercut is, and carries the previous low
+        h = {"routes": {}}
+        e1 = record_low(h, "cq-hgh", "重庆", "杭州", "business",
+                        "2026-10-01", 1800)
+        self.assertFalse(e1.get("record"))
+        e2 = record_low(h, "cq-hgh", "重庆", "杭州", "business",
+                        "2026-10-02", 1650)
+        self.assertTrue(e2["record"])
+        self.assertEqual(e2["record_prev"], 1800)
+        e3 = record_low(h, "cq-hgh", "重庆", "杭州", "business",
+                        "2026-10-03", 1700)
+        self.assertFalse(e3.get("record"))  # above the 1650 low
+
+    def test_record_low_same_day_replacement_recomputes(self):
+        h = {"routes": {}}
+        record_low(h, "cq-hgh", "重庆", "杭州", "business", "2026-10-01", 1800)
+        record_low(h, "cq-hgh", "重庆", "杭州", "business", "2026-10-02", 1600)
+        # re-observing day-01 higher than its old sample: not a record
+        e = record_low(h, "cq-hgh", "重庆", "杭州", "business",
+                       "2026-10-01", 1750)
+        self.assertFalse(e.get("record"))
+        # dropping day-01 under the 1600 low IS a record
+        e2 = record_low(h, "cq-hgh", "重庆", "杭州", "business",
+                        "2026-10-01", 1550)
+        self.assertTrue(e2["record"])
+        self.assertEqual(e2["record_prev"], 1600)
+
+    def test_record_alert_candidate_dedup(self):
+        # never alerted -> any fresh record alerts
+        c = record_alert_candidate([{"date": "2026-10-02", "price": 1650,
+                                     "record": True, "record_prev": 1800}],
+                                   None)
+        self.assertEqual(c["price"], 1650)
+        # already alerted 1650: same price never re-alerts, only lower
+        self.assertIsNone(record_alert_candidate(
+            [{"date": "2026-10-03", "price": 1650, "record": True}],
+            1650))
+        c2 = record_alert_candidate(
+            [{"date": "2026-10-03", "price": 1500, "record": True}],
+            1650)
+        self.assertEqual(c2["price"], 1500)
+        # picks the best of several fresh records
+        c3 = record_alert_candidate(
+            [{"price": 1600, "record": True}, {"price": 1499, "record": True}],
+            1650)
+        self.assertEqual(c3["price"], 1499)
+        # empty / garbage-safe
+        self.assertIsNone(record_alert_candidate([], None))
+        self.assertIsNone(record_alert_candidate(
+            [{"price": "n/a", "record": True}], None))
 
     def test_record_low_ring_cap(self):
         h = {"routes": {}}

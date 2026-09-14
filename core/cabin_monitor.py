@@ -18,6 +18,10 @@ def default_config():
         "threshold_total": 1500.0,
         "cooldown_hours": 12.0,
         "watch_from_cities": [],
+        # v0.52: a fresh all-time low alerts even ABOVE the threshold -
+        # "collect + remind on historical lowest business fares" needs
+        # the record event itself, not only a fixed price line.
+        "alert_record_low": True,
     }
 
 
@@ -67,7 +71,10 @@ def load_history(data_dir):
 
 def record_low(history, route_id, from_city, to_city, cabin, date, price_total):
     """Insert one business-cabin observation; ring-cap per route.
-    Same-date same-cabin observations replace (latest wins)."""
+    Same-date same-cabin observations replace (latest wins).
+    Returns the inserted observation, tagged record=True when it
+    undercuts the leg's previous all-time low (first sample is never
+    a record - otherwise bootstrap would alert on everything)."""
     routes = history.setdefault("routes", {})
     r = routes.setdefault(route_id, {
         "from_city": from_city, "to_city": to_city,
@@ -76,17 +83,46 @@ def record_low(history, route_id, from_city, to_city, cabin, date, price_total):
     r["from_city"] = from_city or r.get("from_city", "")
     r["to_city"] = to_city or r.get("to_city", "")
     obs = r.setdefault("obs", [])
+    lows = [o["price"] for o in obs
+            if isinstance(o.get("price"), (int, float))]
+    prior = min(lows) if lows else None
     obs[:] = [o for o in obs
               if not (o.get("date") == date and o.get("cabin") == cabin)]
-    obs.append({"date": date, "cabin": cabin, "price": price_total,
-                "ts": datetime.now().strftime("%Y-%m-%dT%H:%M")})
+    entry = {"date": date, "cabin": cabin, "price": price_total,
+             "ts": datetime.now().strftime("%Y-%m-%dT%H:%M")}
+    if (prior is not None and isinstance(price_total, (int, float))
+            and price_total < prior):
+        entry["record"] = True       # fresh all-time low for this leg
+        entry["record_prev"] = prior
+    obs.append(entry)
     obs.sort(key=lambda o: o.get("date") or "")
     if len(obs) > HISTORY_CAP:
         del obs[:len(obs) - HISTORY_CAP]
     lows = [o["price"] for o in obs
             if isinstance(o.get("price"), (int, float))]
     r["lowest"] = min(lows) if lows else None
-    return r
+    return entry
+
+
+def record_alert_candidate(new_records, alerted_low):
+    """Best fresh record-low worth alerting, or None.
+
+    new_records: this cycle's record-tagged observations (one leg).
+    alerted_low: lowest price already alerted for the leg (None =
+    never). A candidate must strictly undercut it, so each successive
+    all-time low alerts exactly once and re-observing the same price
+    never re-alerts. Pure."""
+    if not new_records:
+        return None
+    best = min(new_records,
+               key=lambda o: o.get("price")
+               if isinstance(o.get("price"), (int, float)) else 1e18)
+    p = best.get("price")
+    if not isinstance(p, (int, float)):
+        return None
+    if alerted_low is not None and p >= float(alerted_low):
+        return None
+    return best
 
 
 def route_qualifies(route, cw):

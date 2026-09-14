@@ -53,6 +53,16 @@ class CabinWatchConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self._validate(cfg)
 
+    def test_alert_record_low_default_on_and_toggle(self):
+        # v0.52: record-low alerting defaults on; explicit off survives
+        cfg = _base_body()
+        cfg["cabin_watch"] = {"enabled": True, "threshold_total": 1200}
+        out = self._validate(cfg)
+        self.assertTrue(out["cabin_watch"]["alert_record_low"])
+        cfg["cabin_watch"]["alert_record_low"] = False
+        out2 = self._validate(cfg)
+        self.assertFalse(out2["cabin_watch"]["alert_record_low"])
+
     def test_bad_cabins_falls_back(self):
         cfg = _base_body()
         cfg["cabin_watch"] = {"cabins": ["steerage"]}

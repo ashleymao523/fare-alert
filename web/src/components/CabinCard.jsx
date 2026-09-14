@@ -143,6 +143,8 @@ export default function CabinCard({ cfg, setCfg }) {
       cooldown_hours:
         live.cooldown_hours != null ? live.cooldown_hours
           : (cw.cooldown_hours != null ? cw.cooldown_hours : 12),
+      alertRecordLow: live.alert_record_low != null
+        ? !!live.alert_record_low : true,
       cities: (live.watch_from_cities || []).slice(),
     });
   };
@@ -155,6 +157,7 @@ export default function CabinCard({ cfg, setCfg }) {
       default_to_city: draft.toCities[0] || "杭州",
       threshold_total: Number(draft.threshold_total) || 1500,
       cooldown_hours: Number(draft.cooldown_hours) || 0,
+      alert_record_low: !!draft.alertRecordLow,
       watch_from_cities: draft.cities.slice(),
     };
     const next = Object.assign({}, cfg, { cabin_watch: nextCw });
@@ -214,6 +217,11 @@ export default function CabinCard({ cfg, setCfg }) {
               <input type="number" min="0" value={draft.cooldown_hours}
                 onInput={(e) => setD("cooldown_hours", e.target.value)} />
             </label>
+            <label class="field2">
+              <span class="f-label2">历史新低即提醒</span>
+              <input type="checkbox" checked={!!draft.alertRecordLow}
+                onChange={(e) => setD("alertRecordLow", e.target.checked)} />
+            </label>
           </div>
           <div class="field2">
             <span class="f-label2">监控目的地（可多个, 默认杭州）</span>
@@ -237,6 +245,8 @@ export default function CabinCard({ cfg, setCfg }) {
           <div class="cabin-meta">
             目的地 {dests} · 阈值 {fmt(cw.threshold_total)} ·
             冷却 {(cw.cooldown_hours || 0) + "h"}
+            {(cw.alert_record_low != null ? cw.alert_record_low : true)
+              ? " · 新低即提醒" : ""}
             {(cw.watch_from_cities || []).length
               ? " · 出发地 " + cw.watch_from_cities.join("/") : ""}
           </div>
@@ -273,7 +283,10 @@ export default function CabinCard({ cfg, setCfg }) {
                   <tr key={r.id}>
                     <td>{r.from_city}</td>
                     <td>{r.to_city}</td>
-                    <td class="price">{fmt(r.lowest)}</td>
+                    <td class="price">{fmt(r.lowest)}{r.obs && r.obs.length
+                      && r.obs[r.obs.length - 1].record
+                      ? <span class="cw-mirror" title="最近一轮创下历史新低">新低</span>
+                      : null}</td>
                     <td><Spark obs={r.obs} /></td>
                     <td>{r.n}</td>
                     <td>
@@ -296,6 +309,7 @@ export default function CabinCard({ cfg, setCfg }) {
             <div class="cabin-last">
               最近提醒: {data.last_alert.from_city}到{data.last_alert.to_city} ·
               {data.last_alert.date} · {fmt(data.last_alert.price)}
+              {data.last_alert.kind === "record" ? " · 历史新低" : ""}
             </div>
           ) : null}
           {msg && !editing ? <div class="muted push-msg">{msg}</div> : null}
