@@ -63,6 +63,21 @@ bash start_mac.sh
 # 或后台常驻: python3 main.py --loop
 ```
 
+### Docker(推荐用于 NAS / 云主机 / 长期无头部署)
+
+v0.69 起提供容器化部署:镜像内置生产级 WSGI 服务器(waitress),数据与配置全部挂载在宿主机,容器随删随建:
+
+```bash
+# 首次:准备 config.json(可先 cp config.example.json config.json 改好再起)
+docker compose up -d --build
+# 查看面板
+open http://127.0.0.1:8765
+# 升级:git pull 后重建
+docker compose up -d --build
+```
+
+容器内 Web 面板与 Windows 本机同模型:内置监督线程自动拉起/热换 `main.py --loop` 采集进程,无需额外配置 worker 容器。`data/` 持久化班期库/快照/历史,`config.json` 改动重启容器即生效。
+
 ### iPhone 上怎么用?
 
 iPhone 不跑 Python 后端,它的角色是**接收推送 + 查看面板**:
@@ -198,6 +213,7 @@ fare-alert/
 - [x] **v0.66 公务舱出发城市独立巡检**: 用户追加「出发地历史最低公务舱价提醒+目的地默认杭州可改+定时刷新」——v0.42~v0.62 已建齐环形库/多目的地/镜像腿/历史新低提醒/历史低价榜, 但出发城市仍只能从存量路线镜像推导, 想监控一条没有路线的出发地必须手动添加反向经济舱路线; 且公务舱数据只在整轮路线扫描时顺带刷新。① core/cabin_monitor.patrol_legs(cw, routes) 纯函数——watch_from_cities×to_cities 全叉积开独立监控腿, 自动剔除已由路线直采/镜像覆盖的城市对与同城对, 结果排序稳定; ② main.py 采集+告警内核抽取为 _cabin_absorb(路线腿与巡检腿共用同一历史键/冷却/推送语义), 新增 cabin_patrol_once——无 Amadeus 密钥/无巡检腿安全跳过并记录原因, 巡检腿历史键 patrol-<from>-<to>; ③ 定时双轨: run_once 每轮顺带巡检(手动刷新也覆盖), --loop 按 cabin_watch.refresh_minutes(默认30, 钳5-720)在两轮扫描之间独立补跑(睡眠切片≤60s, 无额外线程, state 写入保持单线程); ④ /api/cabin 新增 patrol 块(节奏/腿清单/上轮时间与状态), CabinCard 显示「独立巡检 每 N 分钟」+巡检腿 chips(区别于镜像徽标), 编辑表单开放独立巡检间隔。单测 230→237(叉积去重排序/路线覆盖剔除/禁用与空输入/同城对/refresh 默认与钳制/API patrol 契约), ui_check v0.66×1(核心函数+main 接线+webui 键+源码/dist 独立巡检断言), 版本 0.66 四处盖章。
 - [x] **v0.67 灰色日期精点补全**: 用户判断「查不到飞行数据源的日期并非没票, 直接按日期精点查询能查到」——侦察实锤两个根因: ① offer 精点补全被 gap_dates[:6] 截断, 洞>6 时排位靠后的日期永远轮不到点查(饿死); ② qunar-intl 促销日历常只回 1-2 条尾部真实价, 头部日期距最近锚点>45 天超出参考价半径, 整段头空白。修复: ① _cached_fill_offers 改为轮转预算制——每轮只点查缓存缺失/过期的洞(≤6 个/轮), 负缓存即轮转游标, 后续洞自动轮入, 全窗口洞最终都会被逐日 flight-offers 精点(需 Amadeus 密钥), 新增 stats 出参(holes/probed/deferred); ② _fill_reference_deals 半径 45→75, 单一尾部锚点即可参考覆盖整个 60 天窗口(仍仅展示、不触发提醒/统计); ③ 数据源页 offer fill 步骤显示「缺N天·本轮点查M·待轮转K」。单测新增轮转跨批覆盖+参考价头部可达(30 文件全绿), ui_check v0.67 断言, 版本 0.67 四处盖章。
 - [x] **v0.68 参考班次落地时间补全**: 用户痛点「航班只显示起飞时间、落地一直 --:--」——侦察实锤 dep_time 已 100% 覆盖, 真缺口是 arr_time(国际线 60/60 全缺, 国内 24~47/60 缺); 班期库 flight_sched_db.json(3711 班)的 dow 条目本就同时含 dep+arr, 但 _ref_deps 只透传 dep 把 arr 丢了。修复: ① sched_board._ref_deps 条目新增 arr 透传; ② promote_alt_time 校验并携带 arr(垃圾值置空); ③ main._attach_alt_times 拆 need_dep/need_arr——缺落地的行从提升的参考班次直接补 arr_time(arr_src=alt-ref, 不覆盖已有值), _flight_dict 序列化 alt_times 携带 arr; ④ DayDetail 参考班次 chip 显示「航班号 起飞→落地」。全程零请求零密钥, Amadeus 密钥接入后仍会升级为精查时刻。单测新增 arr 搭车+落地参考回填(15+55 全绿), ui_check v0.68 断言, 版本 0.68 四处盖章。
+- [x] **v0.69 当日班期表 + 生产级部署**: 用户反馈「还是看不到航班班次的具体起飞时间」+「部署太轻量」。数据侧复核: 快照 240 行 miss_dep=0/miss_arr=0, DOM 零占位符——痛点实质是「只看得到最低价那一班」而非数据缺失。① 新增 /api/day-schedule?from&to&date 零密钥接口: 按城市对+星期列出班期库全部班次(no/dep→arr/exact 徽标, 出发杭州走离港板, 其余城市走到达板反查); ② DayDetail 详情卡内嵌「当日班期表 · N班」chips 条, 无报价日期也展示, 一次点击看全该日每个班次的起飞→落地; ③ webui 主进程从 Flask dev server 升级为 waitress 生产级 WSGI(8 线程, ImportError 优雅回退保持零依赖可启动); ④ Dockerfile+docker-compose.yml: python:3.13-slim, 数据/配置宿主机挂载, HEALTHCHECK 走 /api/health, 容器内监督线程同 Windows 模型自动拉起 worker。单测新增 day-schedule 契约 5 例(缺参 400/坏日期 400/去程含 arr/返程走到达板/未知城市对空而 ok), ui_check v0.69 断言, 版本 0.69 四处盖章。
 
 ## 常见问题
 

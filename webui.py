@@ -824,6 +824,41 @@ def api_board():
                     "total": len(rows[:limit]), "flights": rows[:limit]})
 
 
+@app.get("/api/day-schedule")
+def api_day_schedule():
+    """v0.69: per-date timetable strip - every flight the zero-key
+    schedule library knows for this city pair on that weekday, each
+    with dep->arr and an exact/cross-dow-borrow flag. Directly answers
+    "该日每个班次几点起飞" even when the cheapest deal row itself is a
+    reference price without a flight number."""
+    from core.sched_board import (load_sched_db, city_dep_times,
+                                  city_return_dep_times)
+    from_city = (request.args.get("from") or "").strip()
+    to_city = (request.args.get("to") or "").strip()
+    date = (request.args.get("date") or "").strip()
+    if not (from_city and to_city and date):
+        return jsonify({"ok": False,
+                        "error": "缺少 from/to/date 查询参数"}), 400
+    try:
+        import datetime as _dt
+        _dt.date.fromisoformat(date)
+    except ValueError:
+        return jsonify({"ok": False, "error": "date 需为 YYYY-MM-DD"}), 400
+    db = load_sched_db(DATA_DIR)
+    if from_city == "杭州":
+        rows = city_dep_times(db, to_city, date, limit=12)
+    else:
+        rows = city_return_dep_times(db, from_city, date, limit=12)
+    return jsonify({"ok": True, "date": date,
+                    "from": from_city, "to": to_city,
+                    "covered": bool(rows),
+                    "rows": [{"no": a.get("no"),
+                              "dep": a.get("dep"),
+                              "arr": a.get("arr"),
+                              "exact": bool(a.get("exact"))}
+                             for a in rows]})
+
+
 @app.get("/api/health")
 def api_health():
     """v0.27: one-shot deployment observability.
@@ -951,6 +986,14 @@ def main():
         pass  # supervisor is best-effort; the panel must still boot
     shown = "127.0.0.1" if host == "0.0.0.0" else host
     print("FareAlert Web UI: http://" + shown + ":" + str(port))
+    try:  # v0.69: production WSGI server (threaded, Windows-friendly,
+    # no dev-server restart warnings); graceful fallback keeps a bare
+    # `pip install -r requirements.txt`-less box bootable too
+        from waitress import serve
+        print("serving via waitress (production WSGI)")
+        serve(app, host=host, port=port, threads=8, ident="fare-alert")
+    except ImportError:
+        app.run(host=host, port=port, debug=False, threaded=True)
     app.run(host=host, port=port, debug=False, threaded=True)
 
 

@@ -1,8 +1,9 @@
-data/
+.git
+data
 config.json
-config.json.bak
-__pycache__/
+web/node_modules
+**/__pycache__
 *.pyc
-.git/
-probe_out.txt
-probe_err.txt
+*.bak
+*.bak-*
+docs

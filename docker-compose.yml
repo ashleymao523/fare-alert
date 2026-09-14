@@ -2,20 +2,10 @@ services:
   fare-alert:
     build: .
     container_name: fare-alert
-    restart: unless-stopped
     ports:
       - "8765:8765"
     volumes:
-      - ./data:/app/data        # snapshot/cache/sched-db persist on host
-      - ./config.json:/app/config.json   # edit config on host, restart to apply
-    environment:
-      - FAREALERT_HOST=0.0.0.0
-      - FAREALERT_PORT=8765
-    # mirrors the Dockerfile HEALTHCHECK (compose overrides the image-level
-    # one when present; kept explicit here so the probe stays visible)
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8765/api/snapshot', timeout=8)"]
-      interval: 60s
-      timeout: 10s
-      start_period: 90s
-      retries: 3
+      # state lives on the host: wipe/rebuild the container freely
+      - ./data:/app/data
+      - ./config.json:/app/config.json
+    restart: unless-stopped

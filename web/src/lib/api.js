@@ -43,6 +43,11 @@ export function fetchSchedStats() { return fetch("/api/sched-stats").then(j); }
 export function searchBoard(params) {
   return fetch("/api/board?" + new URLSearchParams(params)).then(j);
 }
+export function fetchDaySchedule(from, to, date) {
+  return fetch("/api/day-schedule?from=" + encodeURIComponent(from)
+    + "&to=" + encodeURIComponent(to)
+    + "&date=" + encodeURIComponent(date)).then(j);
+}
 export function fetchAmaUsage() { return fetch("/api/amadeus-usage").then(j); }
 export function fetchCovTrend() { return fetch("/api/coverage-trend").then(j); }
 export function fetchDrops() { return fetch("/api/drops").then(j); }

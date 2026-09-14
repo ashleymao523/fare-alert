@@ -462,6 +462,16 @@ checks["v0.68 参考落地时间"] = (('str(ent.get("arr")' in _sb_src)
     and ('+ a.arr' in _dd_src)
     and ("arr" in _dist_js and 'a.arr' in _dist_js))
 
+_api_js_src = open(os.path.join("web", "src", "lib", "api.js"),
+                   encoding="utf-8").read()
+checks["v0.69 当日班期表+生产部署"] = (("day-schedule" in _webui_src)
+    and ("fetchDaySchedule" in _api_js_src)
+    and ("当日班期表" in _dd_src)
+    and ("当日班期表" in _dist_js)
+    and ("from waitress import serve" in _webui_src)
+    and os.path.exists("Dockerfile")
+    and os.path.exists("docker-compose.yml"))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

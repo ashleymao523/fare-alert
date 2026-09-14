@@ -1,4 +1,6 @@
+import { useState, useEffect } from "react";
 import { fmtMoney, fmtMD, weekday, trainSeats, trainBest, dealForDate } from "../lib/data.js";
+import { fetchDaySchedule } from "../lib/api.js";
 
 function srcBadge(d) {
   if (d.source === "qunar-intl") return <span class="badge sky">国际特价</span>;
@@ -32,6 +34,36 @@ function timeSrcBadge(label, src) {
 }
 
 export default function DayDetail({ route, date }) {
+  const [sched, setSched] = useState(null);
+  useEffect(() => {
+    // v0.69: per-date timetable strip - every flight the schedule
+    // library knows for this route's weekday, zero extra key needed
+    if (!route || !date) return undefined;
+    let alive = true;
+    setSched(null);
+    fetchDaySchedule(route.from_city || "", route.to_city || "", date)
+      .then((x) => { if (alive && x && x.ok) setSched(x); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [route && route.id, route && route.from_city,
+      route && route.to_city, date]);
+  const schedStrip = sched && sched.rows && sched.rows.length ? (
+    <div class="dd-meta">
+      <span class="ft-alts-label">
+        当日班期表 · {sched.rows.length}班
+      </span>
+      {sched.rows.map((a) => (
+        <span
+          class={"ft-alt" + (a.exact ? "" : " x")}
+          title={a.exact
+            ? "该航班当日星期有班期实录: 起飞→落地"
+            : "同号航班其他班期时刻, 同航季通常一致, 仅供参考"}
+        >
+          {a.no} {a.dep}{a.arr ? "→" + a.arr : ""}
+        </span>
+      ))}
+    </div>
+  ) : null;
   if (!route || !date) return null;
   const d = dealForDate(route, date);
   const tr = trainBest(route);
@@ -39,6 +71,7 @@ export default function DayDetail({ route, date }) {
     return (
       <div class="card">
         <div class="dd-title">{date} {weekday(date)} · 该日无报价</div>
+        {schedStrip}
       </div>
     );
   }
@@ -145,6 +178,7 @@ export default function DayDetail({ route, date }) {
           <div class="ft-code">{route.to_iata || route.to_city}</div>
         </div>
       </div>
+      {schedStrip}
       <div class="dd-meta">
         {isRT
           ? "去程 " + (d.flight_no || d.airline) + " ¥" + Math.round(d.out_total) +

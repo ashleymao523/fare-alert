@@ -1,29 +1,23 @@
-# fare-alert: scheduler + webui in one container (single-user deployment)
-# build:  docker build -t fare-alert .
-# run:    docker compose up -d   (see docker-compose.yml)
-FROM python:3.12-slim
-
-ENV PYTHONUNBUFFERED=1 PYTHONUTF8=1
+# syntax=docker/dockerfile:1
+FROM python:3.13-slim
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    FAREALERT_HOST=0.0.0.0 \
+    FAREALERT_PORT=8765
 
-COPY core/ core/
-COPY tools/ tools/
-COPY webui/ webui/
-COPY main.py webui.py ./
+# mirror arg keeps builds fast behind GFW; override with
+# --build-arg PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} -r requirements.txt
 
-# start.sh keeps scheduler (loop mode) + webui in one process tree
-COPY deploy/start.sh /start.sh
-RUN chmod +x /start.sh
-
-VOLUME /app/data
+# web/dist is committed, so the image needs zero Node tooling; the
+# in-process revive supervisor spawns `main.py --loop` automatically
+# when no worker heartbeat exists (same model as the Windows box)
+COPY . .
 EXPOSE 8765
-
-# v0.32: self-healing deploy - compose/docker restart the container when
-# the panel stops answering; python:slim has no wget, use stdlib urllib
-HEALTHCHECK --interval=60s --timeout=10s --start-period=90s --retries=3 \
-    CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8765/api/snapshot', timeout=8)" || exit 1
-
-CMD ["/start.sh"]
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s \
+  CMD ["python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=8)"]
+CMD ["python", "webui.py"]
