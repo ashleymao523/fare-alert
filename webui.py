@@ -577,15 +577,23 @@ def api_cabin():
     routes the monitor currently collects, so the tab explains itself."""
     from core.cabin_monitor import load_config as cw_load
     from core.cabin_monitor import load_history as ch_load
-    from core.cabin_monitor import route_qualifies as cw_qualifies
+    from core.cabin_monitor import cabin_leg as cw_leg
     cfg = load_config(CONFIG_PATH) if CONFIG_PATH else {}
     cw = cw_load(cfg)
     ch = ch_load(DATA_DIR)
     state = _read_json(os.path.join(DATA_DIR, "state.json"), {})
     last = (state.get("_cabin") or {}) if isinstance(state, dict) else {}
-    qual = [{"from_city": (r.get("from_city") or "").strip(),
-             "to_city": (r.get("to_city") or "").strip()}
-            for r in (cfg.get("routes") or []) if cw_qualifies(r, cw)]
+    # v0.50: cabin_leg also auto-derives MIRROR legs (route from_city
+    # watched -> collect the reverse), so 采集路线 shows the real watch
+    # legs (e.g. 重庆→杭州 from a 杭州→重庆 route) without manual
+    # reverse-route setup.
+    qual = []
+    for r in (cfg.get("routes") or []):
+        leg = cw_leg(r, cw)
+        if leg:
+            qual.append({"from_city": leg["from_city"],
+                         "to_city": leg["to_city"],
+                         "mirror": leg["mode"] == "mirror"})
     interval = int((cfg.get("schedule") or {}).get("interval_minutes", 45)
                    or 45)
     hb = _read_json(os.path.join(DATA_DIR, "worker_heartbeat.json"), {}) or {}

@@ -307,6 +307,16 @@ checks["v0.49 return-leg ref times"] = (("city_return_dep_times" in _sb_src)
 checks["v0.49 reenrich return replay"] = (("raw_ret" in _reenrich_src)
     and ("direction=\"ret\"" in _reenrich_src))
 
+_cabin_card_src = open(os.path.join("web", "src", "components",
+                                    "CabinCard.jsx"),
+                       encoding="utf-8").read()
+checks["v0.50 cabin mirror leg core"] = (("def cabin_leg" in _cabin_src)
+    and ("cabin_watch_leg" in _main_src)
+    and ("-rev" in _main_src))
+checks["v0.50 mirror routes api+ui"] = (("cw_leg" in _webui_src)
+    and ("mirror" in _webui_src)
+    and ("cw-mirror" in _cabin_card_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

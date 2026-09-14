@@ -718,6 +718,14 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   background: var(--accent-soft);
   color: var(--tx-1);
 }
+.cw-mirror {
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: var(--r-sm);
+  background: var(--green-bg);
+  color: var(--green-d);
+  font-size: 10px;
+}
 .cabin-last {
   margin-top: var(--sp-2);
   color: var(--tx-2);

@@ -38,6 +38,30 @@ class CabinApiTests(unittest.TestCase):
         self.assertEqual(r1.status_code, 200)
         self.assertEqual(r0.get_json(), r1.get_json())
 
+    def test_cabin_mirror_qualifying_routes(self):
+        # v0.50: a HGH->CKG route auto-derives the mirrored CKG->HGH
+        # watch leg - qualifying_routes reports the real leg + mirror flag
+        import json as _json
+        import tempfile
+        cfg = {"cabin_watch": {"enabled": True, "to_cities": ["杭州"]},
+               "routes": [{"from_city": "杭州", "to_city": "重庆"},
+                          {"from_city": "成都", "to_city": "杭州"}]}
+        fd, p = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        with open(p, "w", encoding="utf-8") as f:
+            _json.dump(cfg, f, ensure_ascii=False)
+        old = webui.CONFIG_PATH
+        webui.CONFIG_PATH = p
+        try:
+            j = self.client.get("/api/cabin").get_json()
+            self.assertIn({"from_city": "重庆", "to_city": "杭州",
+                           "mirror": True}, j["qualifying_routes"])
+            self.assertIn({"from_city": "成都", "to_city": "杭州",
+                           "mirror": False}, j["qualifying_routes"])
+        finally:
+            webui.CONFIG_PATH = old
+            os.remove(p)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -177,6 +177,8 @@ fare-alert/
 
 - [x] **v0.49 返程起飞时刻对称覆盖**: 去程 alt-ref 提升只服务 outbound, 往返模式切回程(return_deals)依旧 --:--。① sched_board.city_dep_times 泛化为 _ref_deps 共享内核, 新增 city_return_dep_times 直接读到达板 preschtime(=外地→杭州起飞时刻), 零新增请求; ② _attach_alt_times 增加 from_city 返程模式, _enrich_flight_times 增加 direction="ret" 使城市敏感查询(板库/时刻/斜杠回退/无号行)全部改走返程口径(leg_from/leg_to/leg_fi/leg_ti 反转); ③ reenrich 离线回放覆盖 raw_ret 块, TIME_FIELDS 写回+变更检测同步生效。快照当前 4 路线全 oneway(return_deals 为空)属前瞻性覆盖——切往返后返程同样具备时刻提升能力。单测 174→176, acceptance 13/13。
 
+- [x] **v0.50 公务舱监控自动反采(镜像腿)**: "出发地历史最低公务舱价+目的地默认杭州可改+定时刷新"在 v0.42~v0.47 已成型, 但存量路线全是"杭州→外地"方向, to_cities=[杭州] 时一条都不匹配——此前必须手动添加反向路线才会真正采集。① cabin_leg 纯函数: 路线 to_city 被监控→直采本腿, from_city 被监控→自动派生镜像腿(外地→杭州), watch_from_cities 按监控腿自身出发城市过滤; ② 采集块 direction=out 独占(顺带修复往返模式下 ret 调用会采错方向的历史问题), 镜像腿换 IATA 对调后 fetch_cabin_offers(购票链接自动指向正确方向), 镜像行经 cabin_out 独立通道回传——绝不混入经济舱 deals(不污染 cheapest/告警口径); ③ 历史记录键 "<id>-rev" 与经济舱路线 id 不冲突, 提醒文案用监控腿城市("公务舱低价 重庆到杭州"); ④ /api/cabin qualifying_routes 改报真实监控腿+mirror 标记, CabinCard 加"镜像"徽标; ⑤ 实测开启后存量 4 路线自动派生 重庆/郑州/曼谷/成都→杭州 四条镜像采集腿。单测 176→179, acceptance 13/13。
+
 ## 常见问题
 
 - **机票起降时刻从哪来?** 去哪儿低价日历只返回每日最低价+航班号(列表页需签名,按合规原则不破解)。v0.18 起杭州相关线路自动用机场官网公开班期板按「航班号+星期几」沉淀计划时刻(零密钥);v0.19 起目标星期未沉淀时自动借用同号航班其他班期时刻(跨日班期·参考),仅有起飞时落地按大圆估算(~ 前缀);配置 Amadeus 后优先实时刻。车次时刻/历时来自 12306, 原生即有。

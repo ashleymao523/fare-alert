@@ -25,6 +25,7 @@ from core.intl import fetch_cabin_offers, fetch_fill_offers
 from core.cabin_monitor import (
     load_config as cabin_cfg_load, load_history as cabin_history_load,
     record_low as cabin_record_low, route_qualifies as cabin_route_qualifies,
+    cabin_leg as cabin_watch_leg,
     evaluate_alert as cabin_evaluate_alert, cooldown_ok as cabin_cooldown_ok,
     _atomic_write as cabin_atomic_write,
 )
@@ -256,7 +257,7 @@ def _cached_amadeus_fill(session, net, cfg, ama_cfg, fi, ti,
 
 def _fetch_route_flights(session, net, route, date_from, date_to,
                          cfg, ama_cfg, ama_ready, direction="out",
-                         rec=None, route_id=""):
+                         rec=None, route_id="", cabin_out=None):
     """Fetch one leg's calendar. direction 'out'/'ret' swaps the cities."""
     if direction == "ret":
         fc, tc = route.get("to_city", ""), route.get("from_city", "")
@@ -302,12 +303,24 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
     # v0.43: business-cabin offers BEFORE the gap-fill early-return so a
     # complete economy calendar never starves the cabin monitor (v0.42
     # bug: "if not gaps: return" skipped cabin fetch on hole-free days).
-    # Same Amadeus key; silently skipped when the watch is off or the
-    # route does not qualify.
+    # v0.50: cabin_leg auto-derives the watch leg - direct (to_city
+    # watched) or MIRROR (from_city watched -> collect the reverse leg
+    # by swapping the IATA pair, so HGH->CKG routes feed the CKG->HGH
+    # business watch with zero manual reverse routes). Mirrored rows
+    # must NOT join deals (wrong direction for this calendar); they
+    # travel via the cabin_out list. Outbound call only - the roundtrip
+    # ret call already carries the same watch leg through the out leg.
     cw = cabin_cfg_load(cfg)
-    if cw.get("enabled") and cabin_route_qualifies(route, cw):
-        cfi = (fi or "").strip().upper() or city_iata(fc)
-        cti = (ti or "").strip().upper() or city_iata(tc)
+    leg = cabin_watch_leg(route, cw) if direction != "ret" else None
+    if leg and leg["mode"] == "mirror" and cabin_out is None:
+        leg = None  # mirror rows have no channel back -> skip the fetch
+    if leg:
+        if leg["mode"] == "mirror":
+            cfi = (ti or "").strip().upper() or city_iata(tc)
+            cti = (fi or "").strip().upper() or city_iata(fc)
+        else:
+            cfi = (fi or "").strip().upper() or city_iata(fc)
+            cti = (ti or "").strip().upper() or city_iata(tc)
         if cfi and cti:
             try:
                 t0c = time.time()
@@ -316,7 +329,10 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
                     cfi, cti, date_from, date_to,
                     cabin=(cw.get("cabins") or ["business"])[0],
                     data_dir=DATA_DIR)
-                deals = deals + biz
+                if leg["mode"] == "mirror" and cabin_out is not None:
+                    cabin_out.extend(biz)
+                else:
+                    deals = deals + biz
                 if rec:
                     rec.step("amadeus-cabin", route_id, "cabin offers",
                              "ok", (time.time() - t0c) * 1000,
@@ -725,7 +741,7 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
             "flight_source_status": "ok",
         }
 
-        deals, return_deals = [], []
+        deals, return_deals, mirror_cabin = [], [], []
         if not use_leg_flight:
             route_snap["flight_source_status"] = "disabled"
             rec.step(flight_key, route_snap["id"], "fetch calendar", "disabled", 0)
@@ -735,7 +751,8 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
             try:
                 deals = _fetch_route_flights(session, net, route, date_from,
                                              date_to, cfg, ama_cfg, ama_ready, "out",
-                                             rec, route_snap["id"])
+                                             rec, route_snap["id"],
+                                             cabin_out=mirror_cabin)
                 deals = _enrich_flight_times(session, net, route, deals, cfg,
                                              ama_cfg, ama_ready, date_from, date_to,
                                              rec, route_snap["id"])
@@ -859,18 +876,25 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
         # v0.42: business-cabin low-fare collection + threshold alert.
         # Cabin-tagged deals (source rows carrying cabin='business') feed
         # the ring history; hits re-use the push guard (key configured).
+        # v0.50: mirror legs record under "<id>-rev" with the watch
+        # leg's own cities, so CKG->HGH history never collides with the
+        # HGH->CKG economy route id and alerts read the right direction.
         cw = cabin_cfg_load(cfg)
-        if cabin_route_qualifies(route, cw):
+        leg = cabin_watch_leg(route, cw)
+        if leg:
             try:
                 ch = cabin_history_load(DATA_DIR)
                 tax_cfg = cfg.get("tax", {})
-                biz = [d for d in deals if (d.cabin or "") == "business"
-                       and d.source not in NON_REAL_SOURCES]
+                biz = ([d for d in deals
+                        if (d.cabin or "") == "business"
+                        and d.source not in NON_REAL_SOURCES]
+                       if leg["mode"] == "direct" else mirror_cabin)
+                hid = (route_snap["id"] if leg["mode"] == "direct"
+                       else route_snap["id"] + "-rev")
                 for d in biz:
                     cabin_record_low(
-                        ch, route_snap["id"],
-                        route.get("from_city", ""),
-                        route.get("to_city", ""), "business",
+                        ch, hid,
+                        leg["from_city"], leg["to_city"], "business",
                         d.date, total_price(d.bare_price, tax_cfg))
                 if biz:
                     cabin_atomic_write(

@@ -110,6 +110,39 @@ def route_qualifies(route, cw):
     return True
 
 
+def cabin_leg(route, cw):
+    """v0.50: the business-watch leg a configured route feeds, if any.
+
+    Direct: the route's to_city is watched -> collect the route itself.
+    Mirror: the route's from_city is watched (and to_city is not) ->
+    collect the reverse leg, so a HGH->CKG route also feeds the
+    CKG->HGH business watch without manually adding reverse routes.
+    watch_from_cities narrows by the WATCH leg's own departure city
+    (mirror: the route's to_city). Returns None when the watch is off
+    or neither end matches. Pure."""
+    if not cw.get("enabled"):
+        return None
+    want = {str(c).strip() for c in (cw.get("to_cities") or [])
+            if str(c).strip()}
+    if not want:
+        legacy = (cw.get("default_to_city") or "").strip()
+        want = {legacy} if legacy else set()
+    fc = (route.get("from_city") or "").strip()
+    tc = (route.get("to_city") or "").strip()
+    leg = None
+    if tc and tc in want and fc:
+        leg = {"mode": "direct", "from_city": fc, "to_city": tc}
+    elif fc and fc in want and tc:
+        leg = {"mode": "mirror", "from_city": tc, "to_city": fc}
+    if leg is None:
+        return None
+    watch_from = {str(c).strip() for c in (cw.get("watch_from_cities") or [])
+                  if str(c).strip()}
+    if watch_from and leg["from_city"] not in watch_from:
+        return None
+    return leg
+
+
 def evaluate_alert(history, cw, now=None):
     """Scan recorded business lows for threshold hits.
     Returns list of dicts for the notify layer (title/body/meta)."""

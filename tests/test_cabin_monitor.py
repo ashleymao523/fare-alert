@@ -10,7 +10,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from core.cabin_monitor import (
     HISTORY_CAP, cooldown_ok, default_config, evaluate_alert,
-    load_config, record_low, route_qualifies,
+    load_config, record_low, route_qualifies, cabin_leg,
 )
 
 
@@ -79,6 +79,36 @@ class CabinMonitorTests(unittest.TestCase):
             {"from_city": "重庆", "to_city": "宁波"}, cw))
         self.assertFalse(route_qualifies(
             {"from_city": "杭州", "to_city": "重庆"}, cw))
+
+    def test_cabin_leg_direct_and_mirror(self):
+        # v0.50: a route whose to_city is watched feeds itself (direct)
+        cw = load_config({"cabin_watch": {"enabled": True}})
+        leg = cabin_leg({"from_city": "重庆", "to_city": "杭州"}, cw)
+        self.assertEqual(leg, {"mode": "direct", "from_city": "重庆",
+                               "to_city": "杭州"})
+        # ... while a HGH->CKG route auto-derives the mirrored CKG->HGH
+        leg2 = cabin_leg({"from_city": "杭州", "to_city": "重庆"}, cw)
+        self.assertEqual(leg2, {"mode": "mirror", "from_city": "重庆",
+                                "to_city": "杭州"})
+        # neither end watched -> no leg
+        self.assertIsNone(
+            cabin_leg({"from_city": "北京", "to_city": "成都"}, cw))
+        # disabled -> no leg even when matched
+        cw_off = load_config({"cabin_watch": {"enabled": False}})
+        self.assertIsNone(cabin_leg({"from_city": "杭州", "to_city": "重庆"},
+                                    cw_off))
+
+    def test_cabin_leg_mirror_watch_from_narrows_by_leg_departure(self):
+        # watch_from_cities filters by the WATCH leg's departure city:
+        # a mirrored CKG->HGH leg survives only when 重庆 is watched-from
+        cw = load_config({"cabin_watch": {
+            "enabled": True, "watch_from_cities": ["重庆"]}})
+        leg = cabin_leg({"from_city": "杭州", "to_city": "重庆"}, cw)
+        self.assertEqual(leg["mode"], "mirror")
+        cw2 = load_config({"cabin_watch": {
+            "enabled": True, "watch_from_cities": ["成都"]}})
+        self.assertIsNone(
+            cabin_leg({"from_city": "杭州", "to_city": "重庆"}, cw2))
 
     def test_legacy_single_destination_derives_list(self):
         # old configs only carrying default_to_city keep working

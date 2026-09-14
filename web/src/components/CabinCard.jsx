@@ -252,12 +252,15 @@ export default function CabinCard({ cfg, setCfg }) {
             <div class="cw-routes">
               <span class="muted">采集路线</span>
               {(data.qualifying_routes || []).map((r, i) => (
-                <span class="cw-route" key={i}>{r.from_city}→{r.to_city}</span>
+                <span class="cw-route" key={i}>
+                  {r.from_city}→{r.to_city}
+                  {r.mirror ? <span class="cw-mirror" title="由反向路线自动镜像采集">镜像</span> : null}
+                </span>
               ))}
             </div>
           ) : (cw.enabled ? (
             <div class="cw-routes muted">
-              暂无匹配路线——在「路线」页添加飞往 {dests} 的路线后开始采集
+              暂无匹配路线——在「路线」页添加任意方向含 {dests} 的路线即可自动采集(支持反采)
             </div>
           ) : null)}
           {rows.length ? (
