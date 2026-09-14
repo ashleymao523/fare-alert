@@ -72,11 +72,16 @@ export default function DayDetail({ route, date }) {
           href={dayListUrl(route, date)}
           target="_blank"
           rel="noopener"
-          title={a.exact
-            ? "该航班当日星期有班期实录: 起飞→落地 · 点击直达去哪儿当日列表"
-            : "同号航班其他班期时刻, 同航季通常一致, 仅供参考 · 点击直达去哪儿当日列表"}
+          title={(a.exact
+            ? "该航班当日星期有班期实录: 起飞→落地"
+            : "同号航班其他班期时刻, 同航季通常一致, 仅供参考")
+            + ((a.airline || a.craft)
+              ? " · " + [a.airline, a.craft].filter(Boolean).join(" ")
+              : "")
+            + " · 点击直达去哪儿当日列表"}
         >
           {a.no} {a.dep}{a.arr ? "→" + a.arr : ""}
+          {a.craft ? <span class="ft-alt-craft">{a.craft.split("(")[0]}</span> : null}
         </a>
       ))}
     </div>
@@ -159,6 +164,7 @@ export default function DayDetail({ route, date }) {
                   title={a.exact ? "出发机场该航线当日星期实测时刻" : "同一航班其他班期时刻, 同航季通常一致, 仅供参考"}
                 >
                   {a.no} {a.dep}{a.arr ? "→" + a.arr : ""}
+                  {a.craft ? <span class="ft-alt-craft">{a.craft.split("(")[0]}</span> : null}
                 </span>
               ))}
             </div>

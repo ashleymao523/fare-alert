@@ -642,6 +642,8 @@ def _ref_deps(db, origin_city, dest_city, date_iso, limit=4):
         dep = str(ent["dep"])[:5]
         out.append({"no": no, "dep": dep,
                     "arr": str(ent.get("arr") or "")[:5],
+                    "airline": str(ent.get("airline") or "")[:24],
+                    "craft": str(ent.get("craft") or "")[:24],
                     "exact": bool((exact or {}).get("dep"))})
     out.sort(key=lambda x: (not x["exact"], x["dep"]))
     # codeshare rows repeat one physical flight under several numbers:

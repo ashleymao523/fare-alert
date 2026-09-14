@@ -483,6 +483,14 @@ checks["v0.70 班期直达+省%+CI"] = (("dayListUrl" in _dd_src)
     and os.path.exists(_ci_path)
     and ("docker-build" in open(_ci_path, encoding="utf-8").read()))
 
+checks["v0.71 班期航司机型+ghcr发布"] = (("ft-alt-craft" in _dd_src)
+    and ("a.airline" in _dd_src)
+    and ("ft-alt-craft" in _dist_js)
+    and ('"craft": str(ent.get("craft") or "")' in _sb_src)
+    and ('"craft": a.get("craft")' in _webui_src)
+    and ("docker-publish" in open(_ci_path, encoding="utf-8").read())
+    and ("ghcr.io" in open(_ci_path, encoding="utf-8").read()))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

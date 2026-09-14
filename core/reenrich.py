@@ -119,6 +119,8 @@ def reenrich_snapshot(base_dir, dry=False, log=None):
                                 m[k] = [{"no": a.get("no"),
                                          "dep": a.get("dep"),
                                          "arr": a.get("arr"),
+                                         "airline": a.get("airline"),
+                                         "craft": a.get("craft"),
                                          "exact": bool(a.get("exact"))}
                                         for a in (d2.alt_times or [])][:4]
                             else:
@@ -142,6 +144,8 @@ def reenrich_snapshot(base_dir, dry=False, log=None):
                     if k == "alt_times":
                         m[k] = [{"no": a.get("no"), "dep": a.get("dep"),
                                  "arr": a.get("arr"),
+                                 "airline": a.get("airline"),
+                                 "craft": a.get("craft"),
                                  "exact": bool(a.get("exact"))}
                                 for a in (d.alt_times or [])][:4]
                     else:

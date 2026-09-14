@@ -588,6 +588,23 @@ class TestCityDepTimes(unittest.TestCase):
                                       "arr": "junk", "exact": True}])
         self.assertEqual(pick2["arr"], "")
 
+    def test_airline_craft_ride_along(self):
+        # v0.71: board rows already carry airline/craft - they must
+        # flow through _ref_deps so chips can show them keylessly
+        db = {"updated": 1, "flights": {"JD419": {"dows": {"4": {
+            "dep": "08:35", "arr": "12:45", "from": "杭州",
+            "to": "曼谷素万那普机场", "airline": "首都航空",
+            "craft": "A321"}}}}}
+        out = sb.city_dep_times(db, "曼谷", "2026-09-11")
+        self.assertEqual(out[0]["airline"], "首都航空")
+        self.assertEqual(out[0]["craft"], "A321")
+        # legacy dbs without the fields stay blank, never KeyError
+        db2 = {"updated": 1, "flights": {"JD419": {"dows": {"4": {
+            "dep": "08:35", "arr": "", "from": "杭州", "to": "曼谷"}}}}}
+        out2 = sb.city_dep_times(db2, "曼谷", "2026-09-11")
+        self.assertEqual(out2[0]["airline"], "")
+        self.assertEqual(out2[0]["craft"], "")
+
     def test_return_dep_times_mirror(self):
         # v0.49: return legs read CITY->HGH rows (arrive-board
         # preschtime entries); 2026-09-11 is a Friday (dow=4)

@@ -855,6 +855,8 @@ def api_day_schedule():
                     "rows": [{"no": a.get("no"),
                               "dep": a.get("dep"),
                               "arr": a.get("arr"),
+                              "airline": a.get("airline") or "",
+                              "craft": a.get("craft") or "",
                               "exact": bool(a.get("exact"))}
                              for a in rows]})
 

@@ -123,6 +123,8 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "ref_offset": deal.ref_offset if deal.source == "nearby-ref" else 0,
         "alt_times": [{"no": a.get("no"), "dep": a.get("dep"),
                        "arr": a.get("arr"),
+                       "airline": a.get("airline"),
+                       "craft": a.get("craft"),
                        "exact": bool(a.get("exact"))}
                       for a in (deal.alt_times or [])][:4],
         "stop_kind": deal.stop_kind,
