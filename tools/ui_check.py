@@ -253,6 +253,21 @@ checks["v0.42 公务舱API"] = (("/api/cabin" in open("webui.py",
 checks["v0.42 v2产物公务舱卡"] = "公务舱低价监控" in _dist_js
 checks["v0.42 共享号时刻兜底"] = (("_attach_alt_times" in _reenrich_src)
     and ("alt_before" in _reenrich_src))
+_intl_src = open(os.path.join("core", "intl.py"),
+                 encoding="utf-8").read() if os.path.exists(
+    os.path.join("core", "intl.py")) else ""
+_main_src = open("main.py", encoding="utf-8").read()
+checks["v0.43 公务舱精确时刻"] = (("_cabin_offer_times" in _intl_src)
+    and ('time_src="amadeus" if dep else ""' in _intl_src))
+checks["v0.43 采集先于补全早退"] = (('covered = {d.date for d in deals'
+    ' if (d.cabin or "") == ""}' in _main_src)
+    and ("BEFORE the gap-fill early-return" in _main_src))
+checks["v0.43 offer时刻不被降级"] = (("and not d.dep_time" in _main_src)
+    and ("offer-exact times" in _main_src))
+checks["v0.43 监控配置校验"] = ("cabin_watch必须是对象" in open(
+    "webui.py", encoding="utf-8").read())
+checks["v0.43 v2产物监控编辑"] = (("保存监控配置" in _dist_js)
+    and ("监控出发城市" in _dist_js))
 
 bad = 0
 for k, v in checks.items():

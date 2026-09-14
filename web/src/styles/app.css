@@ -447,6 +447,28 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 /* ---- v0.31: routes / reverse / logs (wave-3 migration) ---- */
 
 .btn.sm { padding: var(--sp-xs) var(--sp-md); font-size: var(--fs-sm); }
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+}
+
+.cabin-edit {
+  display: grid;
+  gap: var(--sp-sm);
+  padding: var(--sp-sm) 0 var(--sp-xs);
+}
+
+.cabin-edit textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--sp-xs) var(--sp-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--rad-sm);
+  font: inherit;
+  resize: vertical;
+}
 .btn.danger { color: var(--red); border-color: var(--red-line); }
 .btn.danger:hover { background: var(--red-bg); }
 

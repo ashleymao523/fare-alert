@@ -281,8 +281,36 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
         return deals
     deals = fetch_calendar(session, net, fc, tc, date_from, date_to)
 
+    # v0.43: business-cabin offers BEFORE the gap-fill early-return so a
+    # complete economy calendar never starves the cabin monitor (v0.42
+    # bug: "if not gaps: return" skipped cabin fetch on hole-free days).
+    # Same Amadeus key; silently skipped when the watch is off or the
+    # route does not qualify.
+    cw = cabin_cfg_load(cfg)
+    if cw.get("enabled") and cabin_route_qualifies(route, cw):
+        cfi = (fi or "").strip().upper() or city_iata(fc)
+        cti = (ti or "").strip().upper() or city_iata(tc)
+        if cfi and cti:
+            try:
+                t0c = time.time()
+                biz = fetch_cabin_offers(
+                    session, net, ama_cfg, cfg.get("tax", {}),
+                    cfi, cti, date_from, date_to,
+                    cabin=(cw.get("cabins") or ["business"])[0],
+                    data_dir=DATA_DIR)
+                deals = deals + biz
+                if rec:
+                    rec.step("amadeus-cabin", route_id, "cabin offers",
+                             "ok", (time.time() - t0c) * 1000,
+                             count=len(biz))
+            except Exception as e:
+                if rec:
+                    rec.step("amadeus-cabin", route_id, "cabin offers",
+                             "skip", (time.time() - t0c) * 1000,
+                             error="公务舱采集跳过: {}".format(e))
+
     # ---- gap-fill: qunar calendar holes via Amadeus cheapest-dates ----
-    covered = {d.date for d in deals}
+    covered = {d.date for d in deals if (d.cabin or "") == ""}
     gaps = [d for d in window_dates(date_from, date_to) if d not in covered]
     if not gaps:
         return deals
@@ -313,28 +341,6 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
         if rec:
             rec.step("amadeus-fill", route_id, "fill gaps", "error",
                      (time.time() - t0f) * 1000, error=e)
-    # v0.42: business-cabin offers alongside the economy calendar (needs
-    # the same Amadeus key; skipped silently when the watch is off or
-    # the route does not qualify - the cabin monitor records whatever
-    # lands here during the snapshot phase).
-    cw = cabin_cfg_load(cfg)
-    if cw.get("enabled") and cabin_route_qualifies(route, cw):
-        try:
-            t0c = time.time()
-            biz = fetch_cabin_offers(
-                session, net, ama_cfg, cfg.get("tax", {}),
-                fi2, ti2, date_from, date_to,
-                cabin=(cw.get("cabins") or ["business"])[0],
-                data_dir=DATA_DIR)
-            deals = deals + biz
-            if rec:
-                rec.step("amadeus-cabin", route_id, "cabin offers", "ok",
-                         (time.time() - t0c) * 1000, count=len(biz))
-        except Exception as e:
-            if rec:
-                rec.step("amadeus-cabin", route_id, "cabin offers", "skip",
-                         (time.time() - t0c) * 1000,
-                         error="公务舱采集跳过: {}".format(e))
     return deals
 
 
@@ -400,7 +406,10 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
         if "/" in no:  # connecting itinerary: estimate with layover
             segs = [s.strip().upper() for s in no.split("/") if s.strip()]
             seg_rows = [by_no.get(s) for s in segs]
-            if seg_rows and seg_rows[0] and seg_rows[0].get("dep"):
+            # v0.43: cabin rows already carry exact offer times; never
+            # downgrade them to generic schedule times.
+            if (segs and seg_rows and seg_rows[0] and seg_rows[0].get("dep")
+                    and not d.dep_time):
                 d.dep_time = seg_rows[0]["dep"]
                 d.time_src = "amadeus"
                 d.dep_src = "amadeus"
@@ -408,7 +417,8 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                 if seg_rows[0].get("arr") and not d.stop_kind:
                     d.stop_kind = "transfer"
                     d.stop_arr = seg_rows[0]["arr"]
-            if seg_rows and seg_rows[-1] and seg_rows[-1].get("arr"):
+            if (segs and seg_rows and seg_rows[-1]
+                    and seg_rows[-1].get("arr") and not d.arr_time):
                 d.arr_time = seg_rows[-1]["arr"]
                 d.time_src = "amadeus"
                 d.arr_src = "amadeus"
@@ -449,9 +459,13 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
             continue
         row = by_no.get(no.upper())
         if row:
-            d.dep_time = row.get("dep") or d.dep_time
-            d.arr_time = row.get("arr") or d.arr_time
-            d.duration_text = row.get("dur") or d.duration_text
+            # v0.43: offer-exact times (cabin rows) win over schedules
+            if not d.dep_time:
+                d.dep_time = row.get("dep") or ""
+            if not d.arr_time:
+                d.arr_time = row.get("arr") or ""
+            if not d.duration_text:
+                d.duration_text = row.get("dur") or ""
             if d.dep_time or d.arr_time:
                 d.time_src = "amadeus"
                 d.dep_src = "amadeus" if d.dep_time else d.dep_src

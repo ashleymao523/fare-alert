@@ -155,7 +155,7 @@ export function App() {
               />
             ) : null}
             <Top5 route={route} />
-            <CabinCard />
+            <CabinCard cfg={cfg} setCfg={setCfg} />
             <Trains route={route} />
             <div class="foot">
               v2 · 全部 8 个功能页已迁移 · Preact + Vite ·

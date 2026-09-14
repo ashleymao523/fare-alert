@@ -66,6 +66,31 @@ def google_flights_url(from_iata, to_iata, date):
     return "https://www.google.com/travel/flights?" + q
 
 
+def _cabin_offer_times(off):
+    """v0.43: exact dep/arr clock times from a flight-offers offer.
+
+    itineraries[0].segments carry local departure.at / arrival.at per
+    segment (ISO datetime); first/last segment bound the journey.
+    Returns (flight_no, dep, arr, duration_text, transfer_iata).
+    """
+    it = ((off.get("itineraries") or [{}])[0]) or {}
+    segs = it.get("segments") or []
+    if not segs:
+        return "", "", "", "", ""
+    nos = []
+    for s in segs:
+        nos.append(((s.get("carrierCode") or "")
+                    + str(s.get("number") or "")).strip())
+    dep_at = ((segs[0].get("departure") or {}).get("at")) or ""
+    arr_at = ((segs[-1].get("arrival") or {}).get("at")) or ""
+    dur = (it.get("duration") or "").replace("PT", "") \
+        .replace("H", "h").replace("M", "m")
+    stop = ""
+    if len(segs) > 1:
+        stop = ((segs[-2].get("arrival") or {}).get("iataCode")) or ""
+    return "/".join(nos), dep_at[11:16], arr_at[11:16], dur, stop
+
+
 def fetch_cabin_offers(session, net_cfg, ama_cfg, tax_cfg,
                        from_iata, to_iata, date_from, date_to,
                        cabin="business", data_dir=None, max_days=8):
@@ -112,8 +137,15 @@ def fetch_cabin_offers(session, net_cfg, ama_cfg, tax_cfg,
             if best is None or total < best[0]:
                 best = (total, off)
         if best:
+            fn, dep, arr, dur, stop = _cabin_offer_times(best[1])
             deals.append(FlightDeal(
-                date=d, bare_price=round(best[0], 1), flight_no="",
+                date=d, bare_price=round(best[0], 1), flight_no=fn,
+                dep_time=dep, arr_time=arr, duration_text=dur,
+                time_src="amadeus" if dep else "",
+                dep_src="amadeus" if dep else "",
+                arr_src="amadeus" if arr else "",
+                stop_kind="transfer" if stop else "",
+                stop_city=stop,
                 source="amadeus-cabin", cabin=cabin,
                 url=google_flights_url(from_iata, to_iata, d)))
     deals.sort(key=lambda x: (x.bare_price, x.date))

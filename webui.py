@@ -216,6 +216,34 @@ def _validate_config(body, current):
     al["cooldown_hours"] = max(0.0, float(al.get("cooldown_hours", 6)))
     cfg["alert"] = al
 
+    cwt = cfg.get("cabin_watch") or {}
+    if not isinstance(cwt, dict):
+        raise ValueError("cabin_watch必须是对象")
+    cwt["enabled"] = bool(cwt.get("enabled", False))
+    cabins = cwt.get("cabins")
+    if not (isinstance(cabins, list) and cabins
+            and all(c in ("business", "first") for c in cabins)):
+        cabins = ["business"]
+    cwt["cabins"] = cabins
+    cwt["default_to_city"] = (str(cwt.get("default_to_city")
+                                 or "杭州").strip()) or "杭州"
+    cw_th = cwt.get("threshold_total", 1500)
+    if not isinstance(cw_th, (int, float)) or cw_th <= 0:
+        raise ValueError("公务舱心理价位必须是正数")
+    cwt["threshold_total"] = float(cw_th)
+    cw_cd = cwt.get("cooldown_hours", 12)
+    if not isinstance(cw_cd, (int, float)) or cw_cd < 0:
+        raise ValueError("公务舱冷却小时必须是非负数字")
+    cwt["cooldown_hours"] = float(cw_cd)
+    wfc = cwt.get("watch_from_cities")
+    if wfc is None:
+        wfc = []
+    if not isinstance(wfc, list):
+        raise ValueError("watch_from_cities必须是列表")
+    cwt["watch_from_cities"] = sorted(
+        {str(c).strip() for c in wfc if str(c).strip()})
+    cfg["cabin_watch"] = cwt
+
     w = cfg.get("webui") or {}
     if not isinstance(w, dict):
         raise ValueError("webui必须是对象")
