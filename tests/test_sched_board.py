@@ -572,6 +572,27 @@ class TestCityDepTimes(unittest.TestCase):
         self.assertIsNone(sb.promote_alt_time([{"no": "X", "dep": "8:5"}]))
         self.assertIsNone(sb.promote_alt_time([{"no": "X", "dep": "junk"}]))
 
+    def test_return_dep_times_mirror(self):
+        # v0.49: return legs read CITY->HGH rows (arrive-board
+        # preschtime entries); 2026-09-11 is a Friday (dow=4)
+        db = self._db(
+            ("3U8882", 4, "07:20", "10:05", "重庆", "杭州"),
+            ("GJ8692", 2, "13:00", "15:35", "重庆", "杭州"),
+            ("XX1234", 4, "09:00", "11:00", "重庆", "成都"))
+        out = sb.city_return_dep_times(db, "重庆", "2026-09-11")
+        # exact-first: same-dow row first, cross-dow borrow second,
+        # wrong-destination row excluded
+        self.assertEqual([e["no"] for e in out], ["3U8882", "GJ8692"])
+        self.assertTrue(out[0]["exact"])
+        self.assertFalse(out[1]["exact"])
+        # off-dow date: every row is a cross-dow borrow, earliest first
+        out2 = sb.city_return_dep_times(db, "重庆", "2026-09-15")
+        self.assertEqual(out2[0]["no"], "3U8882")
+        self.assertFalse(out2[0]["exact"])
+        # guards
+        self.assertEqual(sb.city_return_dep_times(db, "", "2026-09-11"), [])
+        self.assertEqual(sb.city_return_dep_times(db, "重庆", "bad"), [])
+
 
 class TestHopOffArrivalAndBackfill(unittest.TestCase):
     """v0.32: through-flight hop-off arrivals + offline cache backfill."""

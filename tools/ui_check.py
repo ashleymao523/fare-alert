@@ -301,6 +301,11 @@ checks["v0.48 alt-ref promote core"] = (("promote_alt_time" in _sb_src)
     and ("promote_alt_time" in _main_src))
 checks["v0.48 v2产物参考班次徽标"] = (("参考班次" in _dist_js)
     and ("alt-ref" in _dist_js))
+checks["v0.49 return-leg ref times"] = (("city_return_dep_times" in _sb_src)
+    and ("direction=\"ret\"" in _main_src)
+    and ("from_city=" in _main_src))
+checks["v0.49 reenrich return replay"] = (("raw_ret" in _reenrich_src)
+    and ("direction=\"ret\"" in _reenrich_src))
 
 bad = 0
 for k, v in checks.items():

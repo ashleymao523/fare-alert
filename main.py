@@ -32,7 +32,8 @@ from core.models import FlightDeal
 from core.notify import has_channel, push_all
 from core.report import write_report
 from core.sched_board import (board_lookup_x, build_route_priors,
-                              city_dep_times, load_sched_db,
+                              city_dep_times, city_return_dep_times,
+                              load_sched_db,
                               prior_minutes_for, promote_alt_time,
                               touches_hangzhou, update_sched_db)
 from core.state import load_state, save_state
@@ -190,7 +191,7 @@ def _fill_reference_deals(deals, date_from, date_to, fc, tc,
     return deals + refs
 
 
-def _attach_alt_times(deals, to_city, db):
+def _attach_alt_times(deals, to_city, db, from_city=None):
     """v0.26.1: reference departures for numberless gap-filled deals.
 
     nearby-ref/interp deals are appended AFTER _enrich_flight_times ran,
@@ -201,14 +202,21 @@ def _attach_alt_times(deals, to_city, db):
     reference departure PROMOTED onto dep_time (dep_src="alt-ref") -
     103 snapshot rows had real reference times parked in alt_times that
     the UI never lifted into the time slot. Outbound only: the board
-    holds HGH departures, return legs have no matching rows."""
+    holds HGH departures, return legs have no matching rows.
+    v0.49: pass from_city=<return origin> to attach RETURN-leg
+    reference departures from the arrive board's preschtime rows
+    (CITY->HGH) - the same zero-key db, still no extra request."""
+    ret_mode = bool(from_city and (from_city or "").strip()
+                    and from_city != "杭州")
     cache = {}
     for d in deals:
         if d.dep_time:
             continue
         if not d.alt_times:
             if d.date not in cache:
-                cache[d.date] = city_dep_times(db, to_city, d.date)
+                cache[d.date] = (city_return_dep_times(db, from_city, d.date)
+                                 if ret_mode
+                                 else city_dep_times(db, to_city, d.date))
             d.alt_times = cache[d.date]
         best = promote_alt_time(d.alt_times)
         if best:
@@ -436,7 +444,7 @@ def _cached_fill_offers(session, net, cfg, ama_cfg, fi, ti,
 
 def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                          ama_ready, date_from, date_to,
-                         rec=None, route_id=""):
+                         rec=None, route_id="", direction="out"):
     """Fill duration estimates (great-circle, labeled) + real dep/arr times
     via Amadeus schedules (best-effort, 24h cached, only when key present)."""
     if not deals:
@@ -460,11 +468,20 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
     fc, tc = route.get("from_city", ""), route.get("to_city", "")
     fi = (route.get("from_iata") or "").strip().upper() or city_iata(fc)
     ti = (route.get("to_iata") or "").strip().upper() or city_iata(tc)
+    # v0.49: return legs fly the physical reverse leg (tc->fc). All
+    # city-scoped lookups below must use the LEG's cities or return
+    # rows would borrow outbound-side times; route-level cities stay
+    # untouched for the duration priors (tc's prior is CITY->HGH, which
+    # is exactly the return leg's direction).
+    if direction == "ret":
+        leg_from, leg_to, leg_fi, leg_ti = tc, fc, ti, fi
+    else:
+        leg_from, leg_to, leg_fi, leg_ti = fc, tc, fi, ti
     by_no = {}
     if ama_ready and fi and ti and any(d.flight_no for d in deals):
         t0 = time.time()
         try:
-            rows = fetch_schedule_times(session, net, ama_cfg, fi, ti,
+            rows = fetch_schedule_times(session, net, ama_cfg, leg_fi, leg_ti,
                                         date_from, date_to, DATA_DIR)
             by_no = {r["n"].upper(): r for r in rows if r.get("n")}
             if rec:
@@ -513,7 +530,7 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                 d.time_src = "amadeus"
                 d.arr_src = "amadeus"
             if segs:
-                hit = board_lookup_x(bdb, segs[0], d.date, fc, "")
+                hit = board_lookup_x(bdb, segs[0], d.date, leg_from, "")
                 if hit and hit[0].get("dep"):
                     ent, exact = hit
                     if not d.dep_time:
@@ -532,7 +549,7 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                         d.stop_city = ent["to"]
                         d.stop_arr = ent["arr"]
             if not d.arr_time and segs:
-                hit = board_lookup_x(bdb, segs[-1], d.date, "", tc)
+                hit = board_lookup_x(bdb, segs[-1], d.date, "", leg_to)
                 if hit and hit[0].get("arr"):
                     ent, exact = hit
                     d.arr_time = ent["arr"]
@@ -542,13 +559,17 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                     if not exact:
                         n_x += 1
             if not d.duration_text:
-                d.duration_text = estimate_duration_text(fi, ti, connecting=True)
+                d.duration_text = estimate_duration_text(leg_fi, leg_ti,
+                                                         connecting=True)
             if not d.dep_time:
                 # v0.48: both segments unboarded (e.g. SC2114/SC2135):
                 # fall back to the day's same-route reference departures
                 # instead of rendering "--:--" for a priced deal.
                 if d.date not in alt_cache:
-                    alt_cache[d.date] = city_dep_times(bdb, tc, d.date)
+                    alt_cache[d.date] = (
+                        city_return_dep_times(bdb, leg_from, d.date)
+                        if direction == "ret"
+                        else city_dep_times(bdb, leg_to, d.date))
                 d.alt_times = alt_cache[d.date]
                 best = promote_alt_time(d.alt_times)
                 if best:
@@ -556,7 +577,7 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                     d.time_src = "alt-ref"
                     d.dep_src = "alt-ref"
             if not d.arr_time and d.dep_time:
-                d.arr_est = estimate_arrival_time(d.dep_time, fi, ti,
+                d.arr_est = estimate_arrival_time(d.dep_time, leg_fi, leg_ti,
                                                   connecting=True)
             continue
         row = by_no.get(no.upper())
@@ -573,7 +594,7 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                 d.dep_src = "amadeus" if d.dep_time else d.dep_src
                 d.arr_src = "amadeus" if d.arr_time else d.arr_src
         if no and not (d.dep_time and d.arr_time):
-            hit = board_lookup_x(bdb, no, d.date, fc, tc)
+            hit = board_lookup_x(bdb, no, d.date, leg_from, leg_to)
             if hit:
                 ent, exact = hit
                 got = False
@@ -600,9 +621,14 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                     d.stop_arr = ent.get("via_arr") or ""
         if not (d.flight_no or "").strip() and not d.dep_time:
             # intl calendar deals carry price+date only: give them the
-            # board's known HGH->city departures for that dow as reference
+            # board's known same-leg departures for that dow as reference
+            # (outbound: HGH->city leave board; return: city->HGH arrive
+            # board preschtime, v0.49)
             if d.date not in alt_cache:
-                alt_cache[d.date] = city_dep_times(bdb, tc, d.date)
+                alt_cache[d.date] = (
+                    city_return_dep_times(bdb, leg_from, d.date)
+                    if direction == "ret"
+                    else city_dep_times(bdb, leg_to, d.date))
             d.alt_times = alt_cache[d.date]
             # v0.48: lift the best reference departure onto dep_time so
             # the calendar chip + day detail show a real time (badged).
@@ -734,12 +760,18 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                                                         rec, route_snap["id"])
                     return_deals = _enrich_flight_times(
                         session, net, route, return_deals, cfg, ama_cfg,
-                        ama_ready, date_from, date_to, rec, route_snap["id"])
+                        ama_ready, date_from, date_to, rec, route_snap["id"],
+                        direction="ret")
                     return_deals = _fill_reference_deals(
                         return_deals, date_from, date_to,
                         route.get("to_city", ""), route.get("from_city", ""))
-                    # no alt_times on return legs: the board is HGH-departure
-                    # only, return flights depart from the destination city
+                    # v0.49: return legs get reference departures from the
+                    # arrive board's preschtime rows (CITY->HGH) - the same
+                    # zero-key db, zero extra requests
+                    return_deals = _attach_alt_times(
+                        return_deals, route.get("from_city", ""),
+                        load_sched_db(DATA_DIR),
+                        from_city=route.get("to_city", ""))
                     rec.step(flight_key, route_snap["id"], "fetch return calendar",
                              "ok", (time.time() - t0r) * 1000, count=len(return_deals))
                 except Exception as e:

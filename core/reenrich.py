@@ -89,6 +89,42 @@ def reenrich_snapshot(base_dir, dry=False, log=None):
             out = app_main._attach_alt_times(
                 out, r.get("to_city", ""),
                 app_main.load_sched_db(app_main.DATA_DIR))
+            # v0.49: replay return legs the same way, direction-aware -
+            # nearby-ref return rows gain arrive-board reference deps
+            # (CITY->HGH preschtime) plus the alt-ref promotion.
+            raw_ret = r.get("return_deals") or []
+            if raw_ret:
+                deals_ret = [FlightDeal(**{k: v for k, v in m.items()
+                                           if k in FlightDeal.__dataclass_fields__})
+                             for m in raw_ret]
+                for d in deals_ret:
+                    _reset_time_fields(d)
+                out_ret = app_main._enrich_flight_times(
+                    None, {}, r, deals_ret, cfg, ama_cfg, False,
+                    win[0], win[1], direction="ret")
+                out_ret = app_main._attach_alt_times(
+                    out_ret, r.get("from_city", ""),
+                    app_main.load_sched_db(app_main.DATA_DIR),
+                    from_city=r.get("to_city", ""))
+                if not dry:
+                    ret_before = [{k: m.get(k) for k in TIME_FIELDS}
+                                  for m in raw_ret]
+                    by_date_ret = {d.date: d for d in out_ret}
+                    for m in raw_ret:
+                        d2 = by_date_ret.get(m.get("date"))
+                        if not d2:
+                            continue
+                        for k in TIME_FIELDS:
+                            if k == "alt_times":
+                                m[k] = [{"no": a.get("no"),
+                                         "dep": a.get("dep"),
+                                         "exact": bool(a.get("exact"))}
+                                        for a in (d2.alt_times or [])][:4]
+                            else:
+                                m[k] = getattr(d2, k, "")
+                    if ([{k: m.get(k) for k in TIME_FIELDS}
+                         for m in raw_ret] != ret_before):
+                        changed = True
             cov = app_main.time_coverage(out)
             stats.append({"id": r.get("id"), "deals": len(out), "cov": cov})
             if dry:

@@ -153,10 +153,22 @@ def test_attach_alt_times_promotes_best_reference():
                    {"no": "JD419", "dep": "08:35", "exact": True}]
     _attach_alt_times([d], "曼谷", db)
     assert d.dep_time == "08:35"
+
+
+def test_attach_alt_times_return_mode_promotes():
+    # v0.49: return legs read CITY->HGH preschtime rows via from_city
+    db = _alt_db(("3U8882", 4, "07:20", "重庆", "杭州"),
+                 ("GJ8692", 4, "13:00", "重庆", "成都"))
+    d = FlightDeal(date="2026-09-25", bare_price=900, flight_no="",
+                   source="nearby-ref")
+    _attach_alt_times([d], "杭州", db, from_city="重庆")
+    assert d.alt_times and d.alt_times[0]["no"] == "3U8882"
+    assert d.dep_time == "07:20"
+    assert d.dep_src == "alt-ref"
     assert d.dep_src == "alt-ref" and d.time_src == "alt-ref"
     # already-promoted deals stay untouched on replay (idempotent)
     _attach_alt_times([d], "曼谷", db)
-    assert d.dep_time == "08:35"
+    assert d.dep_time == "07:20"  # keeps CKG->HGH promotion, no Bangkok rows
 
 
 def run_all():

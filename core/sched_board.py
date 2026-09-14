@@ -610,15 +610,13 @@ def prior_minutes_for(priors, city):
     return cands[0][1]
 
 
-def city_dep_times(db, to_city, date_iso, limit=4):
-    """v0.26 numberless-deal helper: known HGH->to_city departures for the
-    date's dow, so intl calendar deals (price-only, no flight number) can
-    still show real departure times. Board rows store the final destination
-    ('曼谷素万那普机场'), so match by city substring; cross-dow borrowed
-    entries are flagged exact=False (same flight number, same season ->
-    the time is a strong reference, the UI badges it). Pure over db dict."""
-    city = (to_city or "").strip()
-    if not city:
+def _ref_deps(db, origin_city, dest_city, date_iso, limit=4):
+    """v0.49 shared lister behind city_dep_times / city_return_dep_times:
+    board entries whose from~origin_city and to~dest_city, filed under
+    the date's dow, cross-dow borrow flagged exact=False. Pure over db."""
+    origin = (origin_city or "").strip()
+    dest = (dest_city or "").strip()
+    if not origin or not dest:
         return []
     try:
         dow = str(_dt.date.fromisoformat(date_iso).weekday())
@@ -637,9 +635,9 @@ def city_dep_times(db, to_city, date_iso, limit=4):
                         if (e or {}).get("dep")), {})
         if not ent.get("dep"):
             continue
-        if "杭州" not in (ent.get("from") or ""):
+        if origin not in (ent.get("from") or ""):
             continue
-        if city not in (ent.get("to") or ""):
+        if dest not in (ent.get("to") or ""):
             continue
         dep = str(ent["dep"])[:5]
         out.append({"no": no, "dep": dep,
@@ -655,6 +653,25 @@ def city_dep_times(db, to_city, date_iso, limit=4):
         seen_dep.add(e["dep"])
         dedup.append(e)
     return dedup[:limit]
+
+
+def city_dep_times(db, to_city, date_iso, limit=4):
+    """v0.26 numberless-deal helper: known HGH->to_city departures for the
+    date's dow, so intl calendar deals (price-only, no flight number) can
+    still show real departure times. Board rows store the final destination
+    ('曼谷素万那普机场'), so match by city substring; cross-dow borrowed
+    entries are flagged exact=False (same flight number, same season ->
+    the time is a strong reference, the UI badges it). Pure over db dict."""
+    return _ref_deps(db, "杭州", to_city, date_iso, limit)
+
+
+def city_return_dep_times(db, from_city, date_iso, limit=4):
+    """v0.49 return-leg mirror of city_dep_times: known from_city->HGH
+    departures for the date's dow. The ARRIVE board stores preschtime =
+    the upstream city's planned departure for every flight landing at
+    HGH, so return legs get real reference departures from the same
+    zero-key db - no extra request, no new data source."""
+    return _ref_deps(db, from_city, "杭州", date_iso, limit)
 
 
 def promote_alt_time(alts):

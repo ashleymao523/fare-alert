@@ -175,6 +175,8 @@ fare-alert/
 - [x] **v0.47 公务舱多目的地监控 + 采集节奏可视**: ① cabin_watch 目的地从单值升级为 to_cities 列表(默认杭州, 随时增删改), 旧配置 default_to_city 自动派生列表并保持同步, route_qualifies 按列表匹配任意目的地; ② /api/cabin 新增 refresh(每轮间隔+上轮/下轮时间, 来自 worker 心跳)与 qualifying_routes(当前正在采集的路线), 卡片上直接可见“每 45 分钟一轮 · 上轮 xx:xx · 下轮 ≈xx:xx”与采集路线标签, 无匹配路线时提示去路线页添加; ③ 编辑面板目的地改 CityPicker 多选标签。单测 166→172。
 - [x] **v0.48 起飞时刻全覆盖(参考班次提升)**: 240 张有价票中 116 张不显示起飞时间, 诊断发现其中 103 张(nearby-ref/国际日历行)的 alt_times 里已存真实班次时刻却从未提升到 dep_time, 另 13 张(斜杠中转串如 SC2114/SC2135 + 插值行)连参考班次都没挂。① core/sched_board.promote_alt_time 纯函数: 从 city_dep_times 列表选最优参考班次(同星期精确优先, 再按最早起飞), 提升 dep_src="alt-ref"; ② _attach_alt_times 对"有 alt 无 dep_time"的行直接提升(reenrich 离线回放同样生效), _enrich 斜杠段两段都查不到时回退挂同航线当日参考班次并提升; ③ 双 UI 新增“参考班次”琥珀徽标(标注非本航班号, 仅供参考), KPI 覆盖口径把 alt-ref 归入"参考"桶不冒充精确, time_coverage 归入 borrow 桶。实测离线回放: 缺起飞 116→0, 真实票覆盖 90/98→98/98(100%), 全程零新增网络请求。单测 172→174。
 
+- [x] **v0.49 返程起飞时刻对称覆盖**: 去程 alt-ref 提升只服务 outbound, 往返模式切回程(return_deals)依旧 --:--。① sched_board.city_dep_times 泛化为 _ref_deps 共享内核, 新增 city_return_dep_times 直接读到达板 preschtime(=外地→杭州起飞时刻), 零新增请求; ② _attach_alt_times 增加 from_city 返程模式, _enrich_flight_times 增加 direction="ret" 使城市敏感查询(板库/时刻/斜杠回退/无号行)全部改走返程口径(leg_from/leg_to/leg_fi/leg_ti 反转); ③ reenrich 离线回放覆盖 raw_ret 块, TIME_FIELDS 写回+变更检测同步生效。快照当前 4 路线全 oneway(return_deals 为空)属前瞻性覆盖——切往返后返程同样具备时刻提升能力。单测 174→176, acceptance 13/13。
+
 ## 常见问题
 
 - **机票起降时刻从哪来?** 去哪儿低价日历只返回每日最低价+航班号(列表页需签名,按合规原则不破解)。v0.18 起杭州相关线路自动用机场官网公开班期板按「航班号+星期几」沉淀计划时刻(零密钥);v0.19 起目标星期未沉淀时自动借用同号航班其他班期时刻(跨日班期·参考),仅有起飞时落地按大圆估算(~ 前缀);配置 Amadeus 后优先实时刻。车次时刻/历时来自 12306, 原生即有。

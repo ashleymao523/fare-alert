@@ -61,6 +61,39 @@ class ReenrichAltTimesTests(unittest.TestCase):
             out2 = reenrich_snapshot(tmp)
             self.assertFalse(out2["changed"])
 
+    def test_return_legs_gain_reference_times(self):
+        # v0.49: return legs replay direction-aware and gain arrive-board
+        # reference departures (CITY->HGH preschtime) + alt-ref promotion
+        from core.reenrich import reenrich_snapshot
+        with tempfile.TemporaryDirectory() as tmp:
+            snap = self._make_repo(tmp)
+            snap["routes"][0]["return_deals"] = [{
+                "date": "2026-10-25", "bare_price": 320,
+                "flight_no": "", "source": "nearby-ref",
+                "dep_time": "", "alt_times": [],
+            }]
+            with open(os.path.join(tmp, "data", "snapshot.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump(snap, f, ensure_ascii=False)
+            db_path = os.path.join(tmp, "data", "flight_sched_db.json")
+            with open(db_path, encoding="utf-8") as f:
+                db = json.load(f)
+            # 2026-10-25 is a Sunday -> weekday() == 6
+            db["flights"]["GJ8692"] = {"dows": {"6": {
+                "dep": "07:20", "arr": "10:05", "from": "重庆",
+                "to": "杭州", "src": "airport-board"}}}
+            with open(db_path, "w", encoding="utf-8") as f:
+                json.dump(db, f, ensure_ascii=False)
+            out = reenrich_snapshot(tmp)
+            self.assertTrue(out["changed"])
+            with open(os.path.join(tmp, "data", "snapshot.json"),
+                      encoding="utf-8") as f:
+                snap2 = json.load(f)
+            d = snap2["routes"][0]["return_deals"][0]
+            self.assertEqual(d["dep_time"], "07:20")
+            self.assertEqual(d["dep_src"], "alt-ref")
+            self.assertTrue(d["alt_times"])
+
 
 if __name__ == "__main__":
     unittest.main()
