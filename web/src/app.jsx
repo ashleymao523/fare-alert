@@ -3,6 +3,7 @@ import { fetchSnapshot, fetchCityPhoto, fetchConfig, fetchDrops } from "./lib/ap
 import Header from "./components/Header.jsx";
 import Hero from "./components/Hero.jsx";
 import Kpis from "./components/Kpis.jsx";
+import OverviewCard from "./components/OverviewCard.jsx";
 import Verdict from "./components/Verdict.jsx";
 import DestIntel from "./components/DestIntel.jsx";
 import CalendarView from "./components/CalendarView.jsx";
@@ -117,6 +118,11 @@ export function App() {
         {tab === "push" ? <PushView cfg={cfg} setCfg={setCfg} cfgErr={cfgErr} /> : null}
         {err ? <div class="card"><div class="empty">快照加载失败: {err}</div></div> : null}
         {!snap && !err && tab === "dash" ? <div class="card"><div class="empty">加载中…</div></div> : null}
+        {tab === "dash" ? (
+          <OverviewCard routes={routes} drops={drops}
+            currentId={route && route.id}
+            onPick={(id) => { setRouteId(id); setSelDate(null); }} />
+        ) : null}
         {routes.length > 1 && tab === "dash" && (
           <div class="route-tabs">
             {routes.map((r) => (

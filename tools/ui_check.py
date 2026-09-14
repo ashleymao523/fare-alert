@@ -408,6 +408,14 @@ checks["v0.60 alert history kinds"] = (
     and ("清理测试" in _push_view_src)
     and ("清理测试" in _dist_js))
 
+_ov_src = open(os.path.join("web", "src", "components", "OverviewCard.jsx"),
+               encoding="utf-8").read() if os.path.exists(
+    os.path.join("web", "src", "components", "OverviewCard.jsx")) else ""
+checks["v0.61 route overview board"] = (("路线总览" in _ov_src)
+    and ("按接近心理价位排序" in _ov_src)
+    and ("路线总览" in _dist_js)
+    and ("路线总览" in h))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

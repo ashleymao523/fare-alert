@@ -737,6 +737,36 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   cursor: pointer;
   user-select: none;
 }
+.ov-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.ov-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--card2);
+  cursor: pointer;
+  font: inherit;
+  color: var(--tx-1);
+  text-align: left;
+  width: 100%;
+}
+.ov-row:hover {
+  border-color: var(--sky);
+}
+.ov-row.current {
+  border-color: var(--green-d);
+}
+.ov-arrow {
+  margin-left: auto;
+  color: var(--tx-2);
+}
 .cw-routes {
   display: flex;
   flex-wrap: wrap;
