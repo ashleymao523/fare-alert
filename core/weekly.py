@@ -248,6 +248,84 @@ def _summary_text(doc):
     return head + "\n" + body
 
 
+def global_best(snapshot):
+    """v0.65: the single best buy across every route in a live
+    snapshot. Min price/threshold ratio wins, lower price breaks
+    ties - the same rule the v0.64 hero row applies client-side,
+    now canonical server-side so pushes quote one answer. Deals
+    without a numeric total or a positive threshold are ignored;
+    returns None when nothing qualifies. Pure."""
+    best = None
+    for r in (snapshot or {}).get("routes") or []:
+        try:
+            th = float(r.get("threshold_total"))
+        except (TypeError, ValueError):
+            continue
+        if th <= 0:
+            continue
+        for d in r.get("deals") or []:
+            p = d.get("total_price")
+            if not isinstance(p, (int, float)):
+                continue
+            key = (float(p) / th, float(p))
+            if best is None or key < best[0]:
+                best = (key, {
+                    "route_id": r.get("id"),
+                    "from_city": r.get("from_city", ""),
+                    "to_city": r.get("to_city", ""),
+                    "date": d.get("date") or "",
+                    "price": float(p),
+                    "dep_time": d.get("dep_time") or "",
+                    "arr_time": d.get("arr_time") or "",
+                    "threshold": th,
+                    "savings": round(th - float(p), 2),
+                })
+    return best[1] if best else None
+
+
+def global_best_line(gb):
+    """One-line wire format: route, date, price, dep-arr times and
+    the threshold gap. Over-threshold legs still get their line -
+    '距心理价¥X' - so the push always names the front-runner."""
+    if not gb:
+        return ""
+    date = (gb.get("date") or "")[5:]
+    times = ""
+    if gb.get("dep_time"):
+        times = " ({0}-{1})".format(gb.get("dep_time"),
+                                    gb.get("arr_time") or "")
+    route = "{0}→{1}".format(gb.get("from_city") or "?",
+                             gb.get("to_city") or "?")
+    sav = gb.get("savings") or 0
+    tail = (" 比心理价低¥{0}".format(_fmt(sav)) if sav > 0
+            else (" 距心理价¥{0}".format(_fmt(-sav)) if sav < 0 else ""))
+    return "🏆 全局最优 {0} {1} ¥{2}{3}{4}".format(
+        route, date, _fmt(gb.get("price")), times, tail).rstrip()
+
+
+def attach_global_best(report, snapshot):
+    """Merge the live global-best line into a weekly report's push
+    text, right under the 📊 head (ahead of the highlights line -
+    the unique answer leads). Pure: the caller loads the snapshot.
+    No-op when nothing qualifies or the line is already in."""
+    gb = global_best(snapshot)
+    if not gb or not report:
+        return report
+    line = global_best_line(gb)
+    body = report.get("push_text") or ""
+    if not line or line in body:
+        return report
+    lines = body.split("\n")
+    if lines and lines[0].startswith("📊"):
+        rest = "\n".join(lines[1:])
+        body = lines[0] + "\n" + line + ("\n" + rest if rest else "")
+    else:
+        body = line + "\n" + body
+    report["push_text"] = body
+    report["global_best"] = gb
+    return report
+
+
 def should_push(cfg, path):
     """Weekly push fires only when enabled AND >=7d since last push.
     A recent failure backs off (no push storm every loop cycle)."""

@@ -10,7 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from core.history import append_history, load_history
-from core.weekly import (PUSH_INTERVAL, build_weekly, mark_failed,
+from core.weekly import (PUSH_INTERVAL, attach_global_best, build_weekly,
+                        global_best, global_best_line, mark_failed,
                         mark_pushed, push_text, should_push, week_highlights)
 
 
@@ -261,6 +262,63 @@ class TestPushText(unittest.TestCase):
             self.assertIn("价格周报", rep["push_text"])
         finally:
             os.remove(path)
+
+
+class TestGlobalBest(unittest.TestCase):
+    SNAP = {
+        "routes": [
+            {"id": "a", "from_city": "杭州", "to_city": "重庆",
+             "threshold_total": 500,
+             "deals": [{"date": "2026-09-20", "total_price": 380,
+                        "dep_time": "19:45", "arr_time": "22:25"}]},
+            {"id": "b", "from_city": "杭州", "to_city": "成都",
+             "threshold_total": 900,
+             "deals": [{"date": "2026-09-22", "total_price": 700,
+                        "dep_time": "06:35", "arr_time": "09:10"}]},
+        ]
+    }
+
+    def test_picks_min_ratio_with_times(self):
+        gb = global_best(self.SNAP)
+        self.assertEqual(gb["route_id"], "a")   # 380/500 beats 700/900
+        self.assertEqual(gb["price"], 380)
+        self.assertEqual(gb["dep_time"], "19:45")
+        self.assertEqual(gb["savings"], 120)
+
+    def test_skips_bad_thresholds_and_prices(self):
+        snap = {"routes": [
+            {"id": "x", "threshold_total": 0, "deals": [
+                {"date": "d", "total_price": 100}]},
+            {"id": "y", "threshold_total": 500, "deals": [
+                {"date": "d", "total_price": None},
+                {"date": "d2", "total_price": "abc"}]},
+        ]}
+        self.assertIsNone(global_best(snap))
+        self.assertIsNone(global_best({}))
+        self.assertIsNone(global_best(None))
+
+    def test_line_format_under_and_over_threshold(self):
+        under = global_best_line(global_best(self.SNAP))
+        self.assertIn("🏆 全局最优 杭州→重庆 09-20 ¥380", under)
+        self.assertIn("(19:45-22:25)", under)
+        self.assertIn("比心理价低¥120", under)
+        over = dict(global_best(self.SNAP), savings=-30)
+        self.assertIn("距心理价¥30", global_best_line(over))
+
+    def test_attach_inserts_under_head_no_dup(self):
+        report = {"push_text": "📊 价格周报（09-08~09-14）\n正文"}
+        out = attach_global_best(report, self.SNAP)
+        self.assertIn("🏆 全局最优", out["push_text"].split("\n")[1])
+        self.assertIn("global_best", out)
+        again = attach_global_best(dict(out), self.SNAP)
+        self.assertEqual(again["push_text"].count("全局最优"), 1)
+
+    def test_attach_safe_without_best_or_text(self):
+        bare = {"push_text": "只有正文没有表头"}
+        self.assertEqual(attach_global_best(bare, {}).get("push_text"),
+                         "只有正文没有表头")
+        self.assertIsNone(
+            attach_global_best({}, self.SNAP).get("global_best"))
 
 
 if __name__ == "__main__":

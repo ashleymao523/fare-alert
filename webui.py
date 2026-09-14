@@ -297,8 +297,13 @@ def classic():
 
 @app.get("/api/snapshot")
 def api_snapshot():
-    return jsonify({"snapshot": _read_json(SNAPSHOT_PATH, None),
-                    "push_pending": _push_pending()})
+    snap = _read_json(SNAPSHOT_PATH, None)
+    if isinstance(snap, dict):
+        # v0.65: canonical server-side best buy (same rule as the
+        # v0.64 hero row) so API consumers need not re-derive it.
+        from core.weekly import global_best
+        snap["global_best"] = global_best(snap)
+    return jsonify({"snapshot": snap, "push_pending": _push_pending()})
 
 
 def _push_pending():
@@ -675,6 +680,9 @@ def api_weekly_report():
     from core.weekly import build_weekly, should_push
     cfg = load_config(CONFIG_PATH)
     report = build_weekly(os.path.join(DATA_DIR, "history.json"))
+    # v0.65: preview carries the same global-best line the push sends.
+    from core.weekly import attach_global_best
+    attach_global_best(report, _read_json(SNAPSHOT_PATH, {}) or {})
     report["push_enabled"] = (cfg.get("push") or {}).get("weekly_enabled", False)
     report["channel_ready"] = any(_secrets_set(cfg).values())
     report["push_due"] = should_push(
@@ -713,6 +721,9 @@ def api_weekly_push():
     from core.weekly import build_weekly, mark_failed, mark_pushed, push_text
     cfg = load_config(CONFIG_PATH)
     report = build_weekly(os.path.join(DATA_DIR, "history.json"))
+    # v0.65: manual push walks the exact same merge as the scheduler.
+    from core.weekly import attach_global_best
+    attach_global_best(report, _read_json(SNAPSHOT_PATH, {}) or {})
     if not report.get("ok"):
         return jsonify({"ok": False, "error": "暂无历史数据,先跑一次查询"}), 400
     if not any(_secrets_set(cfg).values()):

@@ -1017,7 +1017,7 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
     try:  # M4: daily KPI archive + optional weekly digest push
         from core.history import append_history
         from core.weekly import (build_weekly, mark_failed, mark_pushed,
-                                 push_text, should_push)
+                                 push_text, should_push, attach_global_best)
         hist_path = os.path.join(DATA_DIR, "history.json")
         append_history(snapshot, hist_path)
         # v0.55: day-over-day window-min drop watch. A sharp drop (both
@@ -1061,6 +1061,12 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                             "(timer not consumed)")
             else:
                 report = build_weekly(hist_path)
+                try:  # v0.65: same global-best merge as the manual push
+                    with open(os.path.join(DATA_DIR, "snapshot.json"),
+                              encoding="utf-8") as f:
+                        attach_global_best(report, json.load(f))
+                except Exception:
+                    log.debug("global best merge skipped", exc_info=True)
                 if report.get("ok"):
                     results = push_all(cfg, log, "📈 FareAlert 价格周报",
                                        push_text(report), url="", kind="weekly")

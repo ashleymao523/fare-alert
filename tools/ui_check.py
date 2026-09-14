@@ -437,6 +437,10 @@ checks["v0.64 global best hero"] = (("全局最优" in _ov_src)
     and ("全局最优" in _dist_js)
     and ("全局最优" in h))
 
+checks["v0.65 global best to push"] = (("def global_best" in _weekly_src)
+    and ("attach_global_best" in _main_src)
+    and ("global_best" in open("webui.py", encoding="utf-8").read()))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:
