@@ -789,6 +789,11 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   color: var(--green-d);
   font-size: 10px;
 }
+.cw-date {
+  margin-left: 4px;
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+}
 .cabin-last {
   margin-top: var(--sp-2);
   color: var(--tx-2);

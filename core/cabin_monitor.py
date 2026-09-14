@@ -207,6 +207,41 @@ def evaluate_alert(history, cw, now=None):
     return hits
 
 
+def history_board(history):
+    """v0.62: leaderboard rows for the cabin UI - one per watched leg.
+
+    The ring history already stores every observation, but the card
+    needs the derived story: the all-time low WITH its fare date (when
+    is that cheapest ticket for), the latest observation, and how far
+    the market now sits above its own record. Latest = max ts (the
+    collector rewrites same-date entries, so ts orders observations),
+    tie-broken by date. Legs without a single numeric price are
+    skipped. Sorted by low asc so the best departure city leads.
+    Pure."""
+    rows = []
+    for rid, r in (history.get("routes") or {}).items():
+        obs = [o for o in (r.get("obs") or [])
+               if isinstance(o.get("price"), (int, float))]
+        if not obs:
+            continue
+        low = min(obs, key=lambda o: o["price"])
+        latest = max(obs, key=lambda o: (o.get("ts") or "",
+                                         o.get("date") or ""))
+        rows.append({
+            "route_id": rid,
+            "from_city": r.get("from_city", ""),
+            "to_city": r.get("to_city", ""),
+            "low": low["price"],
+            "low_date": low.get("date", ""),
+            "latest": latest["price"],
+            "latest_date": latest.get("date", ""),
+            "gap": round(float(latest["price"]) - float(low["price"]), 2),
+            "samples": len(obs),
+        })
+    rows.sort(key=lambda x: x["low"])
+    return rows
+
+
 def cooldown_ok(last_alert_at, cw, now=None):
     """True when a new alert may fire given the previous fire time."""
     hours = float(cw.get("cooldown_hours") or 0)

@@ -416,6 +416,17 @@ checks["v0.61 route overview board"] = (("路线总览" in _ov_src)
     and ("路线总览" in _dist_js)
     and ("路线总览" in h))
 
+_cabin_card_src = open(os.path.join("web", "src", "components",
+                                    "CabinCard.jsx"),
+                       encoding="utf-8").read() if os.path.exists(
+    os.path.join("web", "src", "components", "CabinCard.jsx")) else ""
+_cabin_core_src = open(os.path.join("core", "cabin_monitor.py"),
+                       encoding="utf-8").read()
+checks["v0.62 cabin history board"] = (("def history_board" in _cabin_core_src)
+    and ("history_board" in open("webui.py", encoding="utf-8").read())
+    and ("历史低价榜" in _cabin_card_src)
+    and ("历史低价榜" in _dist_js))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

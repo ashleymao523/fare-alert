@@ -199,9 +199,16 @@ export default function CabinCard({ cfg, setCfg }) {
     ? new Date(ts * 1000).toLocaleTimeString("zh-CN",
         { hour: "2-digit", minute: "2-digit" }) : "-";
   const routes = (data.history && data.history.routes) || {};
-  const rows = Object.entries(routes)
-    .map(([id, r]) => ({ id, ...r, n: (r.obs || []).length }))
-    .sort((a, b) => (a.lowest || 1e9) - (b.lowest || 1e9));
+  // v0.62: server-side leaderboard (all-time low WITH its fare date,
+  // latest obs, gap-to-record); local derivation stays as a fallback
+  // for snapshots served by an older backend.
+  const rows = data.board || Object.entries(routes)
+    .map(([id, r]) => ({
+      route_id: id, from_city: r.from_city, to_city: r.to_city,
+      low: r.lowest, low_date: "", latest: null, gap: null,
+      samples: (r.obs || []).length,
+    }))
+    .sort((a, b) => (a.low || 1e9) - (b.low || 1e9));
   return (
     <div class="card">
       <div class="card-head">
@@ -301,30 +308,43 @@ export default function CabinCard({ cfg, setCfg }) {
             </div>
           ) : null)}
           {rows.length ? (
-            <table class="tbl">
-              <thead>
-                <tr><th>出发</th><th>到达</th><th>历史最低</th><th>走势</th><th>样本</th><th>状态</th></tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>{r.from_city}</td>
-                    <td>{r.to_city}</td>
-                    <td class="price">{fmt(r.lowest)}{r.obs && r.obs.length
-                      && r.obs[r.obs.length - 1].record
-                      ? <span class="cw-mirror" title="最近一轮创下历史新低">新低</span>
-                      : null}</td>
-                    <td><Spark obs={r.obs} /></td>
-                    <td>{r.n}</td>
-                    <td>
-                      <span class={"badge " + (r.lowest <= (cw.threshold_total || 0) ? "green" : "gray")}>
-                        {r.lowest <= (cw.threshold_total || 0) ? "低于阈值" : "观察中"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div>
+              <div class="cabin-meta">🏆 历史低价榜 · 按历史最低排序</div>
+              <table class="tbl">
+                <thead>
+                  <tr><th>出发</th><th>到达</th><th>历史最低</th><th>最新</th><th>走势</th><th>样本</th><th>状态</th></tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => {
+                    const obs = (routes[r.route_id] || {}).obs;
+                    return (
+                      <tr key={r.route_id}>
+                        <td>{r.from_city}</td>
+                        <td>{r.to_city}</td>
+                        <td class="price">{fmt(r.low)}
+                          {r.low_date
+                            ? <span class="cw-date">{String(r.low_date).slice(5)}</span>
+                            : null}
+                          {obs && obs.length && obs[obs.length - 1].record
+                            ? <span class="cw-mirror" title="最近一轮创下历史新低">新低</span>
+                            : null}</td>
+                        <td>{fmt(r.latest)}
+                          {typeof r.gap === "number" && r.gap > 0
+                            ? <span class="cw-date">距新低 +{fmt(r.gap)}</span>
+                            : null}</td>
+                        <td><Spark obs={obs} /></td>
+                        <td>{r.samples}</td>
+                        <td>
+                          <span class={"badge " + (r.low <= (cw.threshold_total || 0) ? "green" : "gray")}>
+                            {r.low <= (cw.threshold_total || 0) ? "低于阈值" : "观察中"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div class="empty">
               {cw.enabled

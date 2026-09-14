@@ -11,7 +11,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from core.cabin_monitor import (
     HISTORY_CAP, cooldown_ok, default_config, evaluate_alert,
     load_config, record_low, route_qualifies, cabin_leg,
-    record_alert_candidate,
+    record_alert_candidate, history_board,
 )
 
 
@@ -180,6 +180,38 @@ class CabinMonitorTests(unittest.TestCase):
             "enabled": True, "to_cities": [" 杭州 ", "", "宁波", "杭州"]}})
         self.assertEqual(cw["to_cities"], ["杭州", "宁波"])
         self.assertEqual(cw["default_to_city"], "杭州")
+
+    def test_history_board_low_with_date_latest_and_gap(self):
+        h = {"routes": {}}
+        record_low(h, "ckg-hgh", "重庆", "杭州", "business",
+                   "2026-10-03", 3200)
+        record_low(h, "ckg-hgh", "重庆", "杭州", "business",
+                   "2026-10-05", 2900)   # all-time low
+        record_low(h, "ckg-hgh", "重庆", "杭州", "business",
+                   "2026-10-07", 3350)   # latest bounce
+        rows = history_board(h)
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["low"], 2900)
+        self.assertEqual(row["low_date"], "2026-10-05")
+        self.assertEqual(row["latest"], 3350)
+        self.assertEqual(row["latest_date"], "2026-10-07")
+        self.assertEqual(row["gap"], 450)
+        self.assertEqual(row["samples"], 3)
+
+    def test_history_board_sorted_by_low_skips_empty_legs(self):
+        h = {"routes": {}}
+        record_low(h, "a", "北京", "杭州", "business", "2026-10-01", 4000)
+        record_low(h, "b", "重庆", "杭州", "business", "2026-10-02", 2900)
+        h["routes"]["empty"] = {"from_city": "西安", "to_city": "杭州",
+                                "obs": [], "lowest": None}
+        rows = history_board(h)
+        self.assertEqual([r["route_id"] for r in rows], ["b", "a"])
+        self.assertEqual(rows[0]["from_city"], "重庆")
+
+    def test_history_board_empty_history_safe(self):
+        self.assertEqual(history_board({}), [])
+        self.assertEqual(history_board({"routes": {}}), [])
 
 
 if __name__ == "__main__":

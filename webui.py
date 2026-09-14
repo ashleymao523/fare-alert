@@ -630,6 +630,7 @@ def api_cabin():
     from core.cabin_monitor import load_config as cw_load
     from core.cabin_monitor import load_history as ch_load
     from core.cabin_monitor import cabin_leg as cw_leg
+    from core.cabin_monitor import history_board as cw_board
     cfg = load_config(CONFIG_PATH) if CONFIG_PATH else {}
     cw = cw_load(cfg)
     ch = ch_load(DATA_DIR)
@@ -657,6 +658,7 @@ def api_cabin():
     ama_ready = bool((ama.get("client_id") or "").strip()
                      and (ama.get("client_secret") or "").strip())
     return jsonify({"config": cw, "history": ch,
+                    "board": cw_board(ch),
                     "last_alert": last.get("last_hit"),
                     "qualifying_routes": qual,
                     "amadeus_ready": ama_ready,
