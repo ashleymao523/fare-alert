@@ -14,7 +14,7 @@ export default function Header({ snap }) {
         <div class="brand">
           <span class="brand-logo">✈</span>
           <span class="brand-name">FareAlert</span>
-          <span class="ver">v2 · 0.53</span>
+          <span class="ver">v2 · 0.54</span>
         </div>
         <div class="hd-right">
           <span class={cls}>{text}</span>

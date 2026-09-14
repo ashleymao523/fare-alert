@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { saveConfig, fetchSchedStats, fetchHealth, fetchAmaUsage,
-  fetchCovTrend } from "../lib/api.js";
+  fetchCovTrend, searchBoard } from "../lib/api.js";
 
 const DOW_NAMES = ["一", "二", "三", "四", "五", "六", "日"]; // /api/sched-stats: 0=周一
 
@@ -11,6 +11,72 @@ function CovBar({ label, val, total, cls }) {
       <span class="tc-k">{label}</span>
       <div class="tc-bar"><div class={"tc-fill " + cls} style={"width:" + Math.round((val / total) * 100) + "%"} /></div>
       <span class="tc-v">{val}</span>
+    </div>
+  );
+}
+
+// v0.54: search the zero-key schedule library (city pair / flight no) -
+// shows what actually flies each weekday, i.e. the engine behind
+// alt-ref reference times, and a planning tool in its own right.
+function BoardExplorer() {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const go = () => {
+    setBusy(true);
+    searchBoard({ from: from.trim(), to: to.trim(), limit: 30 })
+      .then((r) => setRows(r.flights || []))
+      .catch(() => setRows([]))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div class="board-explorer">
+      <div class="push-grid">
+        <label class="field2"><span class="f-label2">出发城市</span>
+          <input type="text" placeholder="如 杭州, 留空查全部" value={from}
+            onInput={(e) => setFrom(e.target.value)} />
+        </label>
+        <label class="field2"><span class="f-label2">到达城市</span>
+          <input type="text" placeholder="如 重庆, 留空查全部" value={to}
+            onInput={(e) => setTo(e.target.value)} />
+        </label>
+      </div>
+      <div class="row-btns">
+        <button class="btn" disabled={busy} onClick={go}>
+          {busy ? "查询中…" : "班期查询"}
+        </button>
+        {rows ? <span class="muted">命中 {rows.length} 班(按起飞时间排序)</span> : null}
+      </div>
+      {rows && rows.length ? (
+        <div class="tbl-scroll">
+          <table class="tbl">
+            <thead>
+              <tr><th>航班</th><th>航司 / 机型</th><th>航线</th><th>起飞→到达</th><th>班期</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((f) => (
+                <tr key={f.no}>
+                  <td class="num">{f.no}</td>
+                  <td>{f.airline}{f.craft ? " · " + f.craft : ""}</td>
+                  <td>{f.from} → {f.to}</td>
+                  <td class="num">{f.dep} → {f.arr}</td>
+                  <td>
+                    <span class="dow-mini-row">
+                      {DOW_NAMES.map((w, i) => (
+                        <span class={"dow-mini" + (f.dows.indexOf(i) >= 0 ? " has" : "")}
+                          key={i}>{w}</span>
+                      ))}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : rows ? <div class="muted">库中暂无匹配班次; 随每日抓取自动沉淀。</div> : (
+        <div class="muted">查任意城市对的已沉淀计划班次(航班号/起降时刻/班期), 留空查全部。</div>
+      )}
     </div>
   );
 }
@@ -232,6 +298,7 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
           已覆盖 {covered}/7 个星期 · 板库按查询日自动沉淀, 约 7 天长满
  未覆盖星期的航班时刻以「跨日参考」展示。{covered >= 7 ? " ✅ 已长满" : ""}
         </div>
+        <BoardExplorer />
       </div>
       <div class="card">
         <div class="card-head">

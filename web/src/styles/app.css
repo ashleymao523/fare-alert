@@ -650,6 +650,14 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 }
 .dow-chip.has { border-color: var(--green); color: var(--green-d); background: var(--green-bg); }
 .dow-chip b { margin-left: var(--sp-2); font-variant-numeric: tabular-nums; }
+.board-explorer { border-top: 1px dashed var(--line); margin-top: var(--sp-md); padding-top: var(--sp-md); }
+.dow-mini-row { display: inline-flex; gap: 3px; }
+.dow-mini {
+  display: inline-block; min-width: 1.4em; text-align: center;
+  border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+  padding: 1px 3px; font-size: var(--fs-xs, 11px); color: var(--faint);
+}
+.dow-mini.has { border-color: var(--green); color: var(--green-d); background: var(--green-bg); }
 .tc-row { display: flex; align-items: center; gap: var(--sp-md); margin: var(--sp-2) 0; }
 .tc-k { width: 8.5em; font-size: var(--fs-sm); color: var(--text-2); flex: none; }
 .tc-bar { flex: 1; height: var(--sp-md); background: var(--card2); border-radius: var(--r-pill); overflow: hidden; }

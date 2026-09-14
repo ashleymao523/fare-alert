@@ -183,6 +183,7 @@ fare-alert/
 
 - [x] **v0.52 公务舱历史新低提醒**: "出发地历史最低公务舱价"此前只对照固定阈值——创了历史新低但仍在阈值上方时不会提醒。① record_low 记账时打 record 标(首样本不算, 防引导期全量误报), 携带前低 record_prev; ② record_alert_candidate 纯函数: 新低必须严格低于"已提醒过的最低价"才再提醒(alerted_low 持久化于 state.json, 同价重观测永不重复提醒); ③ main 提醒优先级: 历史新低 > 阈值命中, 文案"公务舱历史新低 重庆到杭州 · 10-02 ¥1650 (前低 ¥1800)", 若同时低于阈值追加标注; ④ cabin_watch.alert_record_low 开关(默认开, /api/config 校验+回显), CabinCard 编辑面板复选框, 表格历史最低列"新低"徽标(最近一轮创新低时), 最近提醒行显示提醒类型; ⑤ 实测 /api/cabin 回显 alert_record_low=true, 4 条镜像腿(重庆/郑州/曼谷/成都→杭州)在采。单测 188→192, acceptance 13/13。
 - [x] **v0.53 手机局域网可达闭环**: iPhone 上看板+提醒此前卡在两处隐性知识——webui 默认绑 127.0.0.1(改 config+防火墙+重启三步手工), 手机上也不知道该输哪个地址。① /api/lan-info: 返回绑定 host/port、本机局域网 IP(UDP connect 探路由, 零发包)、lan_open 与拼好的手机 URL; ② PushView 手机访问卡: chip 展示"局域网已开放/仅本机可访问"+可直接抄的 URL, 未开放时提示一键脚本; ③ tools/enable_lan.ps1 一键开放(改绑定 0.0.0.0+防火墙规则+重启 webui, 打印手机地址), -Revert 一键收回; ④ PWA 已有(添加到主屏幕即 App 图标), Bark 推送不依赖页面在线。单测 192→195(lan-info 契约/开放拼 URL/仅本机隐藏 URL), ui_check v0.53×2, acceptance 13/13。
+- [x] **v0.54 班期库浏览器**: 时刻库(3711 班号)是 alt-ref 参考起飞时刻的引擎, 但此前完全不可查——"为什么这天是参考班次""周三到底飞什么"无从回答。① /api/board: 按城市对(子串匹配)/航班号(大小写不敏感)检索班期库, 代表条目取跨 dow 众数起飞时刻(个别一天的时刻漂移不污染常态), 返回航司/机型/起降/班期 dow 列表, 按起飞时间排序, limit≤200; ② SourcesView 时刻库沉淀卡内嵌 BoardExplorer: 出发/到达城市输入+班期查询, 结果表格 7 个 dow 迷你徽标直观展示班期(周一~周日哪些飞), 命中数与空态引导; ③ .dow-mini 复用设计令牌(零硬编码色过 STRUCT 门禁)。单测 195→200(契约/城市过滤/排序/航班号检索/dow 排序/limit), ui_check v0.54×2, acceptance 13/13。
 
 ## 常见问题
 

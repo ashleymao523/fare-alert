@@ -349,6 +349,11 @@ checks["v0.53 lan card + one-shot script"] = (("手机访问" in _push_src)
     and ("enable_lan" in _push_src)
     and ("advfirewall" in _lan_ps1)
     and ("-Revert" in _lan_ps1))
+checks["v0.54 board explorer api"] = "/api/board" in _webui_src
+checks["v0.54 board explorer ui"] = (("班期查询" in _sources_src)
+    and ("searchBoard" in _sources_src)
+    and ("dow-mini" in _sources_src)
+    and ("班期查询" in _dist_js))
 
 bad = 0
 for k, v in checks.items():

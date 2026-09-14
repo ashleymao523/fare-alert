@@ -690,6 +690,54 @@ def api_sched_stats():
     return jsonify({"ok": True, **sched_stats(db)})
 
 
+@app.get("/api/board")
+def api_board():
+    """v0.54: board explorer - search the zero-key schedule library by
+    city pair or flight no. Makes the engine behind alt-ref reference
+    times inspectable ("why is this a reference time, what flies
+    Wednesdays"), and doubles as a planned-timetable lookup for travel
+    planning (airline / craft / dep-arr per weekday)."""
+    from core.sched_board import load_sched_db, sched_stats
+    q = (request.args.get("q") or "").strip().upper()
+    from_city = (request.args.get("from") or "").strip()
+    to_city = (request.args.get("to") or "").strip()
+    try:
+        limit = max(1, min(int(request.args.get("limit") or 50), 200))
+    except ValueError:
+        limit = 50
+    db = load_sched_db(DATA_DIR)
+    rows = []
+    for no, fdb in (db.get("flights") or {}).items():
+        dows = {d: e for d, e in ((fdb or {}).get("dows") or {}).items() if e}
+        if not dows:
+            continue
+        # representative entry: the most frequent dep across dows, so a
+        # flight with an odd one-off time still shows its usual plan
+        deps = [e.get("dep") for e in dows.values() if e.get("dep")]
+        if not deps:
+            continue
+        dep = max(set(deps), key=deps.count)
+        ent = next(e for e in dows.values() if e.get("dep") == dep)
+        if from_city and from_city not in (ent.get("from") or ""):
+            continue
+        if to_city and to_city not in (ent.get("to") or ""):
+            continue
+        if q and q not in str(no).upper():
+            continue
+        rows.append({"no": no,
+                     "from": ent.get("from") or "",
+                     "to": ent.get("to") or "",
+                     "dep": dep,
+                     "arr": ent.get("arr") or "",
+                     "airline": ent.get("airline") or "",
+                     "craft": ent.get("craft") or "",
+                     "dows": sorted(int(d) for d in dows),
+                     "src": ent.get("src") or ""})
+    rows.sort(key=lambda r: (r["dep"], str(r["no"])))
+    return jsonify({"ok": True, "library": sched_stats(db)["flights"],
+                    "total": len(rows[:limit]), "flights": rows[:limit]})
+
+
 @app.get("/api/health")
 def api_health():
     """v0.27: one-shot deployment observability.
