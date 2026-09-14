@@ -51,6 +51,10 @@ export function fetchLanInfo() { return fetch("/api/lan-info").then(j); }
 
 export function fetchAlerts() { return fetch("/api/alerts").then(j); }
 
+export function deleteAlerts() {
+  return fetch("/api/alerts", { method: "DELETE" }).then(j);
+}
+
 let _citiesCache = null;
 export function fetchCities() {
   if (!_citiesCache) {

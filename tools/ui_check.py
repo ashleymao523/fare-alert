@@ -373,6 +373,9 @@ _weekly_view_src = open(os.path.join("web", "src", "components",
                                      "WeeklyView.jsx"), encoding="utf-8").read()
 _cabin_src = open(os.path.join("web", "src", "components",
                                "CabinCard.jsx"), encoding="utf-8").read()
+_notify_src = open(os.path.join("core", "notify.py"), encoding="utf-8").read()
+_push_view_src = open(os.path.join("web", "src", "components",
+                                   "PushView.jsx"), encoding="utf-8").read()
 checks["v0.57 weekly highlights"] = (
     ("def week_highlights" in _weekly_src)
     and ("biggest_drop" in _weekly_src)
@@ -395,6 +398,15 @@ checks["v0.59 cabin ops closure"] = (
     and ("intervalMinutes" in _cabin_src)
     and ("刷新间隔" in _cabin_src)
     and ("立即刷新" in _dist_js))
+
+checks["v0.60 alert history kinds"] = (
+    ("def classify_alert" in _notify_src)
+    and ("cabin-record" in _notify_src)
+    and ("api_alerts_delete" in _webui_src)
+    and ("counts" in _webui_src)
+    and ("kindLabel" in _push_view_src)
+    and ("清理测试" in _push_view_src)
+    and ("清理测试" in _dist_js))
 
 bad = 0
 for k, v in checks.items():

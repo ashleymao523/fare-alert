@@ -476,7 +476,7 @@ def api_test_push():
     cfg = load_config(CONFIG_PATH)
     results = push_all(cfg, _log, "✈️ FareAlert 测试推送",
                        "推送通道配置成功!这是一条测试消息。", url="",
-                       route_id="test-push")
+                       route_id="test-push", kind="test")
     return jsonify({"ok": True, "results": results})
 
 
@@ -545,12 +545,44 @@ def api_amadeus_test():
 
 @app.get("/api/alerts")
 def api_alerts():
+    """v0.60: rows carry a kind tag (stored, or classified from the
+    title for legacy rows); counts cover the FULL back-catalog so the
+    filter chips reflect reality beyond the returned 50-row page."""
+    from core.notify import classify_alert
     history = _read_json(ALERTS_PATH, [])
     if isinstance(history, list):
         history = list(reversed(history[-50:]))
     else:
         history = []
-    return jsonify({"alerts": history})
+    for a in history:
+        if isinstance(a, dict) and not a.get("kind"):
+            a["kind"] = classify_alert(a.get("title"))
+    counts = {}
+    for a in _read_json(ALERTS_PATH, []):
+        if isinstance(a, dict):
+            k = a.get("kind") or classify_alert(a.get("title"))
+            counts[k] = counts.get(k, 0) + 1
+    return jsonify({"alerts": history, "counts": counts})
+
+
+@app.delete("/api/alerts")
+def api_alerts_delete():
+    """v0.60: purge test-kind rows (manual 't'/'b' junk + test pushes)
+    so real alerts stop drowning in noise. Other kinds are untouched."""
+    from core.notify import classify_alert
+    with _lock:
+        history = _read_json(ALERTS_PATH, [])
+        if not isinstance(history, list):
+            history = []
+        keep = [a for a in history
+                if classify_alert((a or {}).get("title")) != "test"]
+        removed = len(history) - len(keep)
+        if removed:
+            tmp = ALERTS_PATH + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(keep, f, ensure_ascii=False, indent=1)
+            os.replace(tmp, ALERTS_PATH)
+    return jsonify({"ok": True, "removed": removed})
 
 
 @app.get("/api/history")
@@ -685,7 +717,7 @@ def api_weekly_push():
         return jsonify({"ok": False,
                         "error": "未配置推送渠道:请先在「提醒推送」页填写 Bark Key 或 ServerChan SendKey"}), 400
     results = push_all(cfg, _log, "📈 FareAlert 价格周报",
-                       push_text(report), url="")
+                       push_text(report), url="", kind="weekly")
     failed = [x for x in results if ":ERR" in x]
     wk_path = os.path.join(DATA_DIR, "weekly_push.json")
     if len(failed) == len(results):

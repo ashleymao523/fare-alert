@@ -931,7 +931,7 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                                      p=int(rec_hit["price"]),
                                      q=int(rec_hit.get("record_prev")
                                            or rec_hit["price"]), x=under),
-                                 route_id=hid)
+                                 route_id=hid, kind="cabin-record")
                         st.setdefault("alerted_low", {})[hid] = \
                             rec_hit["price"]
                         st["last_hit"] = {
@@ -950,7 +950,7 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                                  "{d} 公务舱 ¥{p} (阈值 ¥{t})".format(
                                      d=h["date"], p=int(h["price"]),
                                      t=int(cw.get("threshold_total") or 0)),
-                                 route_id=h["route_id"])
+                                 route_id=h["route_id"], kind="cabin")
                         st["last_hit"] = h
                     st["last_alert_ts"] = dt.datetime.now().isoformat()
             except Exception as e:
@@ -998,7 +998,8 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
             title, body = build_message(route, to_alert, below, train_info, cfg)
             log.info("ALERT >> " + title)
             push_all(cfg, log, title, body,
-                     url=to_alert[0][1].url, route_id=route.get("id"))
+                     url=to_alert[0][1].url, route_id=route.get("id"),
+                     kind="threshold")
             pushed += len(to_alert)
         if pending_push:
             rec.step("push", "all", "send alerts", "ok", 0, count=pushed)
@@ -1046,7 +1047,7 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                              "窗口最低 ¥{t} 较昨日 {p}% (¥{d})".format(
                                  t=int(d0["today"]), p=d0["pct"],
                                  d=int(d0["delta"])),
-                             route_id=d0["route_id"])
+                             route_id=d0["route_id"], kind="drop")
                 st_drop[key] = True
                 fired = True
             if fired:
@@ -1062,7 +1063,7 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 report = build_weekly(hist_path)
                 if report.get("ok"):
                     results = push_all(cfg, log, "📈 FareAlert 价格周报",
-                                       push_text(report), url="")
+                                       push_text(report), url="", kind="weekly")
                     failed = [x for x in results if ":ERR" in x]
                     if len(failed) == len(results):
                         # every channel failed: retry in 6h, no 45min storm
@@ -1111,7 +1112,8 @@ def main():
     cfg = load_config(CONFIG_PATH)
 
     if args.test_push:
-        push_all(cfg, log, "✈️FareAlert 测试推送", "配置成功!这是测试消息。", url="")
+        push_all(cfg, log, "✈️FareAlert 测试推送", "配置成功!这是测试消息。",
+                 url="", kind="test")
         return
     if args.query:
         run_once(cfg, log, push_enabled=False, verbose=True)

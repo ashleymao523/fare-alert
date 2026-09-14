@@ -19,7 +19,33 @@ def has_channel(cfg):
                 or (p.get("serverchan_sendkey") or "").strip())
 
 
-def push_all(cfg, log, title, body, url="", route_id=None):
+def classify_alert(title):
+    """v0.60: best-effort kind tag from an alert title (pure function).
+
+    New push_all call sites pass kind= explicitly; this fallback
+    classifies legacy rows recorded before kinds existed, so the whole
+    200-row back-catalog becomes filterable. Titles of <= 2 chars are
+    manual junk ('t'/'b' style test pushes) - no production call site
+    produces anything that short, so they clean up as test noise."""
+    t = str(title or "").strip()
+    if len(t) <= 2 or "测试" in t:
+        return "test"
+    if "周报" in t:
+        return "weekly"
+    if "公务舱历史新低" in t:
+        return "cabin-record"
+    if "公务舱" in t:
+        return "cabin"
+    if "骤降" in t:
+        return "drop"
+    if "巡检" in t:
+        return "patrol"
+    if t.startswith("✈️") or "低于¥" in t:
+        return "threshold"
+    return "other"
+
+
+def push_all(cfg, log, title, body, url="", route_id=None, kind=None):
     p = cfg.get("push", {})
     results = []
 
@@ -69,11 +95,11 @@ def push_all(cfg, log, title, body, url="", route_id=None):
     if not results:
         results.append("console-only(未配置推送key,详见report)")
     log.info("push -> " + ", ".join(results))
-    _record_alert(title, body, url, route_id)
+    _record_alert(title, body, url, route_id, kind)
     return results
 
 
-def _record_alert(title, body, url, route_id):
+def _record_alert(title, body, url, route_id, kind=None):
     try:
         os.makedirs(os.path.dirname(_ALERTS_FILE), exist_ok=True)
         history = []
@@ -91,6 +117,7 @@ def _record_alert(title, body, url, route_id):
             "title": title,
             "body": body,
             "url": url or "",
+            "kind": kind or classify_alert(title),
         })
         history = history[-200:]
         with open(_ALERTS_FILE, "w", encoding="utf-8") as f:

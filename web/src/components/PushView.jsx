@@ -1,6 +1,22 @@
 import { useEffect, useState } from "preact/hooks";
 import { saveConfig, testPush, fetchAlerts, fetchWeekly, fetchLanInfo,
-  fetchDrops } from "../lib/api.js";
+  fetchDrops, deleteAlerts } from "../lib/api.js";
+
+// v0.60: alert kinds - explicit on new rows, title-classified on legacy
+const KINDS = [
+  ["all", "全部", () => true],
+  ["threshold", "低价破线", (k) => k === "threshold"],
+  ["cabin", "公务舱", (k) => k === "cabin" || k === "cabin-record"],
+  ["drop", "骤降", (k) => k === "drop"],
+  ["weekly", "周报", (k) => k === "weekly"],
+  ["patrol", "巡检", (k) => k === "patrol"],
+  ["test", "测试", (k) => k === "test"],
+];
+const kindLabel = (k) => ({
+  threshold: "低价破线", cabin: "公务舱", "cabin-record": "公务舱新低",
+  drop: "骤降", weekly: "周报", patrol: "巡检", test: "测试",
+  other: "其他",
+}[k] || "其他");
 
 function Field({ label, children }) {
   return <label class="field2"><span class="f-label2">{label}</span>{children}</label>;
@@ -46,6 +62,8 @@ function LanCard() {
 // silently overwrite unsaved source toggles held in the other tab (and vice versa)
 export default function PushView({ cfg, setCfg, cfgErr }) {
   const [alerts, setAlerts] = useState([]);
+  const [counts, setCounts] = useState({});
+  const [fk, setFk] = useState("all");
   const [rep, setRep] = useState(null);
   const [drops, setDrops] = useState([]);
   const [msg, setMsg] = useState("");
@@ -54,7 +72,7 @@ export default function PushView({ cfg, setCfg, cfgErr }) {
     typeof Notification !== "undefined" ? Notification.permission : "unsupported"
   );
   const load = () => fetchAlerts()
-    .then((a) => setAlerts(a.alerts || []))
+    .then((a) => { setAlerts(a.alerts || []); setCounts(a.counts || {}); })
     .catch((e) => setMsg("提醒历史加载失败: " + (e.message || e)));
   useEffect(() => { load(); }, []);
   useEffect(() => {
@@ -82,6 +100,14 @@ export default function PushView({ cfg, setCfg, cfgErr }) {
     testPush()
       .then((r) => setMsg("已发送 ✅ " + (r.results || []).join(" · ")))
       .catch((e) => setMsg("发送失败 " + (e.message || e)))
+      .finally(() => setBusy(false));
+  };
+  const doClean = () => {
+    if (!window.confirm("清理全部测试推送记录? 其他类型提醒保留。")) return;
+    setBusy(true); setMsg("清理中…");
+    deleteAlerts()
+      .then((r) => { setMsg("已清理 " + (r.removed || 0) + " 条测试记录"); load(); })
+      .catch((e) => setMsg("清理失败: " + (e.message || e)))
       .finally(() => setBusy(false));
   };
   const askPerm = () => {
@@ -208,16 +234,47 @@ export default function PushView({ cfg, setCfg, cfgErr }) {
       <div class="card">
         <div class="card-head">
           <h3>🧾 提醒历史</h3>
-          <span class="sub">低于心理价位时才推送</span>
-        </div>
-        {alerts.length ? alerts.map((a) => (
-          <div class="alert-item2" key={String(a.ts || "") + String(a.title || "")}>
-            <div class="a-title2">{a.title}</div>
-            <div class="a-meta2">{String(a.ts || "").replace("T", " ")}{a.route ? " · " + a.route : ""}</div>
-            <div class="a-body2">{a.body}</div>
-            {a.url ? <a href={a.url} target="_blank" rel="noopener">购票链接 →</a> : null}
+          <div class="head-actions">
+            <span class="sub">分类过滤 · 测试噪音一键清理</span>
+            <button class="btn sm" disabled={busy} onClick={doClean}>
+              清理测试
+            </button>
           </div>
-        )) : <div class="muted">暂无提醒记录</div>}
+        </div>
+        <div class="cw-routes">
+          {KINDS.map(([k, label, match]) => {
+            const n = k === "all"
+              ? Object.values(counts).reduce((s, x) => s + (x || 0), 0)
+              : (counts[k] || 0)
+                + (k === "cabin" ? (counts["cabin-record"] || 0) : 0);
+            return (
+              <span key={k} role="button" tabindex="0"
+                class={"chip2 chip-filter " + (fk === k ? "hero" : "plan")}
+                onClick={() => setFk(k)}
+                onKeyDown={(e) => e.key === "Enter" && setFk(k)}>
+                {label} {n}
+              </span>
+            );
+          })}
+        </div>
+        {(() => {
+          const match = (KINDS.find((x) => x[0] === fk) || KINDS[0])[2];
+          const shown = alerts.filter((a) => match(a.kind || "other"));
+          if (!alerts.length) return <div class="muted">暂无提醒记录</div>;
+          if (!shown.length) return <div class="muted">该分类暂无提醒</div>;
+          return shown.map((a) => (
+            <div class="alert-item2" key={String(a.ts || "") + String(a.title || "")}>
+              <div class="a-title2">{a.title}
+                <span class={"chip2 " + ((a.kind || "other") === "test" ? "plan" : "ok")}>
+                  {kindLabel(a.kind)}
+                </span>
+              </div>
+              <div class="a-meta2">{String(a.ts || "").replace("T", " ")}{a.route ? " · " + a.route : ""}</div>
+              <div class="a-body2">{a.body}</div>
+              {a.url ? <a href={a.url} target="_blank" rel="noopener">购票链接 →</a> : null}
+            </div>
+          ));
+        })()}
       </div>
     </div>
   );

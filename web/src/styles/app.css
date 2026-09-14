@@ -733,6 +733,10 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 .cabin-refresh .btn {
   margin-left: auto;
 }
+.chip-filter {
+  cursor: pointer;
+  user-select: none;
+}
 .cw-routes {
   display: flex;
   flex-wrap: wrap;
