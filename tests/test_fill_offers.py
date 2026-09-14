@@ -117,6 +117,35 @@ class FillOffersTests(unittest.TestCase):
             self.assertEqual(out3, [])
             self.assertEqual(len(s.gets), 2)
 
+    def test_rotation_probes_beyond_first_batch(self):
+        # v0.67: 12 holes with a 6-per-round budget must ALL be probed
+        # across rounds - the old [:6] truncation starved holes #7+.
+        s = _Session(_offer_j())
+        gaps = ["2026-10-%02d" % i for i in range(1, 13)]  # 12 holes
+        kw = {"tax": {}}
+        ama = {"client_id": "x", "client_secret": "y"}
+        with tempfile.TemporaryDirectory() as td:
+            st1 = {}
+            _cached_fill_offers(s, {}, kw, ama, "HGH", "CKG",
+                                gaps, td, max_days=6, stats=st1)
+            self.assertEqual(
+                st1, {"holes": 12, "probed": 6, "deferred": 6})
+            self.assertEqual(len(s.gets), 6)  # round 1: first 6 only
+            # round 2: first 6 cached -> the next 6 rotate in
+            st2 = {}
+            out2 = _cached_fill_offers(s, {}, kw, ama, "HGH", "CKG",
+                                       gaps, td, max_days=6, stats=st2)
+            self.assertEqual(st2["probed"], 6)
+            self.assertEqual(st2["deferred"], 0)
+            self.assertEqual(len(s.gets), 12)
+            self.assertEqual(len(out2), 12)  # 6 cached + 6 fresh
+            # round 3: everything cached -> zero new probes
+            st3 = {}
+            _cached_fill_offers(s, {}, kw, ama, "HGH", "CKG",
+                                gaps, td, max_days=6, stats=st3)
+            self.assertEqual(st3["probed"], 0)
+            self.assertEqual(len(s.gets), 12)
+
     def test_usage_counter_counts_and_rolls(self):
         import time as _t
         with tempfile.TemporaryDirectory() as td:

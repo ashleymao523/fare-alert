@@ -90,6 +90,17 @@ def test_interp_single_side_fallback():
     assert d3.source == "nearby-ref" and d3.ref_offset == 2
 
 
+def test_reference_reaches_head_of_60d_window():
+    # v0.67: qunar-intl promo often returns only 1-2 TAIL dates; the
+    # head of the window sat >45d from the only real price and rendered
+    # blank. Radius 75 must reference the whole 60d window from one anchor.
+    deals = [FlightDeal("2026-11-07", 680, "XX111")]
+    by = {d.date: d for d in _fill_reference_deals(
+        deals, "2026-09-15", "2026-11-13", "A", "B")}
+    assert by["2026-09-15"].source == "nearby-ref"
+    assert by["2026-09-15"].ref_offset == 53
+
+
 def test_estimated_sources_isolated():
     deals = [FlightDeal("2026-09-02", 100, "MU5100"),
              FlightDeal("2026-09-03", 90, "XX0000", source="interp"),

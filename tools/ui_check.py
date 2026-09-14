@@ -447,6 +447,11 @@ checks["v0.66 cabin patrol"] = (("def patrol_legs" in _cabin_core_src)
     and ("独立巡检" in _cabin_card_src)
     and ("独立巡检" in _dist_js))
 
+checks["v0.67 精点轮转"] = (("stats=fstats" in _main_src)
+    and ("max_days_far=75" in _main_src)
+    and ("deferred" in _main_src)
+    and ("本轮点查" in _main_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

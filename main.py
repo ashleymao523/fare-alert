@@ -134,7 +134,7 @@ FILL_ENABLED_DFT = True
 
 
 def _fill_reference_deals(deals, date_from, date_to, fc, tc,
-                          max_days=7, max_days_far=45):
+                          max_days=7, max_days_far=75):
     """Attach nearest-priced-date reference deals for gap dates.
 
     The qunar calendar cache leaves some dates unpriced ("查价"); those need a
@@ -145,6 +145,9 @@ def _fill_reference_deals(deals, date_from, date_to, fc, tc,
     (e.g. inventory not loaded yet). ref_offset carries the distance so the UI
     can label staleness. Reference deals never trigger alerts and never win
     cheapest/KPI computations.
+    v0.67: radius 45->75 so a single tail anchor (qunar-intl promo often
+    returns only 1-2 tail dates) still references the whole 60d window -
+    the head used to stay blank when the nearest real price sat >45d away.
     """
     real = [d for d in deals if d.source not in NON_REAL_SOURCES]
     if not real:
@@ -387,14 +390,19 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
         return deals
     t0o = time.time()
     try:
+        fstats = {}
         off = _cached_fill_offers(session, net, cfg, ama_cfg,
-                                  fi2, ti2, still, DATA_DIR)
+                                  fi2, ti2, still, DATA_DIR, stats=fstats)
         if off:
             deals, _ = merge_fill_deals(
                 deals, off, lambda d: booking_url(fc, tc, d))
         if rec:
             rec.step("amadeus-fill-offer", route_id, "offer fill", "ok",
-                     (time.time() - t0o) * 1000, count=len(off))
+                     (time.time() - t0o) * 1000, count=len(off),
+                     error="缺{}天·本轮点查{}·待轮转{}".format(
+                         fstats.get("holes", len(still)),
+                         fstats.get("probed", 0),
+                         fstats.get("deferred", 0)))
     except Exception as e:
         if rec:
             rec.step("amadeus-fill-offer", route_id, "offer fill", "skip",
@@ -403,13 +411,20 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
 
 
 def _cached_fill_offers(session, net, cfg, ama_cfg, fi, ti,
-                        gap_dates, data_dir, max_days=6):
+                        gap_dates, data_dir, max_days=6, stats=None):
     """v0.44: offer-exact gap fill with per-date 24h cache.
 
     Each still-missing date costs one flight-offers call, so results
     (and negative answers) are cached per date for a day - a 45min poll
     loop stays quota-safe. Rows keep the 'amadeus-fill' source tag the
     pipeline already understands.
+    v0.67: rotating budget. The old gap_dates[:max_days] truncation only
+    ever probed the FIRST batch of holes - anything past #6 was starved
+    forever (7 holes -> #7 never point-queried, exactly the dates users
+    saw blank but could search manually). Now each round probes up to
+    max_days dates whose cache entry is missing or expired; the rest
+    rotate in on later rounds while fresh positives return from cache
+    instantly. The negative cache doubles as the rotation cursor.
     """
     path = os.path.join(data_dir, FILL_CACHE_FILE)
     now = time.time()
@@ -420,8 +435,8 @@ def _cached_fill_offers(session, net, cfg, ama_cfg, fi, ti,
     except Exception:
         cache = {}
     prefix = "OFFER-{}-{}-".format(fi, ti)
-    todo, out = [], []
-    for d in gap_dates[:max_days]:
+    out, todo = [], []
+    for d in gap_dates:
         ent = cache.get(prefix + d)
         if ent and now - float(ent.get("ts", 0)) < FILL_CACHE_TTL:
             if ent.get("p") is not None:
@@ -435,9 +450,11 @@ def _cached_fill_offers(session, net, cfg, ama_cfg, fi, ti,
                     arr_src="amadeus" if ent.get("arr") else "",
                     stop_kind="transfer" if ent.get("stop") else "",
                     stop_city=ent.get("stop", ""),
-                    source="amadeus-fill"))
+                source="amadeus-fill"))
         else:
             todo.append(d)
+    pending = len(todo)
+    todo = todo[:max_days]
     if todo:
         fresh = fetch_fill_offers(session, net, ama_cfg, cfg.get("tax", {}),
                                   fi, ti, todo, data_dir)
@@ -458,6 +475,10 @@ def _cached_fill_offers(session, net, cfg, ama_cfg, fi, ti,
                 json.dump(cache, f, ensure_ascii=False)
         except Exception:
             pass
+    if stats is not None:
+        stats["holes"] = len(gap_dates)
+        stats["probed"] = len(todo)
+        stats["deferred"] = max(0, pending - len(todo))
     return out
 
 
