@@ -82,7 +82,8 @@ class PatrolCoreTests(unittest.TestCase):
     def test_default_fetch_is_loopback_only(self):
         """Contract: the default health seam may only ever talk to
         127.0.0.1, so patrol can never become an external requester."""
-        src = open(patrol.__file__, encoding="utf-8").read()
+        with open(patrol.__file__, encoding="utf-8") as f:
+            src = f.read()
         self.assertIn("127.0.0.1", src)
 
 

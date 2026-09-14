@@ -4,6 +4,7 @@ config.json.bak
 data/
 tools/cache/
 cache/
+backups/
 
 # python
 __pycache__/

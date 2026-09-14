@@ -225,6 +225,21 @@ checks["v0.40 巡检定时化"] = "patrol_once" in open(
     os.path.join("core", "revive.py"), encoding="utf-8").read()
 checks["v0.40 v2 DOM真实票口径"] = "真实票时刻覆盖" in _all
 checks["v0.40.1 v2产物巡检异常可见"] = "最近异常" in _dist_js
+_reenrich_src = open(os.path.join("core", "reenrich.py"),
+                     encoding="utf-8").read() if os.path.exists(
+    os.path.join("core", "reenrich.py")) else ""
+checks["v0.41 时刻回写核心"] = (("reenrich_snapshot" in _reenrich_src)
+    and ("_enrich_flight_times" in _reenrich_src)
+    and ("time_coverage" in _reenrich_src))
+checks["v0.41 巡检接线离线回写"] = "_patrol_time_fill" in open(
+    os.path.join("core", "revive.py"), encoding="utf-8").read()
+checks["v0.41 v2产物时刻回写可见"] = "时刻回写" in _dist_js
+checks["v0.41 v2产物缺时刻CTA"] = "查当日实时班次与购票" in _dist_js
+_backup_src = open(os.path.join("tools", "backup.py"),
+                   encoding="utf-8").read() if os.path.exists(
+    os.path.join("tools", "backup.py")) else ""
+checks["v0.41 迁移备份工具"] = (("flight_sched_db.json" in _backup_src)
+    and ("zipfile" in _backup_src))
 
 bad = 0
 for k, v in checks.items():

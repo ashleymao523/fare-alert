@@ -162,7 +162,17 @@ export default function DayDetail({ route, date }) {
         </div>
       )}
       <div class="dd-actions">
-        <a class="btn primary small" href={d.url} target="_blank" rel="noopener">直达购票页 →</a>
+        <a
+          class={"btn primary small" + (!hasDep && !hasArr && !isRef ? " amber-cta" : "")}
+          href={d.url}
+          target="_blank"
+          rel="noopener"
+          title={!hasDep && !hasArr && !isRef
+            ? "本行时刻待班期库沉淀 · 点击直达去哪儿当日航班列表, 起降时刻以列表页为准"
+            : "直达去哪儿当日航班列表购票"}
+        >
+          {!hasDep && !hasArr && !isRef ? "查当日实时班次与购票 →" : "直达购票页 →"}
+        </a>
       </div>
     </div>
   );

@@ -20,7 +20,7 @@ class ReviveSupervisorTests(unittest.TestCase):
         for k in ("last_check", "last_start", "last_probe",
                   "started_pid", "last_error",
                   "patrol_enabled", "patrol_done_day", "patrol_last",
-                  "patrol_last_error"):
+                  "patrol_last_error", "catchup_done_day"):
             revive._state[k] = None
 
     def test_out_of_window_never_starts(self):
@@ -54,6 +54,97 @@ class ReviveSupervisorTests(unittest.TestCase):
                 "/repo", now=datetime.datetime(2026, 9, 12, 7, 59))
         self.assertEqual(rv, "already-running")
         sl.assert_not_called()
+
+    def test_catchup_revives_stale_heartbeat_out_of_window(self):
+        """v0.41: a desktop that boots AFTER the 07:00 window still
+        revives a >6h-stale worker once per day, so board dow coverage
+        keeps growing on any boot schedule (observed freeze: 2/7)."""
+        p0 = mock.patch.object(revive, "_worker_heartbeat_age_s")
+        p1 = mock.patch.object(revive, "loop_running")
+        p2 = mock.patch.object(revive, "start_loop")
+        with p0 as hb, p1 as lr, p2 as sl:
+            hb.return_value = 2.6 * 86400
+            lr.return_value = False
+            sl.return_value = 4321
+            rv = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 15, 0))
+        self.assertEqual(rv, "started-catchup")
+        sl.assert_called_once_with("/repo")
+        self.assertEqual(revive._state["catchup_done_day"], "2026-09-14")
+
+    def test_catchup_skips_fresh_heartbeat_out_of_window(self):
+        """A fresh (<6h) heartbeat outside the window waits for the
+        normal 07:00 revive - no extra midday launch cycles."""
+        p0 = mock.patch.object(revive, "_worker_heartbeat_age_s")
+        p1 = mock.patch.object(revive, "loop_running")
+        p2 = mock.patch.object(revive, "start_loop")
+        with p0 as hb, p1 as lr, p2 as sl:
+            hb.return_value = 900
+            rv = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 15, 0))
+        self.assertEqual(rv, "out-of-window")
+        lr.assert_not_called()
+        sl.assert_not_called()
+
+    def test_catchup_runs_once_per_day(self):
+        """After a catch-up revive the day is marked done: later passes
+        never re-probe/re-start, even with the heartbeat still stale."""
+        p0 = mock.patch.object(revive, "_worker_heartbeat_age_s")
+        p1 = mock.patch.object(revive, "loop_running")
+        p2 = mock.patch.object(revive, "start_loop")
+        with p0 as hb, p1 as lr, p2 as sl:
+            hb.return_value = 9 * 3600
+            lr.return_value = False
+            sl.return_value = 111
+            rv1 = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 15, 0))
+            rv2 = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 15, 5))
+        self.assertEqual(rv1, "started-catchup")
+        self.assertEqual(rv2, "out-of-window")
+        sl.assert_called_once()
+
+    def test_catchup_marks_done_when_already_running(self):
+        p0 = mock.patch.object(revive, "_worker_heartbeat_age_s")
+        p1 = mock.patch.object(revive, "loop_running")
+        p2 = mock.patch.object(revive, "start_loop")
+        with p0 as hb, p1 as lr, p2 as sl:
+            hb.return_value = 7 * 3600
+            lr.return_value = True
+            rv = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 15, 0))
+        self.assertEqual(rv, "already-running-catchup")
+        sl.assert_not_called()
+        self.assertEqual(revive._state["catchup_done_day"], "2026-09-14")
+
+    def test_catchup_absent_heartbeat_waits_for_window(self):
+        """No heartbeat file at all = nothing to compare; the normal
+        07:00 window owns the first launch (no midday cold start)."""
+        p0 = mock.patch.object(revive, "_worker_heartbeat_age_s",
+                               return_value=None)
+        p1 = mock.patch.object(revive, "loop_running")
+        p2 = mock.patch.object(revive, "start_loop")
+        with p0, p1 as lr, p2 as sl:
+            rv = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 15, 0))
+        self.assertEqual(rv, "out-of-window")
+        lr.assert_not_called()
+        sl.assert_not_called()
+
+    def test_catchup_probe_error_leaves_day_unmarked(self):
+        """A probe failure must not consume the day: the next 5-min
+        pass retries instead of skipping the revive entirely."""
+        p0 = mock.patch.object(revive, "_worker_heartbeat_age_s")
+        p1 = mock.patch.object(
+            revive, "loop_running", side_effect=OSError("no powershell"))
+        p2 = mock.patch.object(revive, "start_loop")
+        with p0 as hb, p1, p2 as sl:
+            hb.return_value = 9 * 3600
+            rv = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 15, 0))
+        self.assertEqual(rv, "probe-error")
+        sl.assert_not_called()
+        self.assertIsNone(revive._state["catchup_done_day"])
 
     def test_probe_error_tolerated(self):
         p1 = mock.patch.object(revive, "loop_running",
@@ -120,6 +211,38 @@ class ReviveSupervisorTests(unittest.TestCase):
             revive.supervisor_snapshot()["patrol"]["last"]["verdict"], "error")
         self.assertIn("webui down",
                       revive.supervisor_snapshot()["patrol"]["last_error"])
+
+    def test_patrol_attaches_offline_time_fill(self):
+        """v0.41: after the health pass, patrol replays snapshot times
+        offline; the summary lands in supervisor_snapshot for the UI."""
+        with mock.patch("core.patrol.run_patrol") as rp, \
+             mock.patch("core.reenrich.reenrich_snapshot") as reen:
+            rp.return_value = {"verdict": "healthy", "notified": False,
+                               "ts": "2026-09-12T09:05:00"}
+            reen.return_value = {"routes": 2, "dep_covered": 70,
+                                 "dep_total": 80, "changed": True,
+                                 "per_route": []}
+            revive._state["patrol_enabled"] = True
+            rv = revive.patrol_once(
+                "/repo", now=datetime.datetime(2026, 9, 12, 9, 5))
+        self.assertEqual(rv, "ran:healthy")
+        reen.assert_called_once_with("/repo")
+        tf = revive.supervisor_snapshot()["patrol"]["last"]["time_fill"]
+        self.assertEqual(tf["dep_covered"], 70)
+        self.assertEqual(tf["dep_total"], 80)
+
+    def test_patrol_time_fill_error_becomes_payload(self):
+        with mock.patch("core.patrol.run_patrol") as rp, \
+             mock.patch("core.reenrich.reenrich_snapshot",
+                        side_effect=OSError("disk")):
+            rp.return_value = {"verdict": "healthy", "notified": False,
+                               "ts": "2026-09-12T09:05:00"}
+            revive._state["patrol_enabled"] = True
+            rv = revive.patrol_once(
+                "/repo", now=datetime.datetime(2026, 9, 12, 9, 5))
+        self.assertEqual(rv, "ran:healthy")  # patrol itself still passed
+        tf = revive.supervisor_snapshot()["patrol"]["last"]["time_fill"]
+        self.assertIn("disk", tf["error"])
 
 
 class ReviveTaskTests(unittest.TestCase):

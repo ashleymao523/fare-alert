@@ -27,6 +27,7 @@ class V2HostingTests(unittest.TestCase):
         self.assertIn('id="app"', body)
         self.assertIn("/v2/assets/", body)
         self.assertIn("no-cache", r.headers.get("Cache-Control", ""))
+        r.close()
 
     def test_v2_asset_served(self):
         assets = os.path.join(self.dist, "assets")
@@ -37,6 +38,7 @@ class V2HostingTests(unittest.TestCase):
         r = self.client.get("/v2/assets/" + js[0])
         self.assertEqual(r.status_code, 200)
         self.assertIn("javascript", r.headers.get("Content-Type", ""))
+        r.close()  # send_file stream: close so ResourceWarning stays quiet
 
     def test_v2_no_path_traversal(self):
         """Security regression lock: /v2 must never serve files outside dist."""
@@ -56,6 +58,7 @@ class V2HostingTests(unittest.TestCase):
         cc = r.headers.get("Cache-Control", "")
         self.assertIn("immutable", cc)
         self.assertIn("max-age=31536000", cc)
+        r.close()
 
     def test_classic_links_to_v2(self):
         r = self.client.get("/classic")

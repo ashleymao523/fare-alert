@@ -52,7 +52,8 @@ _state = {"enabled": False, "thread": None, "last_check": None,
           "last_start": None, "last_probe": None, "started_pid": None,
           "last_error": None,
           "patrol_enabled": False, "patrol_done_day": None,
-          "patrol_last": None, "patrol_last_error": None}
+          "patrol_last": None, "patrol_last_error": None,
+          "catchup_done_day": None}
 
 
 def _query_task():
@@ -87,6 +88,20 @@ def _in_launch_window(now=None):
     return now.hour == REVIVE_HOUR
 
 
+def _worker_heartbeat_age_s(repo_dir, now=None):
+    """Age of data/worker_heartbeat.json in seconds; None when absent.
+    The loop writes it once per pass, so a big age = the worker died
+    (e.g. over a weekend while the machine was off)."""
+    try:
+        with open(os.path.join(repo_dir, "data",
+                               "worker_heartbeat.json"),
+                  encoding="utf-8") as f:
+            ts = float((json.load(f) or {}).get("ts") or 0)
+        return max(0.0, (now or time.time()) - ts)
+    except Exception:
+        return None
+
+
 def loop_running():
     """True when a 'main.py --loop' process exists (per-OS probe)."""
     if os.name == "nt":
@@ -113,10 +128,26 @@ def start_loop(repo_dir):
 
 
 def supervise_once(repo_dir, now=None):
-    """One supervision pass; returns the action taken (test seam)."""
+    """One supervision pass; returns the action taken (test seam).
+
+    v0.41 catch-up: a desktop that boots AFTER the 07:00 window (or was
+    off over the weekend) used to miss the revive entirely - the worker
+    stayed dead for days, freezing board dow coverage at whatever days
+    it had already seen (observed: 2/7 with the last heartbeat 2.6 days
+    old). Now, outside the window, a stale heartbeat (>6h) still probes
+    and revives once per day, so dow coverage keeps growing on any boot
+    schedule."""
     _state["last_check"] = time.time()
-    if not _in_launch_window(now):
-        return "out-of-window"
+    in_window = _in_launch_window(now)
+    if not in_window:
+        day = (now or datetime.datetime.now()).date().isoformat()
+        if _state.get("catchup_done_day") == day:
+            return "out-of-window"
+        age = _worker_heartbeat_age_s(
+            repo_dir, now=(now or datetime.datetime.now()).timestamp()
+            if now else None)
+        if age is None or age < 6 * 3600:
+            return "out-of-window"  # fresh/absent heartbeat: wait for window
     try:
         running = loop_running()
     except Exception as e:
@@ -125,9 +156,17 @@ def supervise_once(repo_dir, now=None):
         return "probe-error"
     _state["last_probe"] = "ok"
     if running:
+        if not in_window:
+            _state["catchup_done_day"] = (
+                now or datetime.datetime.now()).date().isoformat()
+            return "already-running-catchup"
         return "already-running"
     _state["started_pid"] = start_loop(repo_dir)
     _state["last_start"] = time.time()
+    if not in_window:
+        _state["catchup_done_day"] = (
+            now or datetime.datetime.now()).date().isoformat()
+        return "started-catchup"
     return "started"
 
 
@@ -150,9 +189,23 @@ def patrol_once(repo_dir, now=None):
         return "already-done"
     try:
         doc = run_patrol(repo_dir, notify=True, caller="schedule")
+        # v0.41: close the self-heal loop - the board db keeps growing
+        # (one weekday per crawl day), but the snapshot only re-enriched
+        # on the next successful crawl. Replay times offline NOW so the
+        # dashboard reflects today's db growth without any new request.
+        doc["time_fill"] = _patrol_time_fill(repo_dir)
+        try:  # keep the on-disk archive in sync with the in-memory doc
+            _p = os.path.join(repo_dir, "data", "patrol_last.json")
+            _tmp = _p + ".tmp"   # atomic: a crash cannot truncate the
+            with open(_tmp, "w", encoding="utf-8") as f:  # archive
+                json.dump(doc, f, ensure_ascii=False, indent=1)
+            os.replace(_tmp, _p)
+        except Exception:
+            pass  # archive refresh is cosmetic; _state carries the truth
         _state["patrol_last"] = {"ts": doc.get("ts"),
                                  "verdict": doc.get("verdict"),
-                                 "notified": doc.get("notified")}
+                                 "notified": doc.get("notified"),
+                                 "time_fill": doc.get("time_fill")}
         _state["patrol_done_day"] = day
         return "ran:" + (doc.get("verdict") or "?")
     except Exception as e:
@@ -164,6 +217,23 @@ def patrol_once(repo_dir, now=None):
             "verdict": "error", "notified": False}
         _state["patrol_done_day"] = day
         return "error"
+
+
+def _patrol_time_fill(repo_dir):
+    """Best-effort offline re-enrich; never raises (errors become the
+    time_fill payload so SourcesView can show why it skipped)."""
+    try:
+        from core.reenrich import reenrich_snapshot
+        out = reenrich_snapshot(repo_dir)
+        payload = {"routes": out["routes"],
+                   "dep_covered": out["dep_covered"],
+                   "dep_total": out["dep_total"],
+                   "changed": out["changed"]}
+        if out.get("write_error"):
+            payload["write_error"] = out["write_error"]
+        return payload
+    except Exception as e:
+        return {"error": str(e)[:160]}
 
 
 def start_supervisor(repo_dir, enabled=True, interval_s=CHECK_INTERVAL_S,

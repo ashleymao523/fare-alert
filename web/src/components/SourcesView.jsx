@@ -140,6 +140,10 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
             {(pt.last && pt.last.verdict)
               ? " · 最近结论: " + pt.last.verdict : ""}
             {pt.last_error ? " · 最近异常: " + pt.last_error : ""}
+            {(pt.last && pt.last.time_fill && pt.last.time_fill.dep_total)
+              ? " · 时刻回写: 起飞 " + pt.last.time_fill.dep_covered + "/"
+                + pt.last.time_fill.dep_total + " (巡检后离线补全)"
+              : ""}
           </div>
         ) : null}
       </div>
