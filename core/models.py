@@ -22,6 +22,7 @@ class FlightDeal:
     stop_kind: str = ""       # v0.33 中转/经停透明化: ""=无 | transfer=中转(联程首段) | via=经停
     stop_city: str = ""       # 中转城市(首段 to)或经停城市(ent.via)
     stop_arr: str = ""        # 到达中转/经停城市的时刻(首段 arr 或 via_arr)
+    cabin: str = ""           # v0.42 舱等: ""=经济(默认) | business=公务舱监控行
 
     @property
     def airline_code(self):

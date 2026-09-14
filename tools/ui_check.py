@@ -240,6 +240,19 @@ _backup_src = open(os.path.join("tools", "backup.py"),
     os.path.join("tools", "backup.py")) else ""
 checks["v0.41 迁移备份工具"] = (("flight_sched_db.json" in _backup_src)
     and ("zipfile" in _backup_src))
+_cabin_src = open(os.path.join("core", "cabin_monitor.py"),
+                 encoding="utf-8").read() if os.path.exists(
+    os.path.join("core", "cabin_monitor.py")) else ""
+checks["v0.42 公务舱监控核心"] = (("record_low" in _cabin_src)
+    and ("evaluate_alert" in _cabin_src)
+    and ("route_qualifies" in _cabin_src))
+checks["v0.42 公务舱API"] = (("/api/cabin" in open("webui.py",
+    encoding="utf-8").read())
+    and ("fetch_cabin_offers" in open(os.path.join("core", "intl.py"),
+                                      encoding="utf-8").read()))
+checks["v0.42 v2产物公务舱卡"] = "公务舱低价监控" in _dist_js
+checks["v0.42 共享号时刻兜底"] = (("_attach_alt_times" in _reenrich_src)
+    and ("alt_before" in _reenrich_src))
 
 bad = 0
 for k, v in checks.items():

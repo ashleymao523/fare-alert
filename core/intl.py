@@ -66,6 +66,83 @@ def google_flights_url(from_iata, to_iata, date):
     return "https://www.google.com/travel/flights?" + q
 
 
+def fetch_cabin_offers(session, net_cfg, ama_cfg, tax_cfg,
+                       from_iata, to_iata, date_from, date_to,
+                       cabin="business", data_dir=None, max_days=8):
+    """v0.42: per-cabin lowest offers via flight-offers-search.
+
+    The cheapest-dates calendar only returns the economy floor, so the
+    business-cabin watch needs real offers. We probe up to max_days
+    spread dates in the window (start/mid/end) with travelClass pinned:
+    quota-friendly (<=3 calls per route) while still catching typical
+    business-cabin lows. Returns FlightDeal rows with cabin set and
+    source='amadeus-cabin'.
+    """
+    token = get_token(session, net_cfg, ama_cfg, data_dir)
+    spread = _spread_dates(date_from, date_to, max_days)
+    deals = []
+    for d in spread:
+        params = {
+            "originLocationCode": from_iata,
+            "destinationLocationCode": to_iata,
+            "departureDate": d,
+            "adults": 1,
+            "travelClass": (cabin or "business").upper(),
+            "currencyCode": "CNY",
+            "max": 3,
+        }
+        r = session.get(
+            _base_url(ama_cfg) + "/v2/shopping/flight-offers",
+            params=params,
+            headers={"Authorization": "Bearer " + token,
+                     "Accept": "application/json"},
+            timeout=net_cfg.get("timeout_seconds", 25),
+        )
+        r.raise_for_status()
+        j = r.json()
+        if "errors" in j:
+            continue
+        best = None
+        for off in (j.get("data") or [])[:3]:
+            total = (((off.get("price") or {}).get("grandTotal")) or "")
+            try:
+                total = float(total)
+            except (TypeError, ValueError):
+                continue
+            if best is None or total < best[0]:
+                best = (total, off)
+        if best:
+            deals.append(FlightDeal(
+                date=d, bare_price=round(best[0], 1), flight_no="",
+                source="amadeus-cabin", cabin=cabin,
+                url=google_flights_url(from_iata, to_iata, d)))
+    deals.sort(key=lambda x: (x.bare_price, x.date))
+    return deals
+
+
+def _spread_dates(date_from, date_to, max_days):
+    """Evenly pick <=max_days dates inside the window (ISO strings)."""
+    from datetime import date, timedelta
+    try:
+        a = date.fromisoformat(date_from)
+        b = date.fromisoformat(date_to)
+    except (TypeError, ValueError):
+        return []
+    span = (b - a).days
+    if span < 0:
+        return []
+    if span + 1 <= max_days:
+        step = 1
+    else:
+        step = max(1, span // max(1, max_days - 1))
+    out = []
+    cur = a
+    while cur <= b and len(out) < max_days:
+        out.append(cur.isoformat())
+        cur = cur + timedelta(days=step)
+    return out
+
+
 def fetch_intl_calendar(session, net_cfg, ama_cfg, tax_cfg,
                         from_iata, to_iata, date_from, date_to, data_dir):
     """Return sorted list[FlightDeal] within [date_from, date_to].

@@ -27,8 +27,10 @@ def main():
           % (out["dep_covered"], out["dep_total"], out["routes"]))
     if args.dry:
         print("(dry run, snapshot untouched)")
-    elif out["routes"]:
+    elif out.get("routes") and out.get("changed"):
         print("snapshot rewritten (backup saved)")
+    elif out.get("routes"):
+        print("no change (coverage + alt_times identical)")
     return 0
 
 

@@ -84,10 +84,18 @@ def reenrich_snapshot(base_dir, dry=False, log=None):
             out = app_main._enrich_flight_times(
                 None, {}, r, deals, cfg, ama_cfg, False,
                 win[0], win[1])
+            # v0.42: numbered-but-unboarded deals (codeshare strings) also
+            # deserve the day's same-route reference departures.
+            out = app_main._attach_alt_times(
+                out, r.get("to_city", ""),
+                app_main.load_sched_db(app_main.DATA_DIR))
             cov = app_main.time_coverage(out)
             stats.append({"id": r.get("id"), "deals": len(out), "cov": cov})
             if dry:
                 continue
+            # sample BEFORE the write-back mutates raw (same dicts!)
+            alt_before = {m.get("date"): (m.get("alt_times") or [])
+                          for m in raw}
             by_date = {d.date: d for d in out}
             for m in raw:
                 d = by_date.get(m.get("date"))
@@ -100,7 +108,13 @@ def reenrich_snapshot(base_dir, dry=False, log=None):
                                 for a in (d.alt_times or [])][:4]
                     else:
                         m[k] = getattr(d, k, "")
-            if r.get("time_coverage") != cov:
+            # v0.42: alt_times (codeshare reference departures) moves
+            # without changing coverage counts - compare those too, else
+            # the widened _attach_alt_times never persists.
+            alt_after = {d.date: (d.alt_times or []) for d in out}
+            if (r.get("time_coverage") != cov
+                    or any(alt_after.get(k) != v
+                           for k, v in alt_before.items())):
                 changed = True
             r["time_coverage"] = cov
     finally:

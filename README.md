@@ -167,6 +167,7 @@ fare-alert/
 - [x] **v0.38 部署硬化: worker 每日自愈机制**: 「起飞时间显示不全」的机制根因=自启只在登录时触发, 桌面数周不重登则 worker 死后无人拉活, dow 覆盖冻结(实测 2/7)。双层自愈: ① webui 进程内守护线程(每日 07:00 窗口探测 main.py --loop, 缺失则拉起; 纯 Python 跨平台, 不依赖任务计划权限——本机 Register-ScheduledTask 实测拒绝非提权会话); ② install_autostart.ps1 尽力注册每日计划任务(允许的宿主生效, 拒绝则告警不失败)。/api/health 暴露 revive 双层状态(supervisor+task), v2 数据源页心跳卡新增自愈状态行。106 单测 + ui_check(v0.38 断言) 全绿。
 
 - [x] **v0.41 时刻回写闭环 + catch-up 自愈 + 迁移备份**: ① 每日巡检后离线回写快照起降时刻(core/reenrich, 零网络请求, 无变化跳写+滚动备份, 面板当日反映班期库增长), 数据源页巡检行显示回写覆盖; ② 迟到开机 catch-up——错过 07:00 窗口的桌面在 worker 心跳 >6h 且当日未补拉时仍探测+拉起一次(修复周末关机后班期 dow 覆盖冻结 2/7 的根因, 实测重启当日 2/7→3/7); ③ tools/backup.py + restore.py 一键备份/跨设备还原(config+快照+班期库+提醒状态+缓存+周报历史, 白名单精确匹配+realpath 纵深防御防 zip 穿越, 单坏成员不中断整包还原)。133 单测 + ui_check(v0.41 断言) + acceptance 全绿; Zeno 评审 PASS-with-notes, P1(zip-slip 前缀旁路)当轮修复。(v0.39–v0.40 推送可诊断化/巡检定时化详见 docs/迭代路线图.md)
+- [x] **v0.42 公务舱低价监控 + 共享航班时刻兜底**: ① cabin_watch 配置块(默认目的地杭州可改, 多出发地白名单, 独立阈值+冷却), core/cabin_monitor.py 环形历史(data/cabin_history.json, 同日同舱最新价覆盖) + 阈值命中走既有推送通道; ② 公务舱报价走 Amadeus flight-offers(travelClass=BUSINESS, 窗口内均匀采样≤8天, 无 key 安全跳过), 去哪儿低价日历实测仅经济舱地板价、列表页需签名不可用; ③ 共享航班号(SC2114/SC2135/G5虚拟号)班期库零收录导致的时刻空白, 现挂同日同航线已知班次作参考(alt_times 语义不变不造假), reenrich 变更检测含 alt_times(修复 coverage 不变时跳写的盲区), 实测 12/12 天补上参考班次; ④ /api/cabin + v2 公务舱监控卡(历史最低/样本数/阈值状态/最近提醒)。单测 133→145。
 
 ## 常见问题
 

@@ -617,3 +617,15 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   .rev-price2 { margin-left: 32px; }
   .v-link2 { margin-left: auto; }
 }
+
+/* v0.42 cabin watch card */
+.cabin-meta {
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+  margin: var(--sp-1) 0 var(--sp-2);
+}
+.cabin-last {
+  margin-top: var(--sp-2);
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+}

@@ -21,6 +21,13 @@ from core.flights import (airline_name, booking_url, estimate_arrival_time,
                           merge_fill_deals, time_coverage, window_dates,
                           NON_REAL_SOURCES)
 from core.intl import city_iata, fetch_intl_calendar, fetch_schedule_times
+from core.intl import fetch_cabin_offers
+from core.cabin_monitor import (
+    load_config as cabin_cfg_load, load_history as cabin_history_load,
+    record_low as cabin_record_low, route_qualifies as cabin_route_qualifies,
+    evaluate_alert as cabin_evaluate_alert, cooldown_ok as cabin_cooldown_ok,
+    _atomic_write as cabin_atomic_write,
+)
 from core.models import FlightDeal
 from core.notify import has_channel, push_all
 from core.report import write_report
@@ -193,7 +200,7 @@ def _attach_alt_times(deals, to_city, db):
     return legs have no matching rows."""
     cache = {}
     for d in deals:
-        if (d.flight_no or "").strip() or d.dep_time or d.alt_times:
+        if d.dep_time or d.alt_times:
             continue
         if d.date not in cache:
             cache[d.date] = city_dep_times(db, to_city, d.date)
@@ -306,6 +313,28 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
         if rec:
             rec.step("amadeus-fill", route_id, "fill gaps", "error",
                      (time.time() - t0f) * 1000, error=e)
+    # v0.42: business-cabin offers alongside the economy calendar (needs
+    # the same Amadeus key; skipped silently when the watch is off or
+    # the route does not qualify - the cabin monitor records whatever
+    # lands here during the snapshot phase).
+    cw = cabin_cfg_load(cfg)
+    if cw.get("enabled") and cabin_route_qualifies(route, cw):
+        try:
+            t0c = time.time()
+            biz = fetch_cabin_offers(
+                session, net, ama_cfg, cfg.get("tax", {}),
+                fi2, ti2, date_from, date_to,
+                cabin=(cw.get("cabins") or ["business"])[0],
+                data_dir=DATA_DIR)
+            deals = deals + biz
+            if rec:
+                rec.step("amadeus-cabin", route_id, "cabin offers", "ok",
+                         (time.time() - t0c) * 1000, count=len(biz))
+        except Exception as e:
+            if rec:
+                rec.step("amadeus-cabin", route_id, "cabin offers", "skip",
+                         (time.time() - t0c) * 1000,
+                         error="公务舱采集跳过: {}".format(e))
     return deals
 
 
@@ -672,6 +701,42 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 log.warning("report write failed [{}]: {}".format(route_snap["id"], e))
 
         alert_dates = {d.date for _, d in to_alert}
+        # v0.42: business-cabin low-fare collection + threshold alert.
+        # Cabin-tagged deals (source rows carrying cabin='business') feed
+        # the ring history; hits re-use the push guard (key configured).
+        cw = cabin_cfg_load(cfg)
+        if cabin_route_qualifies(route, cw):
+            try:
+                ch = cabin_history_load(DATA_DIR)
+                tax_cfg = cfg.get("tax", {})
+                biz = [d for d in deals if (d.cabin or "") == "business"
+                       and d.source not in NON_REAL_SOURCES]
+                for d in biz:
+                    cabin_record_low(
+                        ch, route_snap["id"],
+                        route.get("from_city", ""),
+                        route.get("to_city", ""), "business",
+                        d.date, total_price(d.bare_price, tax_cfg))
+                if biz:
+                    cabin_atomic_write(
+                        os.path.join(DATA_DIR, "cabin_history.json"), ch)
+                hits = cabin_evaluate_alert(ch, cw)
+                st = state.setdefault("_cabin", {})
+                prev = st.get("last_alert_ts")
+                if hits and push_enabled and cabin_cooldown_ok(prev, cw):
+                    h = hits[0]
+                    push_all(cfg, log,
+                             "公务舱低价 {fn}{fc}到{tc}".format(
+                                 fn="", fc=h["from_city"], tc=h["to_city"]),
+                             "{d} 公务舱 ¥{p} (阈值 ¥{t})".format(
+                                 d=h["date"], p=int(h["price"]),
+                                 t=int(cw.get("threshold_total") or 0)),
+                             route_id=h["route_id"])
+                    st["last_alert_ts"] = dt.datetime.now().isoformat()
+                    st["last_hit"] = h
+            except Exception as e:
+                log.warning("cabin monitor failed [{}]: {}".format(
+                    route_snap["id"], e))
         route_snap["deals"] = [_flight_dict(route, d, cfg, alert_dates) for d in deals]
         route_snap["return_deals"] = [_flight_dict(route, d, cfg, set())
                                       for d in return_deals]

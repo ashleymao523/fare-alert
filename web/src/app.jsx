@@ -6,6 +6,7 @@ import Kpis from "./components/Kpis.jsx";
 import Verdict from "./components/Verdict.jsx";
 import DestIntel from "./components/DestIntel.jsx";
 import CalendarView from "./components/CalendarView.jsx";
+import CabinCard from "./components/CabinCard.jsx";
 import DayDetail from "./components/DayDetail.jsx";
 import TrendChart from "./components/TrendChart.jsx";
 import Top5 from "./components/Top5.jsx";
@@ -154,6 +155,7 @@ export function App() {
               />
             ) : null}
             <Top5 route={route} />
+            <CabinCard />
             <Trains route={route} />
             <div class="foot">
               v2 · 全部 8 个功能页已迁移 · Preact + Vite ·

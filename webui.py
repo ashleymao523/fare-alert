@@ -511,6 +511,20 @@ def api_history():
     return jsonify({"history": load_history(os.path.join(DATA_DIR, "history.json"))})
 
 
+@app.get("/api/cabin")
+def api_cabin():
+    """v0.42: business-cabin watch status - ring history + config echo."""
+    from core.cabin_monitor import load_config as cw_load
+    from core.cabin_monitor import load_history as ch_load
+    cfg = load_config(CONFIG_PATH) if CONFIG_PATH else {}
+    cw = cw_load(cfg)
+    ch = ch_load(DATA_DIR)
+    state = _read_json(os.path.join(DATA_DIR, "state.json"), {})
+    last = (state.get("_cabin") or {}) if isinstance(state, dict) else {}
+    return jsonify({"config": cw, "history": ch,
+                    "last_alert": last.get("last_hit")})
+
+
 @app.get("/api/weekly-report")
 def api_weekly_report():
     """M4: weekly digest preview (no push, numbers recomputable from history)."""
