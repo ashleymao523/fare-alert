@@ -225,6 +225,8 @@ fare-alert/
 
 - [x] **v0.76 PWA 补全 + 部署自检 doctor + 精点补查通道**: ① v2 界面补全 PWA(manifest.webmanifest + apple-touch-icon, iPhone「添加到主屏」即得图标+全屏运行); ② 新增 tools/doctor.py 部署自检——本机模式体检 webui/快照/worker/代码同步/班期库/备份/推送/间隔红线/dist 构建产物/PWA 共 10 项, --url 模式支持局域网远程设备(仅 API 检查), PASS/WARN/FAIL 三级, exit code 可接 uptime 包装; ③ 灰色「查价日」问题实证收案: qunar 低价日历这些日期服务端即无缓存价(快照与线上一致, 非无票非 bug), 按日精点 API(touchInner/touchInter) 被 Bella 签名+浏览器指纹风控挡死(直调/无头/内嵌真实浏览器三途径全 1999, 证据存档 tools/point_probe.py); ④ 双轨补全方案落地——track A: Amadeus 按日 offers(代码就绪, 密钥未配), track B: 新增 core/point_fill 精点缓存模块(真实浏览器抓到价 POST /api/point-fill, TTL 48h, 每轮爬取重放覆盖 interp/nearby-ref 参考价行, 真实行永不覆盖), GET /api/point-gaps 列出待补日期, POST 后快照热补立即生效。单测新增 test_point_fill(7 用例: 落盘/TTL/真实行保护/热补/缺口窗口)与 test_doctor(24 断言三级矩阵), ui_check v0.76 断言, 版本 0.76 四处盖章。
 
+- [x] **v0.77 全功能容器 + 借班透明化 + 部署指南**: ① Docker 镜像升级为全功能单容器——新入口 run_all.py 同容器监督 webui + worker 循环(子进程崩溃 3s 自动重生, 日志合并进 docker logs), FA_ROLE=all|webui|worker 可选角色; 旧镜像只跑 webui 无爬虫, 容器部署下班期库永不沉淀、时刻永远靠借——这正是「页面总是没有起飞时间」的部署侧根因; ② 跨 dow 借用时刻透明化——board_lookup_x 借用分支返回拷贝并标记 borrow_dow(源星期几), FlightDeal/序列化/前端全链路透传, 徽标从模糊的「跨日参考」细化为「借周三参考」, title 说明沉淀满 7 天后自动升级「班期精查」; ③ doctor 新增 check_deploy 部署形态检测(容器 FA_ROLE 不含 worker 时 WARN 提示班期库不会沉淀); ④ 新增 docs/部署指南.md——Windows 本机常驻/Docker 全功能(NAS/旧机/树莓派)/局域网+PWA+iPhone Bark 三形态、数据迁移、班期沉淀机制(每天存 2 个 dow, 常驻 7 天=7/7 全覆盖)一页讲清。单测新增 test_run_all(9 断言角色矩阵)与 test_sched_board borrow_dow 2 用例(借用标记+库不被污染+exact 无标记), test_doctor 补 deploy 断言, ui_check v0.77 断言, 版本 0.77 四处盖章。
+
 ## 常见问题
 
 - **机票起降时刻从哪来?** 去哪儿低价日历只返回每日最低价+航班号(列表页需签名,按合规原则不破解)。v0.18 起杭州相关线路自动用机场官网公开班期板按「航班号+星期几」沉淀计划时刻(零密钥);v0.19 起目标星期未沉淀时自动借用同号航班其他班期时刻(跨日班期·参考),仅有起飞时落地按大圆估算(~ 前缀);配置 Amadeus 后优先实时刻。车次时刻/历时来自 12306, 原生即有。

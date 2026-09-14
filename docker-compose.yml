@@ -8,4 +8,9 @@ services:
       # state lives on the host: wipe/rebuild the container freely
       - ./data:/app/data
       - ./config.json:/app/config.json
+    environment:
+      # v0.77 all-in-one: webui + crawler loop in one container.
+      # all (default) = full feature - the crawler sediments the
+      # sched-board dow library daily (exact departure times).
+      - FA_ROLE=all
     restart: unless-stopped

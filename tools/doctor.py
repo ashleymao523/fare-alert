@@ -126,6 +126,17 @@ def check_interval(cfg):
     return PASS, "查询间隔 %s 分钟" % iv
 
 
+def check_deploy():
+    """v0.77: where are we running? Container deployments only sediment
+    the sched-board dow library when FA_ROLE includes the worker."""
+    if os.path.exists("/.dockerenv"):
+        role = os.environ.get("FA_ROLE", "all")
+        if role in ("all", "worker"):
+            return PASS, "容器部署 (FA_ROLE=%s, 含爬虫循环)" % role
+        return WARN, "容器 FA_ROLE=%s 不含爬虫 - 班期库不会沉淀" % role
+    return PASS, "本机部署 (worker 由 restart_all/计划任务拉起)"
+
+
 def check_pwa(base):
     html = fetch_text(base, "/v2/")
     if html is None:
@@ -154,6 +165,7 @@ def run_all(base, local=True):
     h = fetch_health(base)
     cfg = _load_json(os.path.join(ROOT, "config.json")) if local else None
     rows = [
+        ("deploy", check_deploy()),
         ("webui", check_webui(h)),
         ("snapshot", check_snapshot(h)),
         ("worker", check_worker(h)),

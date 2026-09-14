@@ -497,15 +497,21 @@ def board_lookup_x(db, flight_no, date_iso, from_city, to_city):
     if ent:
         # 号+dow+机场 唯一确定一班, 城市不匹配只是经停终点不同 -> 仍算精确
         return _as_dest(ent), True
-    cands = [e for e in (fdb.get("dows") or {}).values() if e and _city_ok(e)]
+    cands = []
+    for dk, e in (fdb.get("dows") or {}).items():
+        if e and _city_ok(e):
+            cands.append((dk, e))
     if not cands:
         return None
-    cands.sort(key=lambda e: _tier(e))
-    dual = [e for e in cands if e.get("dep") and e.get("arr")]
+    cands.sort(key=lambda kv: _tier(kv[1]))
+    dual = [(dk, e) for dk, e in cands if e.get("dep") and e.get("arr")]
     # dual-time rows carry the most info; otherwise prefer an entry that
     # at least has a dep time so the caller can still render the departure
-    pool = dual or [e for e in cands if e.get("dep")] or cands
-    return _as_dest(pool[0]), False
+    pool = dual or [(dk, e) for dk, e in cands if e.get("dep")] or cands
+    src_dow, pick = pool[0]
+    ent = dict(pick)              # copy: caller mutates, db stays pristine
+    ent["borrow_dow"] = src_dow   # v0.77: which weekday lent this time
+    return _as_dest(ent), False
 
 
 def _hhmm_min(t):

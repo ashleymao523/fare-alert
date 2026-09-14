@@ -20,4 +20,7 @@ COPY . .
 EXPOSE 8765
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s \
   CMD ["python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=8)"]
-CMD ["python", "webui.py"]
+# v0.77: all-in-one - webui + crawler loop in one container (FA_ROLE
+# env: all | webui | worker). Crawler loop sediments the sched-board
+# dow library daily, which is what makes exact departure times appear.
+CMD ["python", "run_all.py"]

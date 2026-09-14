@@ -205,6 +205,22 @@ class TestLookupX(unittest.TestCase):
         self.assertEqual(hit[1], False)
         self.assertEqual(hit[0]["dep"], "07:55")
 
+    def test_v077_borrow_marks_source_dow_and_db_pristine(self):
+        db = self._db({"2": {"dep": "07:55", "arr": "",
+                             "from": "杭州", "to": "重庆"}})
+        hit = sb.board_lookup_x(db, "GJ8888", "2026-09-10", "杭州", "重庆")
+        self.assertEqual(hit[1], False)
+        self.assertEqual(hit[0]["borrow_dow"], "2")
+        # the returned dict is a copy - no key leaked into the stored db
+        self.assertNotIn("borrow_dow", db["flights"]["GJ8888"]["dows"]["2"])
+
+    def test_v077_exact_hit_carries_no_borrow_dow(self):
+        db = self._db({"2": {"dep": "07:55", "arr": "",
+                             "from": "杭州", "to": "重庆"}})
+        hit = sb.board_lookup_x(db, "GJ8888", "2026-09-09", "杭州", "重庆")
+        self.assertEqual(hit[1], True)
+        self.assertNotIn("borrow_dow", hit[0])
+
     def test_cross_dow_city_mismatch_returns_none(self):
         db = self._db({"2": {"dep": "07:55", "arr": "",
                              "from": "杭州", "to": "重庆"}})

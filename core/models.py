@@ -23,6 +23,7 @@ class FlightDeal:
     stop_city: str = ""       # 中转城市(首段 to)或经停城市(ent.via)
     stop_arr: str = ""        # 到达中转/经停城市的时刻(首段 arr 或 via_arr)
     cabin: str = ""           # v0.42 舱等: ""=经济(默认) | business=公务舱监控行
+    borrow_dow: str = ""      # v0.77 跨dow借用源: "0".."6"(周一..周日), ""=非借用
 
     @property
     def airline_code(self):

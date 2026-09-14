@@ -14,12 +14,23 @@ function srcBadge(d) {
   return null;
 }
 
-function timeSrcBadge(label, src) {
+const DOW_CN = ["一", "二", "三", "四", "五", "六", "日"];
+
+function borrowLabel(d) {
+  const w = d && d.borrow_dow !== undefined && d.borrow_dow !== null
+    ? String(d.borrow_dow) : "";
+  return w && DOW_CN[+w] ? ("借周" + DOW_CN[+w]) : "跨日";
+}
+
+function timeSrcBadge(label, src, borrowDow) {
   if (src === "airport-board") return <span class="badge gray ts-badge">{label}·班期精查</span>;
   if (src === "airport-board-x") {
+    const tag = (borrowDow !== undefined && borrowDow !== null
+      && String(borrowDow) && DOW_CN[+borrowDow])
+      ? ("借周" + DOW_CN[+borrowDow]) : "跨日";
     return (
-      <span class="badge amber ts-badge" title="同一航班号其他班期的时刻, 同航季通常一致, 仅供参考">
-        {label}·跨日参考
+      <span class="badge amber ts-badge" title={"同一航班号" + tag + "班期的时刻, 同航季通常一致, 仅供参考; 班期库沉淀满7天后自动变为精查"}>
+        {label}·{tag}参考
       </span>
     );
   }
@@ -184,14 +195,14 @@ export default function DayDetail({ route, date }) {
   if (hasDep || hasArr) {
     if (depSrc && depSrc === arrSrc) {
       const lab = depSrc === "amadeus" ? "计划时刻"
-        : (depSrc === "airport-board-x" ? "跨日班期"
+        : (depSrc === "airport-board-x" ? (borrowLabel(d) + "班期")
           : (depSrc === "alt-ref" ? "参考班次" : "计划时刻"));
-      midBadges = timeSrcBadge(lab, depSrc);
+      midBadges = timeSrcBadge(lab, depSrc, d.borrow_dow);
     } else {
       midBadges = (
         <span>
-          {timeSrcBadge("起飞", depSrc)}
-          {timeSrcBadge("落地", arrSrc)}
+          {timeSrcBadge("起飞", depSrc, d.borrow_dow)}
+          {timeSrcBadge("落地", arrSrc, d.borrow_dow)}
         </span>
       );
     }

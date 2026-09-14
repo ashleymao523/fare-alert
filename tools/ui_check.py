@@ -535,6 +535,17 @@ checks["v0.76 PWA+doctor+精点补查"] = (
     and ("/api/point-fill" in _webui_src)
     and ("/api/point-gaps" in _webui_src))
 
+_runall_src = open(os.path.join("run_all.py"), encoding="utf-8").read()
+_compose_src = open(os.path.join("docker-compose.yml"), encoding="utf-8").read()
+checks["v0.77 全功能容器+借班透明"] = (
+    ("build_cmds" in _runall_src)
+    and ("main.py" in _runall_src and "--loop" in _runall_src)
+    and ("FA_ROLE" in _compose_src)
+    and ("borrow_dow" in _main_src)
+    and ("借周" in _dd_src)
+    and ("借周" in _dist_js)
+    and ("borrow_dow" in _dist_js))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

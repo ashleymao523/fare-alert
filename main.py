@@ -134,6 +134,7 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "stop_kind": deal.stop_kind,
         "stop_city": deal.stop_city,
         "stop_arr": deal.stop_arr,
+        "borrow_dow": deal.borrow_dow,
     }
 
 
@@ -603,6 +604,7 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                     ent, exact = hit
                     if not d.dep_time:
                         d.dep_time = ent["dep"]
+                        d.borrow_dow = "" if exact else (ent.get("borrow_dow") or "")
                         _mark_time_src(d, exact)  # weakest mark wins across segs
                         _mark_dep_src(d, exact)
                         n_board += 1
@@ -621,6 +623,8 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                 if hit and hit[0].get("arr"):
                     ent, exact = hit
                     d.arr_time = ent["arr"]
+                    if not exact and not d.dep_time:
+                        d.borrow_dow = ent.get("borrow_dow") or ""
                     _mark_time_src(d, exact)
                     _mark_arr_src(d, exact)
                     n_board += 1
@@ -669,6 +673,7 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                 if not d.dep_time and ent.get("dep"):
                     d.dep_time = ent["dep"]
                     got = True
+                    d.borrow_dow = "" if exact else (ent.get("borrow_dow") or "")
                     _mark_dep_src(d, exact)
                 if not d.arr_time and ent.get("arr"):
                     d.arr_time = ent["arr"]

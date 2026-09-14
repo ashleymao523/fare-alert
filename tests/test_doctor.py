@@ -8,8 +8,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from tools.doctor import (FAIL, PASS, WARN, check_backup, check_board,
-                          check_code_sync, check_interval, check_push,
-                          check_snapshot, check_webui, check_worker)
+                          check_code_sync, check_deploy, check_interval,
+                          check_push, check_snapshot, check_webui,
+                          check_worker)
 
 fails = []
 
@@ -60,6 +61,10 @@ check("push none = WARN", check_push({})[0] == WARN)
 check("interval 45 = PASS", check_interval({"schedule": {"interval_minutes": 45}})[0] == PASS)
 check("interval 10 = FAIL", check_interval({"schedule": {"interval_minutes": 10}})[0] == FAIL)
 check("interval unset = WARN", check_interval({})[0] == WARN)
+# v0.77 deploy form (container vs host)
+_dep_lvl, _dep_msg = check_deploy()
+check("deploy is PASS/WARN", _dep_lvl in (PASS, WARN))
+check("deploy msg mentions form", ("容器" in _dep_msg) or ("本机" in _dep_msg))
 
 if fails:
     print("test_doctor FAILED: %d" % len(fails))
