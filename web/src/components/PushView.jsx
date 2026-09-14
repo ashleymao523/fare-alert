@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
-import { saveConfig, testPush, fetchAlerts, fetchWeekly, fetchLanInfo } from "../lib/api.js";
+import { saveConfig, testPush, fetchAlerts, fetchWeekly, fetchLanInfo,
+  fetchDrops } from "../lib/api.js";
 
 function Field({ label, children }) {
   return <label class="field2"><span class="f-label2">{label}</span>{children}</label>;
@@ -46,6 +47,7 @@ function LanCard() {
 export default function PushView({ cfg, setCfg, cfgErr }) {
   const [alerts, setAlerts] = useState([]);
   const [rep, setRep] = useState(null);
+  const [drops, setDrops] = useState([]);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [perm, setPerm] = useState(
@@ -58,8 +60,15 @@ export default function PushView({ cfg, setCfg, cfgErr }) {
   useEffect(() => {
     fetchWeekly().then((r) => setRep(r)).catch(() => {});
   }, []);
+  useEffect(() => {
+    fetchDrops().then((d) => setDrops(d.drops || [])).catch(() => {});
+  }, []);
   if (!cfg) return <div class="card"><div class="empty">{cfgErr || "加载中…"}</div></div>;
   const push = cfg.push || {};
+  const al = cfg.alert || {};
+  const setAl = (k, v) => setCfg(Object.assign({}, cfg, {
+    alert: Object.assign({}, al, { [k]: v }),
+  }));
   const set = (k, v) => setCfg(Object.assign({}, cfg, { push: Object.assign({}, push, { [k]: v }) }));
   const doSave = () => {
     setBusy(true); setMsg("保存中…");
@@ -83,6 +92,11 @@ export default function PushView({ cfg, setCfg, cfgErr }) {
   const chSc = !!(rep && rep.channels && rep.channels.serverchan);
   const ready = chBark || chSc;
   const weeklyOn = !!(rep && rep.push_enabled);
+  // v0.56: live re-gate with the *unsaved* input values so the panel
+  // previews exactly what the next cycle would alert on.
+  const gp = Number(al.drop_pct == null || al.drop_pct === "" ? 15 : al.drop_pct) || 15;
+  const ga = Number(al.drop_abs == null || al.drop_abs === "" ? 50 : al.drop_abs) || 0;
+  const isSharp = (d) => d.delta < 0 && -d.pct >= gp && -d.delta >= ga;
   return (
     <div>
       <LanCard />
@@ -110,6 +124,44 @@ export default function PushView({ cfg, setCfg, cfgErr }) {
             微信用户可改用 ServerChan (sct.ftqq.com 微信扫码即得 SendKey)。
           </div>
         ) : null}
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h3>📉 骤降提醒</h3>
+          <span class="sub">大幅变便宜立即知道 · 无需等到破心理价位</span>
+        </div>
+        <div class="push-grid">
+          <Field label="降幅百分比 ≥(%)">
+            <input type="number" min="1" max="90"
+              value={al.drop_pct == null ? 15 : al.drop_pct}
+              onInput={(e) => setAl("drop_pct", e.target.value)} />
+          </Field>
+          <Field label="降幅金额 ≥(元)">
+            <input type="number" min="0" max="5000"
+              value={al.drop_abs == null ? 50 : al.drop_abs}
+              onInput={(e) => setAl("drop_abs", e.target.value)} />
+          </Field>
+        </div>
+        <div class="muted perm-note">
+          两个条件同时满足才提醒(如 ≥15% 且 ≥50 元), 每条路线每天最多提醒一次;
+          改动下方列表即时预演, 点上方「保存配置」后下轮查询生效。
+        </div>
+        {drops.length ? (
+          <div class="drop-list">
+            {drops.map((d) => (
+              <div class="drop-row" key={d.route_id}>
+                <span class="d-route">{d.from_city} → {d.to_city}</span>
+                <span class="num">¥{Math.round(d.prev)} → ¥{Math.round(d.today)}</span>
+                <span class={"d-delta " + (d.delta < 0 ? "down" : "up")}>
+                  {(d.delta < 0 ? "▼" : "▲") + " ¥" + Math.abs(Math.round(d.delta)) + " (" + d.pct + "%)"}
+                </span>
+                <span class={"chip2 " + (isSharp(d) ? "hero" : "plan")}>
+                  {isSharp(d) ? "会提醒" : "未达双闸"}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : <div class="muted">归档两个查询日后, 这里显示每条路线的逐日环比与是否触发。</div>}
       </div>
       <div class="card">
         <div class="card-head">

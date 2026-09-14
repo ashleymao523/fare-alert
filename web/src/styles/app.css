@@ -149,6 +149,14 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 .d-delta { font-weight: 700; font-variant-numeric: tabular-nums; }
 .d-delta.down { color: var(--green-d); }
 .d-delta.up { color: var(--amber-d); }
+.drop-list { margin-top: var(--sp-md); }
+.drop-row {
+  display: flex; align-items: center; gap: var(--sp-md); flex-wrap: wrap;
+  padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft);
+  font-size: var(--fs-sm);
+}
+.drop-row:last-child { border-bottom: 0; }
+.d-route { font-weight: 600; min-width: 8.5em; }
 .kpi.good .k-value { color: var(--green); }
 .kpi.warn .k-value { color: var(--amber); }
 

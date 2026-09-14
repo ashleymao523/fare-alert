@@ -363,6 +363,10 @@ checks["v0.55 drops api+ui"] = (("/api/drops" in _webui_src)
     and ("fetchDrops" in _app_jsx_v2)
     and ("d-delta" in _kpis_src)
     and ("较昨日" in _dist_js))
+checks["v0.56 drop gate panel"] = (("骤降提醒" in _push_src)
+    and ("drop_pct" in _push_src)
+    and ("drop_abs" in _push_src)
+    and ("骤降提醒" in _dist_js))
 
 bad = 0
 for k, v in checks.items():
