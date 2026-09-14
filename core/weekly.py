@@ -42,7 +42,7 @@ def _stats_for(seg):
 def build_weekly(path, today=None):
     """Build the weekly report dict from history.json.
 
-    Returns {ok, period, routes:[{id, name, stats, text}], text}.
+    Returns {ok, period, routes:[{id, name, stats, text}], highlights, text}.
     Every number in text comes from stats (recomputable, DoD G4)."""
     history = load_history(path)
     all_days = sorted(history.get("days", {}))
@@ -88,6 +88,7 @@ def build_weekly(path, today=None):
         "period": period,
         "routes": routes_out,
     }
+    doc["highlights"] = week_highlights(history)
     doc["text"] = _summary_text(doc)
     return doc
 
@@ -123,6 +124,102 @@ def _route_text(r):
         lines.append("当前窗口内 {} 天低于阈值 ¥{}".format(
             latest.get("days_below", 0), _fmt(latest["threshold"])))
     return "；".join(lines) + "。"
+
+
+def week_highlights(history, pct=15.0, abs_yuan=50.0):
+    """v0.57: structured "worth watching this week" board, recomputed
+    from the same archive as the route cards (every number derivable):
+
+    biggest_drop    - largest week-over-week drop of the window minimum
+    sharp_drops     - day-over-day drops inside the week clearing BOTH
+                      gates (relative % AND absolute yuan, like /api/drops)
+    below_threshold - routes whose latest snapshot has days below the line
+
+    Pure; a calm week returns empty lists (the UI shows the calm text)."""
+    days = sorted(history.get("days") or {})
+    week_days = days[-WEEK_SIZE:]
+    route_ids = []
+    for day in week_days:
+        for rid in (history["days"][day].get("routes") or {}):
+            if rid not in route_ids:
+                route_ids.append(rid)
+
+    def _name(m):
+        return "{}→{}".format(m.get("from_city", "?"), m.get("to_city", "?"))
+
+    biggest = None
+    for rid in route_ids:
+        series = _series(history, rid)
+        week = series[-WEEK_SIZE:]
+        prev = series[-2 * WEEK_SIZE:-WEEK_SIZE]
+        if not week or not prev:
+            continue
+        w = _stats_for(week)["min"]
+        p = _stats_for(prev)["min"]
+        if not p or w >= p:
+            continue
+        delta = round(w - p, 1)
+        rel = round(delta * 100.0 / p, 1)
+        cand = {"route_id": rid, "name": _name(week[-1][1]),
+                "week_min": w, "prev_min": p, "delta": delta, "pct": rel}
+        if biggest is None or delta < biggest["delta"]:
+            biggest = cand
+
+    sharps = []
+    for d0, d1 in zip(week_days, week_days[1:]):
+        r0 = history["days"][d0].get("routes") or {}
+        r1 = history["days"][d1].get("routes") or {}
+        for rid, m in r1.items():
+            pm = r0.get(rid)
+            t = m.get("cheapest_total")
+            p = (pm or {}).get("cheapest_total")
+            if not all(isinstance(x, (int, float)) and x > 0
+                       for x in (t, p)):
+                continue
+            delta = round(float(t) - float(p), 1)
+            rel = round(delta * 100.0 / float(p), 1)
+            if delta < 0 and -rel >= float(pct) and -delta >= float(abs_yuan):
+                sharps.append({"route_id": rid, "name": _name(m),
+                               "date": d1, "prev": round(float(p), 1),
+                               "today": round(float(t), 1),
+                               "delta": delta, "pct": rel})
+    sharps.sort(key=lambda s: s["delta"])
+    sharps = sharps[:5]
+
+    below = []
+    for rid in route_ids:
+        series = _series(history, rid)
+        if not series:
+            continue
+        day, m = series[-1]
+        if m.get("days_below") and m.get("threshold"):
+            below.append({"route_id": rid, "name": _name(m),
+                          "days_below": m.get("days_below"),
+                          "threshold": m.get("threshold"),
+                          "cheapest_total": m.get("cheapest_total"),
+                          "best_date": m.get("best_date") or day})
+    below.sort(key=lambda b: b.get("cheapest_total") or 1e18)
+
+    return {"biggest_drop": biggest, "sharp_drops": sharps,
+            "below_threshold": below,
+            "text": _highlights_text(biggest, sharps, below, pct, abs_yuan)}
+
+
+def _highlights_text(biggest, sharps, below, pct, abs_yuan):
+    if not biggest and not sharps and not below:
+        return "本周价格平稳：无破阈值路线、无骤降（双闸 {}%/¥{}）。".format(
+            _fmt(pct), _fmt(abs_yuan))
+    parts = []
+    if biggest:
+        parts.append("最大降幅 {} ¥{}→¥{}（{} / {}%）".format(
+            biggest["name"], _fmt(biggest["prev_min"]),
+            _fmt(biggest["week_min"]), _fmt(biggest["delta"]),
+            _fmt(biggest["pct"])))
+    if below:
+        parts.append("{} 条路线当前低于阈值".format(len(below)))
+    if sharps:
+        parts.append("本周 {} 次骤降".format(len(sharps)))
+    return "⭐ 本周值得关注：" + "；".join(parts) + "。"
 
 
 def _summary_text(doc):

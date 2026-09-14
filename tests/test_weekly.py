@@ -11,7 +11,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from core.history import append_history, load_history
 from core.weekly import (PUSH_INTERVAL, build_weekly, mark_failed,
-                        mark_pushed, should_push)
+                        mark_pushed, should_push, week_highlights)
 
 
 def _snap(cheapest_total, days_below=0):
@@ -149,6 +149,77 @@ class TestWeekly(unittest.TestCase):
         finally:
             if os.path.exists(path):
                 os.remove(path)
+
+
+class TestWeekHighlights(unittest.TestCase):
+    """v0.57: week_highlights board recomputed from the archive."""
+
+    @staticmethod
+    def _m(v, days_below=0, threshold=600):
+        return {"from_city": "杭州", "to_city": "重庆", "threshold": threshold,
+                "cheapest_total": v, "avg_total": v + 20,
+                "days_below": days_below, "best_date": "2026-10-01",
+                "n_deals": 30}
+
+    def _path(self, prev, week, days_below=0):
+        path = os.path.join(os.path.dirname(__file__), "_wkhl_test.json")
+        days = {}
+        for i, v in enumerate(prev):
+            day = "2026-08-{:02d}".format(10 + i)
+            days[day] = {"routes": {"r1": self._m(v)}}
+        for i, v in enumerate(week):
+            day = "2026-09-{:02d}".format(1 + i)
+            days[day] = {"routes": {"r1": self._m(v, days_below=days_below)}}
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"days": days}, f, ensure_ascii=False)
+        return path
+
+    def test_board_drop_sharp_and_below(self):
+        path = self._path(prev=[650] * 7,
+                          week=[520, 510, 500, 490, 480, 470, 380],
+                          days_below=3)
+        try:
+            rep = build_weekly(path)
+            hl = rep["highlights"]
+            self.assertEqual(hl["biggest_drop"]["delta"], -270.0)
+            self.assertEqual(hl["biggest_drop"]["pct"], -41.5)
+            self.assertEqual(len(hl["sharp_drops"]), 1)
+            self.assertEqual(hl["sharp_drops"][0]["delta"], -90.0)
+            self.assertEqual(hl["below_threshold"][0]["days_below"], 3)
+            self.assertIn("最大降幅", hl["text"])
+            self.assertIn("1 次骤降", hl["text"])
+        finally:
+            os.remove(path)
+
+    def test_calm_week_all_empty(self):
+        path = self._path(prev=[500] * 7, week=[500] * 7)
+        try:
+            hl = build_weekly(path)["highlights"]
+            self.assertIsNone(hl["biggest_drop"])
+            self.assertEqual(hl["sharp_drops"], [])
+            self.assertEqual(hl["below_threshold"], [])
+            self.assertIn("平稳", hl["text"])
+        finally:
+            os.remove(path)
+
+    def test_no_prev_week_and_mild_drop_not_sharp(self):
+        path = self._path(prev=[],
+                          week=[500, 495, 480, 470, 500, 480, 475],
+                          days_below=2)
+        try:
+            hl = build_weekly(path)["highlights"]
+            self.assertIsNone(hl["biggest_drop"])    # no prev week
+            self.assertEqual(hl["sharp_drops"], [])  # -4% fails 15% gate
+            self.assertEqual(hl["below_threshold"][0]["days_below"], 2)
+        finally:
+            os.remove(path)
+
+    def test_empty_history_safe(self):
+        hl = week_highlights({"days": {}})
+        self.assertIsNone(hl["biggest_drop"])
+        self.assertEqual(hl["sharp_drops"], [])
+        self.assertEqual(hl["below_threshold"], [])
+        self.assertIn("平稳", hl["text"])
 
 
 if __name__ == "__main__":

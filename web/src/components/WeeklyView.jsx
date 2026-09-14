@@ -34,6 +34,7 @@ export default function WeeklyView() {
   if (err && !rep) return <div class="card"><div class="empty">周报加载失败: {err}</div></div>;
   if (!rep) return <div class="card"><div class="empty">加载中…</div></div>;
   const hasCh = !!rep.channel_ready;
+  const hl = rep.highlights || null;
   const doPush = () => {
     setPushing(true); setPushMsg("");
     pushWeekly()
@@ -64,6 +65,44 @@ export default function WeeklyView() {
           {pushMsg ? <span class="muted push-msg">{pushMsg}</span> : null}
         </div>
       </div>
+      {hl ? (
+        <div class="card wk2-card">
+          <div class="card-head">
+            <h4>⭐ 本周值得关注</h4>
+            <span class="sub">最大降幅 · 破线路线 · 双闸骤降，一屏速览</span>
+          </div>
+          <div class="wk2-hl">
+            {hl.biggest_drop ? (
+              <div class="wk2-hl-row">
+                <span class="chip2 hero">最大降幅</span>
+                <b>{hl.biggest_drop.name}</b>
+                <span class="wk2-hl-nums">
+                  {fmtMoney(hl.biggest_drop.prev_min)} → {fmtMoney(hl.biggest_drop.week_min)}
+                </span>
+                <span class="chip2 ok">
+                  -¥{Math.round(Math.abs(hl.biggest_drop.delta))}（{Math.round(Math.abs(hl.biggest_drop.pct))}%）
+                </span>
+              </div>
+            ) : null}
+            {(hl.below_threshold || []).map((b, i) => (
+              <div class="wk2-hl-row" key={"below-" + i}>
+                <span class="chip2 hero">低于阈值</span>
+                <b>{b.name}</b>
+                <span class="wk2-hl-nums">窗口内 {b.days_below} 天 ≤ {fmtMoney(b.threshold)} · 最低 {fmtMoney(b.cheapest_total)}</span>
+              </div>
+            ))}
+            {(hl.sharp_drops || []).map((s, i) => (
+              <div class="wk2-hl-row" key={"sharp-" + i}>
+                <span class="chip2 ok">骤降</span>
+                <b>{s.name}</b>
+                <span class="wk2-hl-nums">{(s.date || "").slice(5)} {fmtMoney(s.prev)} → {fmtMoney(s.today)}</span>
+                <span class="chip2">-{Math.round(Math.abs(s.pct))}% / -¥{Math.round(Math.abs(s.delta))}</span>
+              </div>
+            ))}
+          </div>
+          <div class="muted wk2-hl-note">{hl.text}</div>
+        </div>
+      ) : null}
       {(rep.routes || []).map((r) => (
         <div class="card wk2-card" key={r.id || r.name}>
           <div class="wk2-head">

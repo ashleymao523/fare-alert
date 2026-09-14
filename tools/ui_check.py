@@ -368,6 +368,16 @@ checks["v0.56 drop gate panel"] = (("骤降提醒" in _push_src)
     and ("drop_abs" in _push_src)
     and ("骤降提醒" in _dist_js))
 
+_weekly_src = open(os.path.join("core", "weekly.py"), encoding="utf-8").read()
+_weekly_view_src = open(os.path.join("web", "src", "components",
+                                     "WeeklyView.jsx"), encoding="utf-8").read()
+checks["v0.57 weekly highlights"] = (
+    ("def week_highlights" in _weekly_src)
+    and ("biggest_drop" in _weekly_src)
+    and ("本周值得关注" in _weekly_view_src)
+    and ("sharp_drops" in _weekly_view_src)
+    and ("本周值得关注" in _dist_js))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

@@ -438,6 +438,11 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 .wk2-line { fill: none; stroke: var(--accent); stroke-width: 2; }
 .wk2-nodata { color: var(--faint); font-size: var(--fs-sm); }
 .wk2-info { color: var(--muted); font-size: var(--fs-sm); flex: 1; min-width: 12em; }
+.wk2-hl { display: flex; flex-direction: column; gap: var(--sp-2); margin: var(--sp-sm) 0; }
+.wk2-hl-row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; font-size: var(--fs-sm); }
+.wk2-hl-row b { font-weight: 600; }
+.wk2-hl-nums { color: var(--muted); }
+.wk2-hl-note { font-size: var(--fs-sm); }
 
 /* 推送设置 */
 .push-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--sp-md); margin: var(--sp-md) 0; }
