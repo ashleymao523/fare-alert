@@ -66,7 +66,7 @@ export default function DayDetail({ route, date }) {
       <span class="ft-alts-label">
         当日班期表 · {sched.total || sched.rows.length}班 · 24小时时间线
       </span>
-      <div class="tl-rail" aria-label="当日班次起飞时刻 24 小时分布">
+      <div class="tl-rail" aria-label="当日班次起降区间 24 小时分布">
         {[0, 3, 6, 9, 12, 15, 18, 21].map((h) => (
           <span class="tl-tick" style={{ left: (h / 24 * 100) + "%" }} />
         ))}
@@ -79,21 +79,43 @@ export default function DayDetail({ route, date }) {
         {sched.rows.map((a, i) => {
           const mm = ((parseInt((a.dep || "").slice(0, 2), 10) || 0) * 60)
             + (parseInt((a.dep || "").slice(3, 5), 10) || 0);
+          const aH = parseInt((a.arr || "").slice(0, 2), 10);
+          const aM = parseInt((a.arr || "").slice(3, 5), 10);
+          const hasArr = !isNaN(aH) && !isNaN(aM);
+          const am = hasArr ? (aH * 60 + aM) : 0;
+          const depPct = Math.min(100, Math.max(0, mm / 1440 * 100));
+          const tip = (a.exact ? "" : "参考·") + a.no + " " + a.dep
+            + (a.arr ? "→" + a.arr : "")
+            + (a.dur ? " · 历时" + a.dur : "")
+            + ((a.airline || a.craft)
+              ? " · " + [a.airline, a.craft].filter(Boolean).join(" ")
+              : "")
+            + (a.via ? " · 经停" + a.via : "")
+            + " · 点击直达去哪儿当日列表";
+          if (!hasArr) {
+            return (
+              <a
+                class={"tl-dot" + (a.exact ? "" : " x") + (i % 2 ? " up" : "")}
+                style={{ left: depPct + "%" }}
+                href={dayListUrl(route, date)}
+                target="_blank"
+                rel="noopener"
+                title={tip}
+              />
+            );
+          }
+          // v0.75: dep->arr span bar; overnight flights clamp to 24:00.
+          const span = am > mm ? (am - mm) : (1440 - mm);
+          const wPct = Math.min(100 - depPct,
+            Math.max(0.6, span / 1440 * 100));
           return (
             <a
-              class={"tl-dot" + (a.exact ? "" : " x") + (i % 2 ? " up" : "")}
-              style={{ left: Math.min(100, Math.max(0, mm / 1440 * 100)) + "%" }}
+              class={"tl-span" + (a.exact ? "" : " x") + (i % 2 ? " up" : "")}
+              style={{ left: depPct + "%", width: wPct + "%" }}
               href={dayListUrl(route, date)}
               target="_blank"
               rel="noopener"
-              title={(a.exact ? "" : "参考·") + a.no + " " + a.dep
-                + (a.arr ? "→" + a.arr : "")
-                + (a.dur ? " · 历时" + a.dur : "")
-                + ((a.airline || a.craft)
-                  ? " · " + [a.airline, a.craft].filter(Boolean).join(" ")
-                  : "")
-                + (a.via ? " · 经停" + a.via : "")
-                + " · 点击直达去哪儿当日列表"}
+              title={tip + (am <= mm ? " · 次日到达" : "")}
             />
           );
         })}

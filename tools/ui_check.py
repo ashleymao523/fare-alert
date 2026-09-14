@@ -514,6 +514,15 @@ checks["v0.74 班次历时+tag发布"] = (("flight_duration" in _sb_src)
     and ("历时" in _dist_js)
     and ("refs/tags" in open(_ci_path, encoding="utf-8").read()))
 
+checks["v0.75 起降区间+自动备份"] = (("flight_duration_hm" in _sb_src)
+    and ("(估)" in _main_src)
+    and ("maybe_daily_backup" in _main_src)
+    and ("tl-span" in _dd_src)
+    and ("tl-span" in _dist_js)
+    and ("tl-span" in _dist_css)
+    and ("backups" in _webui_src)
+    and ("次日到达" in _dd_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

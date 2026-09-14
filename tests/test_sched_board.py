@@ -725,6 +725,14 @@ class FlightDurationTests(unittest.TestCase):
         self.assertEqual(sb.flight_duration("09:00", "09:00"), "")
         self.assertEqual(sb.flight_duration("九点", "12:10"), "")
 
+    def test_flight_duration_hm_tuple(self):
+        # v0.75: precise (h, m) tuple powers the estimate-replace pass
+        self.assertEqual(sb.flight_duration_hm("07:00", "09:35"), (2, 35))
+        self.assertEqual(sb.flight_duration_hm("23:50", "01:05"), (1, 15))
+        self.assertIsNone(sb.flight_duration_hm("09:00", "09:00"))
+        self.assertIsNone(sb.flight_duration_hm("15:00", ""))
+        self.assertIsNone(sb.flight_duration_hm("", "12:10"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)

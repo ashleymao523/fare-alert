@@ -610,21 +610,28 @@ def prior_minutes_for(priors, city):
     return cands[0][1]
 
 
-def flight_duration(dep, arr):
-    """v0.74: real dep+arr board times -> '2h35m' duration string.
+def flight_duration_hm(dep, arr):
+    """v0.75: real dep+arr board times -> (h, m) or None.
     Arrival earlier than departure means the plane lands the next
-    calendar day (+24h red-eye). Missing/garbage/equal times -> ''
+    calendar day (+24h red-eye). Missing/garbage/equal times -> None
     (a zero-minute flight is a data smell, not a duration)."""
     try:
         d = _dt.datetime.strptime(str(dep or "")[:5], "%H:%M")
         a = _dt.datetime.strptime(str(arr or "")[:5], "%H:%M")
     except ValueError:
-        return ""
+        return None
     mins = int((a - d).total_seconds() // 60)
     if mins < 0:
         mins += 1440
     if mins <= 0:
-        return ""
+        return None
+    return (mins // 60, mins % 60)
+
+
+def flight_duration(dep, arr):
+    """v0.74: '2h35m' duration string from real board times."""
+    hm = flight_duration_hm(dep, arr)
+    return "" if not hm else "%dh%02dm" % hm
     h, m = divmod(mins, 60)
     return "%dh%02dm" % (h, m)
 

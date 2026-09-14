@@ -36,6 +36,7 @@ from core.version import CODE_VERSION
 from core.notify import has_channel, push_all
 from core.report import write_report
 from core.sched_board import (board_lookup_x, build_route_priors,
+                              flight_duration,
                               city_dep_times, city_return_dep_times,
                               load_sched_db,
                               prior_minutes_for, promote_alt_time,
@@ -246,6 +247,15 @@ def _attach_alt_times(deals, to_city, db, from_city=None):
             d.arr_time = best["arr"]
             if not d.arr_src:
                 d.arr_src = "alt-ref"
+    # v0.75: real (board/promoted) dep+arr beat the great-circle
+    # estimate in the duration slot; estimates keep serving rows whose
+    # landing time is still unknown.
+    for d in deals:
+        if d.dep_time and d.arr_time and (
+                not d.duration_text or "(估)" in d.duration_text):
+            dur = flight_duration(d.dep_time, d.arr_time)
+            if dur:
+                d.duration_text = dur
     return deals
 
 
@@ -845,6 +855,13 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
 
 def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
     """One full cycle. Returns snapshot dict (also written to data/snapshot.json)."""
+    # v0.75: daily auto backup - deploy boxes kept losing the data dir on
+    # upgrades; first cycle of each day snapshots before touching anything.
+    try:
+        from core.auto_backup import maybe_daily_backup
+        maybe_daily_backup(os.path.dirname(os.path.abspath(DATA_DIR)), DATA_DIR)
+    except Exception:
+        pass
     rec = CrawlRecorder(DATA_DIR)
     rec.begin(trigger=trigger)
     session = make_session(cfg)

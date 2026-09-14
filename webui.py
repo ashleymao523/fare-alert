@@ -908,6 +908,20 @@ def api_health():
         revive = {"supervisor": supervisor_snapshot(), "task": task_status()}
     except Exception:
         revive = None
+    backup = None
+    try:
+        bdir = os.path.join(os.path.dirname(os.path.abspath(DATA_DIR)), "backups")
+        zips = sorted(
+            [os.path.join(bdir, n) for n in os.listdir(bdir)
+             if n.startswith("fare-alert-backup-") and n.endswith(".zip")],
+            key=os.path.getmtime)
+        backup = {"count": len(zips),
+                  "last": os.path.basename(zips[-1]) if zips else None,
+                  "last_ts": (datetime.datetime.fromtimestamp(
+                      os.path.getmtime(zips[-1])).strftime("%Y-%m-%d %H:%M:%S")
+                      if zips else None)}
+    except Exception:
+        backup = None
     return jsonify({
         "ok": True,
         "snapshot": {"updated_at": updated, "age_min": age_min},
@@ -917,6 +931,7 @@ def api_health():
         "worker": worker,
         "revive": revive,
         "push_pending": _push_pending(),
+        "backup": backup,
     })
 
 

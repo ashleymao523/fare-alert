@@ -303,6 +303,10 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 .tl-dot:hover { transform: translate(-50%, -2px) scale(1.3); }
 .tl-dot.up { top: 8px; }
 .tl-dot.x { background: var(--card2); border-color: var(--line-strong); }
+.tl-span { position: absolute; top: 20px; height: 6px; border-radius: var(--r-pill); background: var(--accent); opacity: .85; transition: opacity .15s ease; }
+.tl-span:hover { opacity: 1; }
+.tl-span.up { top: 12px; }
+.tl-span.x { background: var(--card2); border: 1px solid var(--line-strong); }
 .ft-pend { font-size: var(--fs-sm); color: var(--muted); }
 .hb-row { display: flex; align-items: center; gap: 10px; padding: 6px 0 10px; }
 .hb-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); flex: none; }
