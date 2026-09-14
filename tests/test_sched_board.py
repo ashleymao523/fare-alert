@@ -572,6 +572,22 @@ class TestCityDepTimes(unittest.TestCase):
         self.assertIsNone(sb.promote_alt_time([{"no": "X", "dep": "8:5"}]))
         self.assertIsNone(sb.promote_alt_time([{"no": "X", "dep": "junk"}]))
 
+    def test_arr_rides_along_and_promotes(self):
+        # v0.68: board arrival times flow through city_dep_times and
+        # promote_alt_time so ref rows can show a landing slot keylessly
+        db = self._db(
+            ("JD419", 4, "08:35", "12:45", "杭州", "曼谷素万那普机场"),
+            ("FD497", 4, "18:10", "", "杭州", "曼谷素万那普机场"))
+        out = sb.city_dep_times(db, "曼谷", "2026-09-11")
+        self.assertEqual(out[0]["arr"], "12:45")
+        self.assertEqual(out[1]["arr"], "")
+        pick = sb.promote_alt_time(out)
+        self.assertEqual(pick["dep"], "08:35")
+        self.assertEqual(pick["arr"], "12:45")
+        pick2 = sb.promote_alt_time([{"no": "X", "dep": "08:35",
+                                      "arr": "junk", "exact": True}])
+        self.assertEqual(pick2["arr"], "")
+
     def test_return_dep_times_mirror(self):
         # v0.49: return legs read CITY->HGH rows (arrive-board
         # preschtime entries); 2026-09-11 is a Friday (dow=4)

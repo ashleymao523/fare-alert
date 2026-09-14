@@ -108,7 +108,7 @@ export default function DayDetail({ route, date }) {
                   class={"ft-alt" + (a.exact ? "" : " x")}
                   title={a.exact ? "出发机场该航线当日星期实测时刻" : "同一航班其他班期时刻, 同航季通常一致, 仅供参考"}
                 >
-                  {a.no} {a.dep}
+                  {a.no} {a.dep}{a.arr ? "→" + a.arr : ""}
                 </span>
               ))}
             </div>

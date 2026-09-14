@@ -452,6 +452,16 @@ checks["v0.67 精点轮转"] = (("stats=fstats" in _main_src)
     and ("deferred" in _main_src)
     and ("本轮点查" in _main_src))
 
+_dd_src = open(os.path.join("web", "src", "components", "DayDetail.jsx"),
+               encoding="utf-8").read()
+checks["v0.68 参考落地时间"] = (('str(ent.get("arr")' in _sb_src)
+    and ("arr if ok_arr else" in _sb_src)
+    and ("need_arr" in _main_src)
+    and ("arr_src = \"alt-ref\"" in _main_src)
+    and ('"arr": a.get("arr")' in _reenrich_src)
+    and ('+ a.arr' in _dd_src)
+    and ("arr" in _dist_js and 'a.arr' in _dist_js))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

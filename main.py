@@ -122,6 +122,7 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "source": deal.source,
         "ref_offset": deal.ref_offset if deal.source == "nearby-ref" else 0,
         "alt_times": [{"no": a.get("no"), "dep": a.get("dep"),
+                       "arr": a.get("arr"),
                        "exact": bool(a.get("exact"))}
                       for a in (deal.alt_times or [])][:4],
         "stop_kind": deal.stop_kind,
@@ -212,12 +213,18 @@ def _attach_alt_times(deals, to_city, db, from_city=None):
     holds HGH departures, return legs have no matching rows.
     v0.49: pass from_city=<return origin> to attach RETURN-leg
     reference departures from the arrive board's preschtime rows
-    (CITY->HGH) - the same zero-key db, still no extra request."""
+    (CITY->HGH) - the same zero-key db, still no extra request.
+    v0.68: board rows carry arrival times too - the promoted reference
+    now fills arr_time as well (arr_src="alt-ref", never clobbering an
+    existing estimate), killing the "--:--" landing slot on intl/ref
+    rows the great-circle estimator never covered."""
     ret_mode = bool(from_city and (from_city or "").strip()
                     and from_city != "杭州")
     cache = {}
     for d in deals:
-        if d.dep_time:
+        need_dep = not d.dep_time
+        need_arr = not (d.arr_time or "").strip()
+        if not (need_dep or need_arr):
             continue
         if not d.alt_times:
             if d.date not in cache:
@@ -226,10 +233,16 @@ def _attach_alt_times(deals, to_city, db, from_city=None):
                                  else city_dep_times(db, to_city, d.date))
             d.alt_times = cache[d.date]
         best = promote_alt_time(d.alt_times)
-        if best:
+        if not best:
+            continue
+        if need_dep:
             d.dep_time = best["dep"]
             d.time_src = "alt-ref"
             d.dep_src = "alt-ref"
+        if need_arr and (best.get("arr") or "").strip():
+            d.arr_time = best["arr"]
+            if not d.arr_src:
+                d.arr_src = "alt-ref"
     return deals
 
 

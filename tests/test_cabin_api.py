@@ -16,7 +16,23 @@ class CabinApiTests(unittest.TestCase):
         cls.client = webui.app.test_client()
 
     def test_cabin_endpoint_shape(self):
-        r = self.client.get("/api/cabin")
+        # hermetic: the live repo config may carry user-added watch
+        # destinations (e.g. 上海), but this test asserts the DEFAULT
+        # echo - so point the app at a bare temp config first
+        import json as _json
+        import tempfile
+        fd, p = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        with open(p, "w", encoding="utf-8") as f:
+            _json.dump({"cabin_watch": {"enabled": False}}, f,
+                       ensure_ascii=False)
+        old = webui.CONFIG_PATH
+        webui.CONFIG_PATH = p
+        try:
+            r = self.client.get("/api/cabin")
+        finally:
+            webui.CONFIG_PATH = old
+            os.remove(p)
         self.assertEqual(r.status_code, 200)
         j = r.get_json()
         self.assertIn("config", j)

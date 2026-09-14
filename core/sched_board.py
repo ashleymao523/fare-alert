@@ -641,6 +641,7 @@ def _ref_deps(db, origin_city, dest_city, date_iso, limit=4):
             continue
         dep = str(ent["dep"])[:5]
         out.append({"no": no, "dep": dep,
+                    "arr": str(ent.get("arr") or "")[:5],
                     "exact": bool((exact or {}).get("dep"))})
     out.sort(key=lambda x: (not x["exact"], x["dep"]))
     # codeshare rows repeat one physical flight under several numbers:
@@ -682,12 +683,17 @@ def promote_alt_time(alts):
     alt_times yet rendered as "--:--" because nothing lifted the best
     entry onto dep_time. Selection mirrors city_dep_times' own sort:
     exact (same dow) first, then earliest departure. Returns the chosen
-    {no, dep, exact} dict or None when nothing is promotable. Pure."""
+    {no, dep, arr, exact} dict or None when nothing is promotable. Pure.
+    v0.68: the board rows carry arrival times too, so the promoted
+    reference rides arr along for deals missing arr_time."""
     pool = []
     for a in alts or []:
         dep = str((a or {}).get("dep") or "")[:5]
+        arr = str((a or {}).get("arr") or "")[:5]
+        ok_arr = len(arr) >= 4 and arr[:2].isdigit() and arr[3:5].isdigit()
         if len(dep) >= 4 and dep[:2].isdigit() and dep[3:5].isdigit():
             pool.append({"no": (a.get("no") or ""), "dep": dep,
+                         "arr": arr if ok_arr else "",
                          "exact": bool(a.get("exact"))})
     if not pool:
         return None

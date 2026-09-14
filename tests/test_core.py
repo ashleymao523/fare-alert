@@ -17,9 +17,11 @@ TAX = {"airport_fee": 70, "fuel_surcharge": 50}  # 120, current default
 
 def _alt_db(*rows):
     flights = {}
-    for no, dow, dep, frm, to in rows:
+    for row in rows:
+        no, dow, dep, frm, to = row[:5]
+        arr = row[5] if len(row) > 5 else ""
         flights.setdefault(no, {"dows": {}})["dows"][str(dow)] = {
-            "dep": dep, "arr": "", "from": frm, "to": to}
+            "dep": dep, "arr": arr, "from": frm, "to": to}
     return {"updated": 1, "flights": flights}
 
 
@@ -137,7 +139,11 @@ def test_attach_alt_times_fills_gap_deals():
     out = _attach_alt_times(deals, "曼谷", db)
     got = [(a['no'], a['dep'], a['exact']) for a in out[0].alt_times]
     assert got == [('JD419', '08:35', True), ('FD497', '18:10', True)]
-    assert out[1].alt_times == []
+    # v0.68: a numbered deal with dep but no arr now also gains the
+    # route reference list so its landing slot can be filled when the
+    # board row carries an arrival time (here it is empty -> arr stays)
+    assert [(a['no'], a['dep'], a['exact']) for a in out[1].alt_times] == got
+    assert out[1].arr_time == ""
 
 
 def test_attach_alt_times_idempotent_and_empty_city():
@@ -147,6 +153,24 @@ def test_attach_alt_times_idempotent_and_empty_city():
     d.alt_times = [{"no": "XX", "dep": "00:00", "exact": False}]
     _attach_alt_times([d], "曼谷", db)
     assert d.alt_times == [{"no": "XX", "dep": "00:00", "exact": False}]
+
+
+def test_attach_alt_times_fills_arr_reference():
+    # v0.68: the promoted reference carries arrival times too - a
+    # numberless ref row gains arr_time+arr_src; an existing arr/est
+    # is never clobbered
+    db = _alt_db(("JD419", 4, "08:35", "杭州", "曼谷素万那普机场", "12:45"),
+                 ("FD497", 4, "18:10", "杭州", "曼谷素万那普机场", "22:20"))
+    a = FlightDeal(date="2026-09-25", bare_price=900, flight_no="",
+                   source="nearby-ref")
+    b = FlightDeal(date="2026-09-25", bare_price=800, flight_no="",
+                   source="nearby-ref", dep_time="09:00",
+                   arr_time="13:30", arr_src="est")
+    out = _attach_alt_times([a, b], "曼谷", db)
+    assert out[0].dep_time == "08:35" and out[0].arr_time == "12:45"
+    assert out[0].arr_src == "alt-ref"
+    assert out[1].dep_time == "09:00" and out[1].arr_time == "13:30"
+    assert out[1].arr_src == "est"
     e = FlightDeal(date="2026-09-25", bare_price=900, flight_no="",
                    source="nearby-ref")
     _attach_alt_times([e], "", db)
