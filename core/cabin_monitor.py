@@ -14,6 +14,7 @@ def default_config():
         "enabled": False,
         "cabins": ["business"],
         "default_to_city": "杭州",
+        "to_cities": ["杭州"],
         "threshold_total": 1500.0,
         "cooldown_hours": 12.0,
         "watch_from_cities": [],
@@ -24,6 +25,24 @@ def load_config(cfg):
     base = default_config()
     user = (cfg or {}).get("cabin_watch") or {}
     base.update({k: v for k, v in user.items() if v is not None})
+    if "to_cities" not in user:
+        # no explicit list in the user config: drop the default's so the
+        # legacy single-field destination re-derives it below
+        base["to_cities"] = []
+    # v0.47: destinations are a list (default Hangzhou, freely editable).
+    # Legacy single-value configs derive their list from default_to_city;
+    # default_to_city stays synced to the first entry for old readers.
+    tos = [str(c).strip() for c in (base.get("to_cities") or [])
+           if str(c).strip()]
+    if not tos:
+        legacy = (base.get("default_to_city") or "").strip()
+        tos = [legacy] if legacy else ["杭州"]
+    dedup = []
+    for c in tos:
+        if c not in dedup:
+            dedup.append(c)
+    base["to_cities"] = dedup
+    base["default_to_city"] = dedup[0]
     return base
 
 
@@ -72,12 +91,16 @@ def record_low(history, route_id, from_city, to_city, cabin, date, price_total):
 
 def route_qualifies(route, cw):
     """A route is watched when its to_city is the configured default
-    destination. from-city narrowing applies only when the operator
-    filled watch_from_cities."""
+    destination (v0.47: any of the configured to_cities). from-city
+    narrowing applies only when the operator filled watch_from_cities."""
     if not cw.get("enabled"):
         return False
-    want_to = (cw.get("default_to_city") or "").strip()
-    if want_to and (route.get("to_city") or "").strip() != want_to:
+    want = {str(c).strip() for c in (cw.get("to_cities") or [])
+            if str(c).strip()}
+    if not want:
+        legacy = (cw.get("default_to_city") or "").strip()
+        want = {legacy} if legacy else None
+    if want is not None and (route.get("to_city") or "").strip() not in want:
         return False
     watch_from = cw.get("watch_from_cities") or []
     if watch_from:

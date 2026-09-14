@@ -289,6 +289,13 @@ checks["v0.46 board row-date dow"] = (("_row_dow" in _sb_src)
     and ("row_dow = _row_dow(row, dow)" in _sb_src))
 checks["v0.46 pre-fmt db migrated"] = (("_ensure_fmt2" in _sb_src)
     and ('"fmt": 2' in _sb_src))
+checks["v0.47 cabin multi-dest + refresh"] = (("to_cities" in _webui_src)
+    and ("qualifying_routes" in _webui_src)
+    and ("worker_heartbeat" in _webui_src))
+_cabin_src = open(os.path.join("core", "cabin_monitor.py"),
+                  encoding="utf-8").read()
+checks["v0.47 cabin monitor list gate"] = (('"to_cities": ["杭州"]'
+    in _cabin_src) and ("route_qualifies" in _cabin_src))
 
 bad = 0
 for k, v in checks.items():

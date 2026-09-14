@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { saveConfig, fetchCities } from "../lib/api.js";
-import AcField, { filterAC } from "./AcField.jsx";
+import { filterAC } from "./AcField.jsx";
 
 const fmt = (n) => (typeof n === "number" ? "¥" + Math.round(n) : "-");
 
@@ -136,7 +136,9 @@ export default function CabinCard({ cfg, setCfg }) {
     setMsg("");
     setDraft({
       enabled: live.enabled != null ? !!live.enabled : !!cw.enabled,
-      default_to_city: live.default_to_city || cw.default_to_city || "杭州",
+      toCities: (live.to_cities && live.to_cities.length
+        ? live.to_cities
+        : [live.default_to_city || cw.default_to_city || "杭州"]).slice(),
       threshold_total: live.threshold_total || cw.threshold_total || 1500,
       cooldown_hours:
         live.cooldown_hours != null ? live.cooldown_hours
@@ -149,7 +151,8 @@ export default function CabinCard({ cfg, setCfg }) {
     const nextCw = {
       enabled: !!draft.enabled,
       cabins: (live.cabins && live.cabins.length) ? live.cabins : ["business"],
-      default_to_city: (draft.default_to_city || "").trim() || "杭州",
+      to_cities: draft.toCities.slice(),
+      default_to_city: draft.toCities[0] || "杭州",
       threshold_total: Number(draft.threshold_total) || 1500,
       cooldown_hours: Number(draft.cooldown_hours) || 0,
       watch_from_cities: draft.cities.slice(),
@@ -169,6 +172,13 @@ export default function CabinCard({ cfg, setCfg }) {
       .finally(() => setBusy(false));
   };
 
+  const destList = (cw.to_cities && cw.to_cities.length)
+    ? cw.to_cities : [cw.default_to_city || "杭州"];
+  const dests = destList.join(" / ");
+  const rf = data.refresh || {};
+  const hhmm = (ts) => ts
+    ? new Date(ts * 1000).toLocaleTimeString("zh-CN",
+        { hour: "2-digit", minute: "2-digit" }) : "-";
   const routes = (data.history && data.history.routes) || {};
   const rows = Object.entries(routes)
     .map(([id, r]) => ({ id, ...r, n: (r.obs || []).length }))
@@ -194,9 +204,6 @@ export default function CabinCard({ cfg, setCfg }) {
               <input type="checkbox" checked={!!draft.enabled}
                 onChange={(e) => setD("enabled", e.target.checked)} />
             </label>
-            <AcField label="目的地城市" value={draft.default_to_city}
-              ensure={fetchCities}
-              onChange={(v) => setD("default_to_city", v)} />
             <label class="field2">
               <span class="f-label2">心理价位 (总价)</span>
               <input type="number" min="1" value={draft.threshold_total}
@@ -207,6 +214,11 @@ export default function CabinCard({ cfg, setCfg }) {
               <input type="number" min="0" value={draft.cooldown_hours}
                 onInput={(e) => setD("cooldown_hours", e.target.value)} />
             </label>
+          </div>
+          <div class="field2">
+            <span class="f-label2">监控目的地（可多个, 默认杭州）</span>
+            <CityPicker cities={draft.toCities}
+              onChange={(cs) => setD("toCities", cs)} />
           </div>
           <div class="field2">
             <span class="f-label2">监控出发城市 (点选或回车添加, 留空 = 全部出发地)</span>
@@ -223,11 +235,31 @@ export default function CabinCard({ cfg, setCfg }) {
       ) : (
         <div>
           <div class="cabin-meta">
-            目的地 {cw.default_to_city || "杭州"} · 阈值 {fmt(cw.threshold_total)} ·
+            目的地 {dests} · 阈值 {fmt(cw.threshold_total)} ·
             冷却 {(cw.cooldown_hours || 0) + "h"}
             {(cw.watch_from_cities || []).length
               ? " · 出发地 " + cw.watch_from_cities.join("/") : ""}
           </div>
+          <div class="cabin-refresh">
+            <span class="badge gray">定时刷新</span>
+            <span>每 {rf.interval_minutes || 45} 分钟一轮</span>
+            {rf.last_cycle_ts
+              ? <span>上轮 {hhmm(rf.last_cycle_ts)}</span> : null}
+            {rf.next_cycle_ts
+              ? <span>下轮 ≈{hhmm(rf.next_cycle_ts)}</span> : null}
+          </div>
+          {(data.qualifying_routes || []).length ? (
+            <div class="cw-routes">
+              <span class="muted">采集路线</span>
+              {(data.qualifying_routes || []).map((r, i) => (
+                <span class="cw-route" key={i}>{r.from_city}→{r.to_city}</span>
+              ))}
+            </div>
+          ) : (cw.enabled ? (
+            <div class="cw-routes muted">
+              暂无匹配路线——在「路线」页添加飞往 {dests} 的路线后开始采集
+            </div>
+          ) : null)}
           {rows.length ? (
             <table class="tbl">
               <thead>
@@ -254,7 +286,7 @@ export default function CabinCard({ cfg, setCfg }) {
             <div class="empty">
               {cw.enabled
                 ? "暂无公务舱样本 · 需配置 Amadeus 密钥后自动采集 (推送页可测)"
-                : "点击右上「编辑」开启后, 各出发地飞 " + (cw.default_to_city || "杭州") + " 的公务舱最低价会在此汇总"}
+                : "点击右上「编辑」开启后, 各出发地飞 " + dests + " 的公务舱最低价会在此汇总"}
             </div>
           )}
           {data.last_alert ? (

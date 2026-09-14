@@ -695,6 +695,29 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   font-size: var(--fs-sm);
   margin: var(--sp-1) 0 var(--sp-2);
 }
+.cabin-refresh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--tx-2);
+  margin: 0 0 var(--sp-2);
+}
+.cw-routes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-sm);
+  margin: 0 0 var(--sp-2);
+}
+.cw-route {
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--tx-1);
+}
 .cabin-last {
   margin-top: var(--sp-2);
   color: var(--tx-2);

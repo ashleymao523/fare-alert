@@ -59,6 +59,28 @@ class CabinWatchConfigTests(unittest.TestCase):
         out = self._validate(cfg)
         self.assertEqual(out["cabin_watch"]["cabins"], ["business"])
 
+    def test_to_cities_list_validated(self):
+        # v0.47: destinations are a list; order kept, dupes stripped
+        cfg = _base_body()
+        cfg["cabin_watch"] = {"enabled": True,
+                              "to_cities": [" 杭州 ", "", "宁波", "杭州"]}
+        out = self._validate(cfg)
+        cw = out["cabin_watch"]
+        self.assertEqual(cw["to_cities"], ["杭州", "宁波"])
+        self.assertEqual(cw["default_to_city"], "杭州")
+
+    def test_to_cities_falls_back_to_legacy_field(self):
+        cfg = _base_body()
+        cfg["cabin_watch"] = {"enabled": True, "default_to_city": "宁波"}
+        out = self._validate(cfg)
+        self.assertEqual(out["cabin_watch"]["to_cities"], ["宁波"])
+
+    def test_bad_to_cities_rejected(self):
+        cfg = _base_body()
+        cfg["cabin_watch"] = {"to_cities": "杭州"}
+        with self.assertRaises(ValueError):
+            self._validate(cfg)
+
     def test_non_list_from_cities_rejected(self):
         cfg = _base_body()
         cfg["cabin_watch"] = {"watch_from_cities": "重庆"}

@@ -25,6 +25,12 @@ class CabinApiTests(unittest.TestCase):
         # defaults echo even when disabled
         self.assertIn("default_to_city", j["config"])
         self.assertEqual(j["config"]["default_to_city"], "杭州")
+        # v0.47: destination list + refresh cadence + collected routes
+        self.assertEqual(j["config"]["to_cities"], ["杭州"])
+        self.assertIn("interval_minutes", j["refresh"])
+        self.assertIn("last_cycle_ts", j["refresh"])
+        self.assertIn("next_cycle_ts", j["refresh"])
+        self.assertIsInstance(j["qualifying_routes"], list)
 
     def test_cabin_v1_alias(self):
         r0 = self.client.get("/api/cabin")

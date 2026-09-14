@@ -225,8 +225,22 @@ def _validate_config(body, current):
             and all(c in ("business", "first") for c in cabins)):
         cabins = ["business"]
     cwt["cabins"] = cabins
-    cwt["default_to_city"] = (str(cwt.get("default_to_city")
-                                 or "杭州").strip()) or "杭州"
+    # v0.47: destinations as an editable list (default Hangzhou); the
+    # legacy single field stays synced to the first entry
+    tcs = cwt.get("to_cities")
+    if tcs is None:
+        tcs = [cwt.get("default_to_city")] if cwt.get("default_to_city") else []
+    if not isinstance(tcs, list):
+        raise ValueError("to_cities必须是列表")
+    tcl = []
+    for c in tcs:
+        s = str(c).strip()
+        if s and s not in tcl:
+            tcl.append(s)
+    if not tcl:
+        tcl = ["杭州"]
+    cwt["to_cities"] = tcl
+    cwt["default_to_city"] = tcl[0]
     cw_th = cwt.get("threshold_total", 1500)
     if not isinstance(cw_th, (int, float)) or cw_th <= 0:
         raise ValueError("公务舱心理价位必须是正数")
@@ -558,16 +572,32 @@ def api_coverage_trend():
 
 @app.get("/api/cabin")
 def api_cabin():
-    """v0.42: business-cabin watch status - ring history + config echo."""
+    """v0.42: business-cabin watch status - ring history + config echo.
+    v0.47: also reports the worker refresh cadence and which configured
+    routes the monitor currently collects, so the tab explains itself."""
     from core.cabin_monitor import load_config as cw_load
     from core.cabin_monitor import load_history as ch_load
+    from core.cabin_monitor import route_qualifies as cw_qualifies
     cfg = load_config(CONFIG_PATH) if CONFIG_PATH else {}
     cw = cw_load(cfg)
     ch = ch_load(DATA_DIR)
     state = _read_json(os.path.join(DATA_DIR, "state.json"), {})
     last = (state.get("_cabin") or {}) if isinstance(state, dict) else {}
+    qual = [{"from_city": (r.get("from_city") or "").strip(),
+             "to_city": (r.get("to_city") or "").strip()}
+            for r in (cfg.get("routes") or []) if cw_qualifies(r, cw)]
+    interval = int((cfg.get("schedule") or {}).get("interval_minutes", 45)
+                   or 45)
+    hb = _read_json(os.path.join(DATA_DIR, "worker_heartbeat.json"), {}) or {}
+    last_ts = float(hb.get("ts") or 0)
     return jsonify({"config": cw, "history": ch,
-                    "last_alert": last.get("last_hit")})
+                    "last_alert": last.get("last_hit"),
+                    "qualifying_routes": qual,
+                    "refresh": {
+                        "interval_minutes": interval,
+                        "last_cycle_ts": last_ts or None,
+                        "next_cycle_ts": (last_ts + interval * 60)
+                        if last_ts else None}})
 
 
 @app.get("/api/weekly-report")
