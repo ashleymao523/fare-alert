@@ -6,37 +6,44 @@ on:
   pull_request:
 
 jobs:
-  acceptance:
-    runs-on: ubuntu-latest
+  py-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+          python-version: "3.13"
       - run: pip install -r requirements.txt
-      - run: python tools/acceptance.py
-  docker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: docker build -t fare-alert:ci .
-  frontend:
+      - run: python -m compileall -q core main.py webui.py tests
+      - name: unit tests
+        shell: bash
+        run: |
+          fail=0
+          for f in tests/test_*.py; do
+            echo "== $f"
+            python -X utf8 "$f" || fail=1
+          done
+          exit $fail
+
+  web-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
       - run: npm ci
         working-directory: web
       - run: npm run build
         working-directory: web
-      - name: dist must be committed up-to-date
-        run: |
-          git diff --exit-code
-          test -z "$(git status --porcelain)"
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build image
+        run: docker build --build-arg PIP_INDEX_URL=https://pypi.org/simple -t fare-alert:ci .

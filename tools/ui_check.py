@@ -472,6 +472,17 @@ checks["v0.69 当日班期表+生产部署"] = (("day-schedule" in _webui_src)
     and os.path.exists("Dockerfile")
     and os.path.exists("docker-compose.yml"))
 
+_ov2_src = open(os.path.join("web", "src", "components",
+                             "OverviewCard.jsx"), encoding="utf-8").read()
+_ci_path = os.path.join(".github", "workflows", "ci.yml")
+checks["v0.70 班期直达+省%+CI"] = (("dayListUrl" in _dd_src)
+    and ("goDate=" in _dd_src)
+    and ("直达去哪儿当日列表" in _dd_src)
+    and ("直达去哪儿当日列表" in _dist_js)
+    and ("省\n" in _ov2_src or "省 " in _ov2_src)
+    and os.path.exists(_ci_path)
+    and ("docker-build" in open(_ci_path, encoding="utf-8").read()))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

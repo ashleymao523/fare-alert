@@ -33,6 +33,20 @@ function timeSrcBadge(label, src) {
   return null;
 }
 
+function dayListUrl(route, date) {
+  // v0.70: any known deal url is the safest template (right city
+  // spelling for intl hubs); swap goDate, else build from city names
+  const pool = (route.deals || []).concat(route.return_deals || []);
+  const base = pool.find((d) => d && d.url);
+  if (base && base.url) {
+    return base.url.replace(/([?&])goDate=[^&]*/, "$1goDate=" + date);
+  }
+  return "https://m.flight.qunar.com/ncs/page/flightlist?depCity="
+    + encodeURIComponent(route.from_city || "")
+    + "&arrCity=" + encodeURIComponent(route.to_city || "")
+    + "&goDate=" + date + "&from=touch_index_search";
+}
+
 export default function DayDetail({ route, date }) {
   const [sched, setSched] = useState(null);
   useEffect(() => {
@@ -53,14 +67,17 @@ export default function DayDetail({ route, date }) {
         当日班期表 · {sched.rows.length}班
       </span>
       {sched.rows.map((a) => (
-        <span
+        <a
           class={"ft-alt" + (a.exact ? "" : " x")}
+          href={dayListUrl(route, date)}
+          target="_blank"
+          rel="noopener"
           title={a.exact
-            ? "该航班当日星期有班期实录: 起飞→落地"
-            : "同号航班其他班期时刻, 同航季通常一致, 仅供参考"}
+            ? "该航班当日星期有班期实录: 起飞→落地 · 点击直达去哪儿当日列表"
+            : "同号航班其他班期时刻, 同航季通常一致, 仅供参考 · 点击直达去哪儿当日列表"}
         >
           {a.no} {a.dep}{a.arr ? "→" + a.arr : ""}
-        </span>
+        </a>
       ))}
     </div>
   ) : null;

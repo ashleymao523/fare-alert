@@ -94,7 +94,9 @@ export default function OverviewCard({ routes, drops, currentId, onPick }) {
             ) : null}
             {bestRow.cheapest <= bestRow.th ? (
               <span class="chip2 ok">
-                已破线 {fmt(bestRow.th - bestRow.cheapest)}
+                已破线 {fmt(bestRow.th - bestRow.cheapest)} · 省
+                {Math.round((bestRow.th - bestRow.cheapest)
+                  / bestRow.th * 100)}%
               </span>
             ) : (
               <span class="chip2 plan">

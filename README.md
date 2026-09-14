@@ -1,5 +1,7 @@
 # FareAlert · 低价出行提醒组件
 
+[![CI](https://github.com/ashleymao523/fare-alert/actions/workflows/ci.yml/badge.svg)](https://github.com/ashleymao523/fare-alert/actions/workflows/ci.yml)
+
 监控未来 N 天 **机票最低价(含机建燃油,即最终支付口径)**,低于你的心理价位就推送到 iPhone;同时对比 12306 列车全席位票价(二等座/卧铺/普速,含学生票估算),帮你选出**出行最优方案**。自带 Web 仪表盘,单文件依赖极简,适合部署在私人设备上长期运行。
 
 > 个人比价参考工具:数据来自公开接口的低频查询,不破解任何签名/验证码,购票始终跳转官方/平台页面人工完成。
@@ -214,6 +216,7 @@ fare-alert/
 - [x] **v0.67 灰色日期精点补全**: 用户判断「查不到飞行数据源的日期并非没票, 直接按日期精点查询能查到」——侦察实锤两个根因: ① offer 精点补全被 gap_dates[:6] 截断, 洞>6 时排位靠后的日期永远轮不到点查(饿死); ② qunar-intl 促销日历常只回 1-2 条尾部真实价, 头部日期距最近锚点>45 天超出参考价半径, 整段头空白。修复: ① _cached_fill_offers 改为轮转预算制——每轮只点查缓存缺失/过期的洞(≤6 个/轮), 负缓存即轮转游标, 后续洞自动轮入, 全窗口洞最终都会被逐日 flight-offers 精点(需 Amadeus 密钥), 新增 stats 出参(holes/probed/deferred); ② _fill_reference_deals 半径 45→75, 单一尾部锚点即可参考覆盖整个 60 天窗口(仍仅展示、不触发提醒/统计); ③ 数据源页 offer fill 步骤显示「缺N天·本轮点查M·待轮转K」。单测新增轮转跨批覆盖+参考价头部可达(30 文件全绿), ui_check v0.67 断言, 版本 0.67 四处盖章。
 - [x] **v0.68 参考班次落地时间补全**: 用户痛点「航班只显示起飞时间、落地一直 --:--」——侦察实锤 dep_time 已 100% 覆盖, 真缺口是 arr_time(国际线 60/60 全缺, 国内 24~47/60 缺); 班期库 flight_sched_db.json(3711 班)的 dow 条目本就同时含 dep+arr, 但 _ref_deps 只透传 dep 把 arr 丢了。修复: ① sched_board._ref_deps 条目新增 arr 透传; ② promote_alt_time 校验并携带 arr(垃圾值置空); ③ main._attach_alt_times 拆 need_dep/need_arr——缺落地的行从提升的参考班次直接补 arr_time(arr_src=alt-ref, 不覆盖已有值), _flight_dict 序列化 alt_times 携带 arr; ④ DayDetail 参考班次 chip 显示「航班号 起飞→落地」。全程零请求零密钥, Amadeus 密钥接入后仍会升级为精查时刻。单测新增 arr 搭车+落地参考回填(15+55 全绿), ui_check v0.68 断言, 版本 0.68 四处盖章。
 - [x] **v0.69 当日班期表 + 生产级部署**: 用户反馈「还是看不到航班班次的具体起飞时间」+「部署太轻量」。数据侧复核: 快照 240 行 miss_dep=0/miss_arr=0, DOM 零占位符——痛点实质是「只看得到最低价那一班」而非数据缺失。① 新增 /api/day-schedule?from&to&date 零密钥接口: 按城市对+星期列出班期库全部班次(no/dep→arr/exact 徽标, 出发杭州走离港板, 其余城市走到达板反查); ② DayDetail 详情卡内嵌「当日班期表 · N班」chips 条, 无报价日期也展示, 一次点击看全该日每个班次的起飞→落地; ③ webui 主进程从 Flask dev server 升级为 waitress 生产级 WSGI(8 线程, ImportError 优雅回退保持零依赖可启动); ④ Dockerfile+docker-compose.yml: python:3.13-slim, 数据/配置宿主机挂载, HEALTHCHECK 走 /api/health, 容器内监督线程同 Windows 模型自动拉起 worker。单测新增 day-schedule 契约 5 例(缺参 400/坏日期 400/去程含 arr/返程走到达板/未知城市对空而 ok), ui_check v0.69 断言, 版本 0.69 四处盖章。
+- [x] **v0.70 班期直达 + 省% + CI**: ① 当日班期表每个班次 chip 升级为深链——dayListUrl 复用任意已有 deal url 模板替换 goDate(国际城市拼写以真实 deal 为准), 无 deal 时按城市名构造, 点击任一班次直达去哪儿当日航班列表; ② 全局最优卡破线 chip 从「已破线 ¥X」升级为「已破线 ¥X · 省 Y%」; ③ 新增 .github/workflows/ci.yml: ubuntu+windows 双平台跑全量单测与 compileall, web-build 任务 npm ci+build 验证前端可构建, docker-build 任务构建镜像验证 Dockerfile; README 顶部挂 CI 徽章并修正 CI 范围文案(单测+构建级, 完整 acceptance 仍本地)。
 
 ## 常见问题
 
@@ -234,7 +237,7 @@ python tools/acceptance.py
 
 - 门禁覆盖 G0 静态检查 / G1 单测 / G2 API 契约 / G3 DOM 断言 / G4-G6 红线(提醒、隐私、估算价)。
 - 人机协作守则见 [AGENTS.md](AGENTS.md),逐条门禁定义见 [docs/验收规范.md](docs/验收规范.md),里程碑与 DoD 见 [docs/迭代路线图.md](docs/迭代路线图.md),API 契约见 [docs/API.md](docs/API.md)。
-本仓库已接入 CI(push/PR 自动跑验收),本地全绿 + CI 全绿才可合入。
+本仓库已接入 GitHub Actions CI(push/PR 自动跑双平台单测 + 前端构建 + Docker 镜像构建);完整 acceptance 门禁(含运行中面板的 API/DOM 契约)仍在本地执行,本地全绿 + CI 全绿才可合入。
 
 ## 免责声明
 
