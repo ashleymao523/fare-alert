@@ -142,6 +142,23 @@ def test_attach_alt_times_idempotent_and_empty_city():
     assert e.alt_times == []
 
 
+def test_attach_alt_times_promotes_best_reference():
+    # v0.48: a deal carrying alt_times but no dep_time gets the best
+    # reference departure lifted onto dep_time (dep_src="alt-ref")
+    db = _alt_db(("JD419", 4, "08:35", "杭州", "曼谷"),
+                 ("FD497", 4, "18:10", "杭州", "曼谷"))
+    d = FlightDeal(date="2026-09-25", bare_price=900, flight_no="",
+                   source="nearby-ref")
+    d.alt_times = [{"no": "FD497", "dep": "18:10", "exact": False},
+                   {"no": "JD419", "dep": "08:35", "exact": True}]
+    _attach_alt_times([d], "曼谷", db)
+    assert d.dep_time == "08:35"
+    assert d.dep_src == "alt-ref" and d.time_src == "alt-ref"
+    # already-promoted deals stay untouched on replay (idempotent)
+    _attach_alt_times([d], "曼谷", db)
+    assert d.dep_time == "08:35"
+
+
 def run_all():
     fns = sorted((k, v) for k, v in list(globals().items())
                  if k.startswith("test_") and callable(v))

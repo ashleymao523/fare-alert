@@ -641,8 +641,9 @@
     var ds = route.deals || [];
     var depN = 0, altN = 0;
     ds.forEach(function (x) {
-      if ((x.dep_time || "").trim()) depN++;
-      else if ((x.alt_times || []).length) altN++;
+      // v0.48: alt-ref promoted times stay in the "参考" bucket
+      if ((x.dep_time || "").trim() && x.dep_src !== "alt-ref") depN++;
+      else if ((x.dep_time || "").trim() || (x.alt_times || []).length) altN++;
     });
     if (ds.length) {
       items.push({
@@ -911,6 +912,9 @@
     } else if (depSrc === "airport-board-x") {
       depBadge = el("span", "badge amber ts-badge", "起飞·跨日参考");
       depBadge.title = "同一航班号其他班期的时刻，同航季内通常一致，仅供参考";
+    } else if (depSrc === "alt-ref") {
+      depBadge = el("span", "badge amber ts-badge", "起飞·参考班次");
+      depBadge.title = "同航线当日参考班次时刻（非本航班号），仅供参考";
     } else if (depSrc === "amadeus") {
       depBadge = el("span", "badge sky ts-badge", "起飞·Amadeus");
     }
@@ -919,12 +923,15 @@
     } else if (arrSrc === "airport-board-x") {
       arrBadge = el("span", "badge amber ts-badge", "落地·跨日参考");
       arrBadge.title = "同一航班号其他班期的时刻，同航季内通常一致，仅供参考";
+    } else if (arrSrc === "alt-ref") {
+      arrBadge = el("span", "badge amber ts-badge", "落地·参考班次");
     } else if (arrSrc === "amadeus") {
       arrBadge = el("span", "badge sky ts-badge", "落地·Amadeus");
     }
     if (depBadge && arrBadge && depSrc === arrSrc) {
       depBadge.textContent = depSrc === "amadeus" ? "计划时刻·Amadeus" : "计划时刻·机场班期";
       if (depSrc === "airport-board-x") depBadge.textContent = "跨日班期·参考";
+      if (depSrc === "alt-ref") depBadge.textContent = "参考班次·参考";
       durBox.appendChild(depBadge);
     } else {
       if (depBadge) durBox.appendChild(depBadge);

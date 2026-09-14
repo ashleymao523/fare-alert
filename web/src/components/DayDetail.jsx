@@ -20,6 +20,13 @@ function timeSrcBadge(label, src) {
       </span>
     );
   }
+  if (src === "alt-ref") {
+    return (
+      <span class="badge amber ts-badge" title="同航线当日参考班次时刻(非本航班号), 仅供参考">
+        {label === "参考班次" ? "参考班次" : label + "·参考班次"}
+      </span>
+    );
+  }
   if (src === "amadeus") return <span class="badge sky ts-badge">{label}·Amadeus</span>;
   return null;
 }
@@ -52,7 +59,8 @@ export default function DayDetail({ route, date }) {
   if (hasDep || hasArr) {
     if (depSrc && depSrc === arrSrc) {
       const lab = depSrc === "amadeus" ? "计划时刻"
-        : (depSrc === "airport-board-x" ? "跨日班期" : "计划时刻");
+        : (depSrc === "airport-board-x" ? "跨日班期"
+          : (depSrc === "alt-ref" ? "参考班次" : "计划时刻"));
       midBadges = timeSrcBadge(lab, depSrc);
     } else {
       midBadges = (

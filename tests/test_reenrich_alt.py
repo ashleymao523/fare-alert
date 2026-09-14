@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """v0.42 regression: codeshare deals gain alt_times on re-enrich and
-the change persists (changed=True) even when coverage counts are flat."""
+the change persists (changed=True) even when coverage counts are flat.
+v0.48: the best reference departure is also PROMOTED onto dep_time
+(dep_src="alt-ref") so the row renders a time instead of "--:--"."""
 import json
 import os
 import sys
@@ -52,7 +54,8 @@ class ReenrichAltTimesTests(unittest.TestCase):
                       encoding="utf-8") as f:
                 snap = json.load(f)
             d = snap["routes"][0]["deals"][0]
-            self.assertFalse(d["dep_time"])       # codeshare stays unknown
+            self.assertEqual(d["dep_time"], "06:20")  # promoted reference
+            self.assertEqual(d["dep_src"], "alt-ref")
             self.assertTrue(d["alt_times"])        # reference rows attached
             # idempotent second run reports no change
             out2 = reenrich_snapshot(tmp)

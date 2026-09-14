@@ -655,3 +655,24 @@ def city_dep_times(db, to_city, date_iso, limit=4):
         seen_dep.add(e["dep"])
         dedup.append(e)
     return dedup[:limit]
+
+
+def promote_alt_time(alts):
+    """v0.48: pick the best reference departure from a city_dep_times
+    list and promote it to the deal's dep_time (dep_src="alt-ref").
+
+    116 of the snapshot's priced rows carried real reference times in
+    alt_times yet rendered as "--:--" because nothing lifted the best
+    entry onto dep_time. Selection mirrors city_dep_times' own sort:
+    exact (same dow) first, then earliest departure. Returns the chosen
+    {no, dep, exact} dict or None when nothing is promotable. Pure."""
+    pool = []
+    for a in alts or []:
+        dep = str((a or {}).get("dep") or "")[:5]
+        if len(dep) >= 4 and dep[:2].isdigit() and dep[3:5].isdigit():
+            pool.append({"no": (a.get("no") or ""), "dep": dep,
+                         "exact": bool(a.get("exact"))})
+    if not pool:
+        return None
+    pool.sort(key=lambda a: (not a["exact"], a["dep"]))
+    return pool[0]

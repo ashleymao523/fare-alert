@@ -551,6 +551,27 @@ class TestCityDepTimes(unittest.TestCase):
         self.assertEqual(sb.city_dep_times(db, "", "2026-09-11"), [])
         self.assertEqual(sb.city_dep_times(db, "曼谷", "bad-date"), [])
 
+    def test_promote_alt_time_exact_first_then_earliest(self):
+        # v0.48: exact (same-dow) entries win; among borrowed ones the
+        # earliest departure is the safest same-day reference
+        alts = [{"no": "B", "dep": "18:10", "exact": False},
+                {"no": "C", "dep": "01:20", "exact": False},
+                {"no": "A", "dep": "08:35", "exact": True}]
+        pick = sb.promote_alt_time(alts)
+        self.assertEqual((pick["no"], pick["dep"], pick["exact"]),
+                         ("A", "08:35", True))
+        pick2 = sb.promote_alt_time(
+            [{"no": "C", "dep": "01:20", "exact": False},
+             {"no": "B", "dep": "18:10", "exact": False}])
+        self.assertEqual(pick2["dep"], "01:20")
+
+    def test_promote_alt_time_filters_garbage(self):
+        self.assertIsNone(sb.promote_alt_time([]))
+        self.assertIsNone(sb.promote_alt_time(None))
+        self.assertIsNone(sb.promote_alt_time([{"no": "X", "dep": ""}]))
+        self.assertIsNone(sb.promote_alt_time([{"no": "X", "dep": "8:5"}]))
+        self.assertIsNone(sb.promote_alt_time([{"no": "X", "dep": "junk"}]))
+
 
 class TestHopOffArrivalAndBackfill(unittest.TestCase):
     """v0.32: through-flight hop-off arrivals + offline cache backfill."""

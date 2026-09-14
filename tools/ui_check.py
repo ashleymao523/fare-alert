@@ -296,6 +296,11 @@ _cabin_src = open(os.path.join("core", "cabin_monitor.py"),
                   encoding="utf-8").read()
 checks["v0.47 cabin monitor list gate"] = (('"to_cities": ["杭州"]'
     in _cabin_src) and ("route_qualifies" in _cabin_src))
+checks["v0.48 alt-ref promote core"] = (("promote_alt_time" in _sb_src)
+    and ("alt-ref" in _main_src)
+    and ("promote_alt_time" in _main_src))
+checks["v0.48 v2产物参考班次徽标"] = (("参考班次" in _dist_js)
+    and ("alt-ref" in _dist_js))
 
 bad = 0
 for k, v in checks.items():

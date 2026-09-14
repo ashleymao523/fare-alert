@@ -49,8 +49,10 @@ export default function Kpis({ route }) {
   let depN = 0;
   let altN = 0;
   real.forEach((x) => {
-    if ((x.dep_time || "").trim()) depN++;
-    else if ((x.alt_times || []).length) altN++;
+    // v0.48: alt-ref promoted times stay in the "参考" bucket so the
+    // KPI never counts a different flight's departure as exact.
+    if ((x.dep_time || "").trim() && x.dep_src !== "alt-ref") depN++;
+    else if ((x.dep_time || "").trim() || (x.alt_times || []).length) altN++;
   });
   const refN = ds.length - real.length;
   if (real.length) {

@@ -32,7 +32,8 @@ from core.models import FlightDeal
 from core.notify import has_channel, push_all
 from core.report import write_report
 from core.sched_board import (board_lookup_x, build_route_priors,
-                              city_dep_times, load_sched_db, prior_minutes_for,
+                              city_dep_times, load_sched_db,
+                              prior_minutes_for, promote_alt_time,
                               touches_hangzhou, update_sched_db)
 from core.state import load_state, save_state
 from core.trains import refresh_train_info
@@ -195,16 +196,25 @@ def _attach_alt_times(deals, to_city, db):
     nearby-ref/interp deals are appended AFTER _enrich_flight_times ran,
     so the v0.26 mount inside the enrich loop never saw them (Bangkok:
     48/50 deals are nearby-ref -> alt_times stayed empty in snapshots).
-    Idempotent: skips deals that already carry a number, a departure
-    time or alt_times. Outbound only: the board holds HGH departures,
-    return legs have no matching rows."""
+    Idempotent: a deal that already has a departure time is skipped.
+    v0.48: a deal that carries alt_times but no dep_time gets the best
+    reference departure PROMOTED onto dep_time (dep_src="alt-ref") -
+    103 snapshot rows had real reference times parked in alt_times that
+    the UI never lifted into the time slot. Outbound only: the board
+    holds HGH departures, return legs have no matching rows."""
     cache = {}
     for d in deals:
-        if d.dep_time or d.alt_times:
+        if d.dep_time:
             continue
-        if d.date not in cache:
-            cache[d.date] = city_dep_times(db, to_city, d.date)
-        d.alt_times = cache[d.date]
+        if not d.alt_times:
+            if d.date not in cache:
+                cache[d.date] = city_dep_times(db, to_city, d.date)
+            d.alt_times = cache[d.date]
+        best = promote_alt_time(d.alt_times)
+        if best:
+            d.dep_time = best["dep"]
+            d.time_src = "alt-ref"
+            d.dep_src = "alt-ref"
     return deals
 
 
@@ -533,6 +543,18 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                         n_x += 1
             if not d.duration_text:
                 d.duration_text = estimate_duration_text(fi, ti, connecting=True)
+            if not d.dep_time:
+                # v0.48: both segments unboarded (e.g. SC2114/SC2135):
+                # fall back to the day's same-route reference departures
+                # instead of rendering "--:--" for a priced deal.
+                if d.date not in alt_cache:
+                    alt_cache[d.date] = city_dep_times(bdb, tc, d.date)
+                d.alt_times = alt_cache[d.date]
+                best = promote_alt_time(d.alt_times)
+                if best:
+                    d.dep_time = best["dep"]
+                    d.time_src = "alt-ref"
+                    d.dep_src = "alt-ref"
             if not d.arr_time and d.dep_time:
                 d.arr_est = estimate_arrival_time(d.dep_time, fi, ti,
                                                   connecting=True)
@@ -582,6 +604,13 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
             if d.date not in alt_cache:
                 alt_cache[d.date] = city_dep_times(bdb, tc, d.date)
             d.alt_times = alt_cache[d.date]
+            # v0.48: lift the best reference departure onto dep_time so
+            # the calendar chip + day detail show a real time (badged).
+            best = promote_alt_time(d.alt_times)
+            if best:
+                d.dep_time = best["dep"]
+                d.time_src = "alt-ref"
+                d.dep_src = "alt-ref"
         prior_min = prior_minutes_for(priors, tc)
         if not d.duration_text:
             d.duration_text = estimate_duration_text(fi, ti,
