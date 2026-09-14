@@ -767,6 +767,15 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   margin-left: auto;
   color: var(--tx-2);
 }
+.ov-spark {
+  display: block;
+  flex: 0 0 auto;
+}
+.ov-times {
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
 .cw-routes {
   display: flex;
   flex-wrap: wrap;

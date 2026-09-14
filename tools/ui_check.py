@@ -427,6 +427,11 @@ checks["v0.62 cabin history board"] = (("def history_board" in _cabin_core_src)
     and ("历史低价榜" in _cabin_card_src)
     and ("历史低价榜" in _dist_js))
 
+checks["v0.63 overview times + spark"] = (("ov-times" in _ov_src)
+    and ("spark-line" in _ov_src)
+    and ("ov-times" in _dist_js)
+    and ("ov-times" in h))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

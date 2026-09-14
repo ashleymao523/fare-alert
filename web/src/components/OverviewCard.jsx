@@ -1,5 +1,28 @@
 const fmt = (n) => (typeof n === "number" ? "¥" + Math.round(n) : "-");
 
+// v0.63: mini trend of the whole watch window, straight into the row -
+// the board answers "how did it move" without clicking into the route.
+// Reuses the spark-line/spark-min classes already shipped for the
+// cabin card, so the two line up visually.
+function OvSpark({ pts }) {
+  if (!pts || pts.length < 2) return null;
+  const min = Math.min(...pts), max = Math.max(...pts);
+  const W = 84, H = 22, PAD = 2;
+  const x = (i) => PAD + (i * (W - 2 * PAD)) / (pts.length - 1);
+  const y = (v) => (max === min ? H / 2
+    : PAD + ((max - v) / (max - min)) * (H - 2 * PAD));
+  const d = pts.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1)
+    + " " + y(v).toFixed(1)).join(" ");
+  const minI = pts.indexOf(min);
+  return (
+    <svg viewBox={"0 0 " + W + " " + H} width={W} height={H}
+      class="ov-spark" aria-hidden="true">
+      <path class="spark-line" d={d} />
+      <circle cx={x(minI)} cy={y(min)} r="2.6" class="spark-min" />
+    </svg>
+  );
+}
+
 // v0.61: one-glance board across ALL configured routes, sorted by how
 // close each window-lowest sits to its own threshold (best value
 // first). Clicking a row switches the dashboard to that route - it
@@ -36,6 +59,9 @@ export default function OverviewCard({ routes, drops, currentId, onPick }) {
       </div>
       <div class="ov-list">
         {rows.map(({ r, th, cheapest, best, ratio, drop }) => {
+          const pts = (r.deals || [])
+            .filter((d) => typeof d.total_price === "number")
+            .map((d) => d.total_price);
           const under = cheapest != null && th > 0 && cheapest <= th;
           const gap = (cheapest != null && th > 0)
             ? Math.round(cheapest - th) : null;
@@ -50,11 +76,20 @@ export default function OverviewCard({ routes, drops, currentId, onPick }) {
                 {r.trip_type === "roundtrip" ? " ⇄ " : " → "}
                 {r.to_city}
               </span>
+              <OvSpark pts={pts} />
               <span class="num">
                 {fmt(cheapest)}
                 {best && best.date
                   ? " (" + String(best.date).slice(5) + ")" : ""}
               </span>
+              {best && (best.dep_time || best.arr_time) ? (
+                <span class="ov-times"
+                  title={"起飞 " + (best.dep_time || "?") + " · 落地 "
+                    + (best.arr_time || "?")}>
+                  {(best.dep_time || "--:--")
+                    + "-" + (best.arr_time || "")}
+                </span>
+              ) : null}
               {under ? (
                 <span class="chip2 ok">已破线 {(r.days_below || 0) + " 天"}</span>
               ) : (
