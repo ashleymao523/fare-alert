@@ -37,6 +37,8 @@ export function saveConfig(cfg) { return post("/api/config", cfg); }
 
 export function testPush() { return post("/api/test-push", {}); }
 
+export function runNow() { return post("/api/run", { push: true }); }
+
 export function fetchSchedStats() { return fetch("/api/sched-stats").then(j); }
 export function searchBoard(params) {
   return fetch("/api/board?" + new URLSearchParams(params)).then(j);

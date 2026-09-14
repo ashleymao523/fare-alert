@@ -730,6 +730,9 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   color: var(--tx-2);
   margin: 0 0 var(--sp-2);
 }
+.cabin-refresh .btn {
+  margin-left: auto;
+}
 .cw-routes {
   display: flex;
   flex-wrap: wrap;

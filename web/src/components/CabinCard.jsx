@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { saveConfig, fetchCities } from "../lib/api.js";
+import { saveConfig, fetchCities, runNow } from "../lib/api.js";
 import { filterAC } from "./AcField.jsx";
 
 const fmt = (n) => (typeof n === "number" ? "¥" + Math.round(n) : "-");
@@ -117,6 +117,7 @@ export default function CabinCard({ cfg, setCfg }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [runBusy, setRunBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const load = () => {
     fetch("/api/cabin")
@@ -146,9 +147,18 @@ export default function CabinCard({ cfg, setCfg }) {
       alertRecordLow: live.alert_record_low != null
         ? !!live.alert_record_low : true,
       cities: (live.watch_from_cities || []).slice(),
+      intervalMinutes: ((data.refresh || {}).interval_minutes) || 45,
     });
   };
   const cancelEdit = () => { setEditing(false); setMsg(""); };
+  const doRun = () => {
+    setRunBusy(true);
+    setMsg("手动刷新中…");
+    runNow()
+      .then(() => { load(); setMsg("刷新完成 ✅"); })
+      .catch((e) => setMsg("刷新失败: " + (e.message || e)))
+      .finally(() => setRunBusy(false));
+  };
   const doSave = () => {
     const nextCw = {
       enabled: !!draft.enabled,
@@ -161,6 +171,12 @@ export default function CabinCard({ cfg, setCfg }) {
       watch_from_cities: draft.cities.slice(),
     };
     const next = Object.assign({}, cfg, { cabin_watch: nextCw });
+    // v0.59: refresh cadence rides the global worker schedule; the cabin
+    // form edits it in place (backend clamps to >= 5 minutes).
+    next.schedule = Object.assign({}, (cfg && cfg.schedule) || {}, {
+      interval_minutes: Math.max(5,
+        Math.round(Number(draft.intervalMinutes) || 45)),
+    });
     setBusy(true);
     setMsg("保存中…");
     setCfg(next);
@@ -222,6 +238,11 @@ export default function CabinCard({ cfg, setCfg }) {
               <input type="checkbox" checked={!!draft.alertRecordLow}
                 onChange={(e) => setD("alertRecordLow", e.target.checked)} />
             </label>
+            <label class="field2">
+              <span class="f-label2">刷新间隔 (分钟)</span>
+              <input type="number" min="5" value={draft.intervalMinutes}
+                onInput={(e) => setD("intervalMinutes", e.target.value)} />
+            </label>
           </div>
           <div class="field2">
             <span class="f-label2">监控目的地（可多个, 默认杭州）</span>
@@ -257,6 +278,12 @@ export default function CabinCard({ cfg, setCfg }) {
               ? <span>上轮 {hhmm(rf.last_cycle_ts)}</span> : null}
             {rf.next_cycle_ts
               ? <span>下轮 ≈{hhmm(rf.next_cycle_ts)}</span> : null}
+            {cw.enabled && data.amadeus_ready === false ? (
+              <span class="badge amber">公务舱数据源未配置</span>
+            ) : null}
+            <button class="btn sm" disabled={runBusy} onClick={doRun}>
+              {runBusy ? "刷新中…" : "立即刷新"}
+            </button>
           </div>
           {(data.qualifying_routes || []).length ? (
             <div class="cw-routes">

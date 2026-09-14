@@ -33,6 +33,9 @@ class CabinApiTests(unittest.TestCase):
         self.assertIn("last_cycle_ts", j["refresh"])
         self.assertIn("next_cycle_ts", j["refresh"])
         self.assertIsInstance(j["qualifying_routes"], list)
+        # v0.59: cabin data-source readiness flag (explains idle collection)
+        self.assertIn("amadeus_ready", j)
+        self.assertIsInstance(j["amadeus_ready"], bool)
 
     def test_cabin_v1_alias(self):
         r0 = self.client.get("/api/cabin")

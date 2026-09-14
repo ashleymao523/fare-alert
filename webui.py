@@ -618,9 +618,16 @@ def api_cabin():
                    or 45)
     hb = _read_json(os.path.join(DATA_DIR, "worker_heartbeat.json"), {}) or {}
     last_ts = float(hb.get("ts") or 0)
+    # v0.59: surface the business-cabin data source readiness so the card
+    # can explain an empty history (idle collection) instead of looking
+    # broken - same ready logic as _sources_meta.
+    ama = (cfg.get("sources") or {}).get("amadeus") or {}
+    ama_ready = bool((ama.get("client_id") or "").strip()
+                     and (ama.get("client_secret") or "").strip())
     return jsonify({"config": cw, "history": ch,
                     "last_alert": last.get("last_hit"),
                     "qualifying_routes": qual,
+                    "amadeus_ready": ama_ready,
                     "refresh": {
                         "interval_minutes": interval,
                         "last_cycle_ts": last_ts or None,

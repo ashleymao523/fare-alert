@@ -371,6 +371,8 @@ checks["v0.56 drop gate panel"] = (("骤降提醒" in _push_src)
 _weekly_src = open(os.path.join("core", "weekly.py"), encoding="utf-8").read()
 _weekly_view_src = open(os.path.join("web", "src", "components",
                                      "WeeklyView.jsx"), encoding="utf-8").read()
+_cabin_src = open(os.path.join("web", "src", "components",
+                               "CabinCard.jsx"), encoding="utf-8").read()
 checks["v0.57 weekly highlights"] = (
     ("def week_highlights" in _weekly_src)
     and ("biggest_drop" in _weekly_src)
@@ -384,6 +386,15 @@ checks["v0.58 weekly push_text wiring"] = (
     and ("push_text(report)" in _webui_src)
     and ("推送正文" in _weekly_view_src)
     and ("推送正文" in _dist_js))
+
+checks["v0.59 cabin ops closure"] = (
+    ("amadeus_ready" in _webui_src)
+    and ("amadeus_ready" in _cabin_src)
+    and ("runNow" in _cabin_src)
+    and ("立即刷新" in _cabin_src)
+    and ("intervalMinutes" in _cabin_src)
+    and ("刷新间隔" in _cabin_src)
+    and ("立即刷新" in _dist_js))
 
 bad = 0
 for k, v in checks.items():
