@@ -67,6 +67,35 @@ class CabinApiTests(unittest.TestCase):
             webui.CONFIG_PATH = old
             os.remove(p)
 
+    def test_cabin_patrol_contract(self):
+        # v0.66: patrol echo - standalone legs (watch_from x to minus
+        # route-covered pairs) + own cadence + last-run status
+        import json as _json
+        import tempfile
+        cfg = {"cabin_watch": {"enabled": True, "to_cities": ["杭州"],
+                               "watch_from_cities": ["北京", "重庆"],
+                               "refresh_minutes": 20},
+               "routes": [{"from_city": "杭州", "to_city": "重庆"}]}
+        fd, p = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        with open(p, "w", encoding="utf-8") as f:
+            _json.dump(cfg, f, ensure_ascii=False)
+        old = webui.CONFIG_PATH
+        webui.CONFIG_PATH = p
+        try:
+            j = self.client.get("/api/cabin").get_json()
+            pt = j["patrol"]
+            self.assertEqual(pt["interval_minutes"], 20)
+            # 重庆->杭州 is fed by the mirrored 杭州->重庆 route, so
+            # only 北京->杭州 runs standalone
+            self.assertEqual(pt["legs"],
+                             [{"from_city": "北京", "to_city": "杭州"}])
+            self.assertIn("last_run", pt)
+            self.assertIn("last_status", pt)
+        finally:
+            webui.CONFIG_PATH = old
+            os.remove(p)
+
 
 if __name__ == "__main__":
     unittest.main()

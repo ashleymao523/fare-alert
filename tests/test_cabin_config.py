@@ -97,6 +97,23 @@ class CabinWatchConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self._validate(cfg)
 
+    def test_refresh_minutes_default_and_clamp(self):
+        # v0.66: standalone patrol cadence defaults to 30 and clamps
+        # to [5, 720]; garbage falls back to the default
+        cfg = _base_body()
+        cfg["cabin_watch"] = {"enabled": True}
+        self.assertEqual(
+            self._validate(cfg)["cabin_watch"]["refresh_minutes"], 30)
+        cfg["cabin_watch"]["refresh_minutes"] = 2
+        self.assertEqual(
+            self._validate(cfg)["cabin_watch"]["refresh_minutes"], 5)
+        cfg["cabin_watch"]["refresh_minutes"] = 9999
+        self.assertEqual(
+            self._validate(cfg)["cabin_watch"]["refresh_minutes"], 720)
+        cfg["cabin_watch"]["refresh_minutes"] = "abc"
+        self.assertEqual(
+            self._validate(cfg)["cabin_watch"]["refresh_minutes"], 30)
+
 
 if __name__ == "__main__":
     unittest.main()

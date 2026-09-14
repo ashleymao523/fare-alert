@@ -17,6 +17,9 @@ def default_config():
         "to_cities": ["杭州"],
         "threshold_total": 1500.0,
         "cooldown_hours": 12.0,
+        # v0.66: standalone patrol cadence - the cabin watch refreshes
+        # on its own clock, not only when a full route scan happens.
+        "refresh_minutes": 30,
         "watch_from_cities": [],
         # v0.52: a fresh all-time low alerts even ABOVE the threshold -
         # "collect + remind on historical lowest business fares" needs
@@ -177,6 +180,41 @@ def cabin_leg(route, cw):
     if watch_from and leg["from_city"] not in watch_from:
         return None
     return leg
+
+
+def patrol_legs(cw, routes=()):
+    """v0.66: standalone watch legs - watch_from_cities x to_cities,
+    minus pairs configured routes already feed (direct or mirror), so
+    a departure city joins the business watch WITHOUT adding a reverse
+    economy route. from==to drops; result sorted for stable display.
+    Empty watch_from_cities keeps the legacy route-derived mode (no
+    independent legs). Pure."""
+    if not cw.get("enabled"):
+        return []
+    froms = []
+    for c in (cw.get("watch_from_cities") or []):
+        s = str(c).strip()
+        if s and s not in froms:
+            froms.append(s)
+    tos = []
+    for c in (cw.get("to_cities") or []):
+        s = str(c).strip()
+        if s and s not in tos:
+            tos.append(s)
+    if not froms or not tos:
+        return []
+    covered = set()
+    for r in routes or []:
+        leg = cabin_leg(r, cw)
+        if leg:
+            covered.add((leg["from_city"], leg["to_city"]))
+    out = []
+    for fc in froms:
+        for tc in tos:
+            if fc == tc or (fc, tc) in covered:
+                continue
+            out.append({"from_city": fc, "to_city": tc})
+    return sorted(out, key=lambda x: (x["from_city"], x["to_city"]))
 
 
 def evaluate_alert(history, cw, now=None):

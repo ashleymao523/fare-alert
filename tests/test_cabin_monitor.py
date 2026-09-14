@@ -12,6 +12,7 @@ from core.cabin_monitor import (
     HISTORY_CAP, cooldown_ok, default_config, evaluate_alert,
     load_config, record_low, route_qualifies, cabin_leg,
     record_alert_candidate, history_board,
+    patrol_legs,
 )
 
 
@@ -212,6 +213,55 @@ class CabinMonitorTests(unittest.TestCase):
     def test_history_board_empty_history_safe(self):
         self.assertEqual(history_board({}), [])
         self.assertEqual(history_board({"routes": {}}), [])
+
+
+class PatrolLegsTests(unittest.TestCase):
+    """v0.66: standalone watch legs = watch_from x to, minus pairs
+    configured routes already feed (direct or mirror)."""
+
+    def test_cross_product_sorted_and_dedup(self):
+        cw = {"enabled": True, "to_cities": ["杭州", "宁波"],
+              "watch_from_cities": ["重庆", "北京", "重庆"]}
+        legs = patrol_legs(cw, [])
+        self.assertEqual(legs, [
+            {"from_city": "北京", "to_city": "宁波"},
+            {"from_city": "北京", "to_city": "杭州"},
+            {"from_city": "重庆", "to_city": "宁波"},
+            {"from_city": "重庆", "to_city": "杭州"},
+        ])
+
+    def test_route_covered_pairs_excluded(self):
+        # 杭州->重庆 route mirrors 重庆->杭州; 成都->杭州 is direct
+        cw = {"enabled": True, "to_cities": ["杭州"],
+              "watch_from_cities": ["重庆", "成都", "北京"]}
+        routes = [{"from_city": "杭州", "to_city": "重庆"},
+                  {"from_city": "成都", "to_city": "杭州"}]
+        self.assertEqual(patrol_legs(cw, routes),
+                         [{"from_city": "北京", "to_city": "杭州"}])
+
+    def test_disabled_or_empty_inputs(self):
+        self.assertEqual(patrol_legs(
+            {"enabled": False, "to_cities": ["杭州"],
+             "watch_from_cities": ["重庆"]}, []), [])
+        self.assertEqual(patrol_legs(
+            {"enabled": True, "to_cities": ["杭州"],
+             "watch_from_cities": []}, []), [])
+        self.assertEqual(patrol_legs(
+            {"enabled": True, "to_cities": [],
+             "watch_from_cities": ["重庆"]}, []), [])
+
+    def test_same_city_pair_drops(self):
+        cw = {"enabled": True, "to_cities": ["杭州", "北京"],
+              "watch_from_cities": ["杭州", "北京"]}
+        self.assertEqual(patrol_legs(cw, []), [
+            {"from_city": "北京", "to_city": "杭州"},
+            {"from_city": "杭州", "to_city": "北京"},
+        ])
+
+    def test_default_config_has_refresh_minutes(self):
+        self.assertEqual(default_config()["refresh_minutes"], 30)
+        cw = load_config({"cabin_watch": {"refresh_minutes": 15}})
+        self.assertEqual(cw["refresh_minutes"], 15)
 
 
 if __name__ == "__main__":

@@ -826,6 +826,11 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   color: var(--tx-2);
   font-size: var(--fs-sm);
 }
+.cw-patrol {
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
 .cabin-last {
   margin-top: var(--sp-2);
   color: var(--tx-2);

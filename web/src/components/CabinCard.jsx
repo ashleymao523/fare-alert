@@ -148,6 +148,7 @@ export default function CabinCard({ cfg, setCfg }) {
         ? !!live.alert_record_low : true,
       cities: (live.watch_from_cities || []).slice(),
       intervalMinutes: ((data.refresh || {}).interval_minutes) || 45,
+      patrolMinutes: ((data.patrol || {}).interval_minutes) || 30,
     });
   };
   const cancelEdit = () => { setEditing(false); setMsg(""); };
@@ -169,6 +170,8 @@ export default function CabinCard({ cfg, setCfg }) {
       cooldown_hours: Number(draft.cooldown_hours) || 0,
       alert_record_low: !!draft.alertRecordLow,
       watch_from_cities: draft.cities.slice(),
+      refresh_minutes: Math.max(5,
+        Math.round(Number(draft.patrolMinutes) || 30)),
     };
     const next = Object.assign({}, cfg, { cabin_watch: nextCw });
     // v0.59: refresh cadence rides the global worker schedule; the cabin
@@ -195,6 +198,7 @@ export default function CabinCard({ cfg, setCfg }) {
     ? cw.to_cities : [cw.default_to_city || "杭州"];
   const dests = destList.join(" / ");
   const rf = data.refresh || {};
+  const pt = data.patrol || {};
   const hhmm = (ts) => ts
     ? new Date(ts * 1000).toLocaleTimeString("zh-CN",
         { hour: "2-digit", minute: "2-digit" }) : "-";
@@ -250,6 +254,11 @@ export default function CabinCard({ cfg, setCfg }) {
               <input type="number" min="5" value={draft.intervalMinutes}
                 onInput={(e) => setD("intervalMinutes", e.target.value)} />
             </label>
+            <label class="field2">
+              <span class="f-label2">独立巡检间隔 (分钟)</span>
+              <input type="number" min="5" value={draft.patrolMinutes}
+                onInput={(e) => setD("patrolMinutes", e.target.value)} />
+            </label>
           </div>
           <div class="field2">
             <span class="f-label2">监控目的地（可多个, 默认杭州）</span>
@@ -288,6 +297,13 @@ export default function CabinCard({ cfg, setCfg }) {
             {cw.enabled && data.amadeus_ready === false ? (
               <span class="badge amber">公务舱数据源未配置</span>
             ) : null}
+            {(pt.legs || []).length ? (
+              <span class="cw-patrol" title={pt.last_status || ""}>
+                独立巡检 每 {pt.interval_minutes || 30} 分钟
+                {pt.last_run
+                  ? " · 上轮 " + String(pt.last_run).slice(11, 16) : ""}
+              </span>
+            ) : null}
             <button class="btn sm" disabled={runBusy} onClick={doRun}>
               {runBusy ? "刷新中…" : "立即刷新"}
             </button>
@@ -299,6 +315,12 @@ export default function CabinCard({ cfg, setCfg }) {
                 <span class="cw-route" key={i}>
                   {r.from_city}→{r.to_city}
                   {r.mirror ? <span class="cw-mirror" title="由反向路线自动镜像采集">镜像</span> : null}
+                </span>
+              ))}
+              {((data.patrol || {}).legs || []).map((r, i) => (
+                <span class="cw-route" key={"p" + i}>
+                  {r.from_city}→{r.to_city}
+                  <span class="cw-mirror" title="独立巡检腿, 无需添加路线">巡检</span>
                 </span>
               ))}
             </div>

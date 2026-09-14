@@ -441,6 +441,12 @@ checks["v0.65 global best to push"] = (("def global_best" in _weekly_src)
     and ("attach_global_best" in _main_src)
     and ("global_best" in open("webui.py", encoding="utf-8").read()))
 
+checks["v0.66 cabin patrol"] = (("def patrol_legs" in _cabin_core_src)
+    and ("def cabin_patrol_once" in _main_src)
+    and ("patrol" in open("webui.py", encoding="utf-8").read())
+    and ("独立巡检" in _cabin_card_src)
+    and ("独立巡检" in _dist_js))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

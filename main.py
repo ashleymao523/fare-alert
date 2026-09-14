@@ -29,6 +29,7 @@ from core.cabin_monitor import (
     evaluate_alert as cabin_evaluate_alert, cooldown_ok as cabin_cooldown_ok,
     record_alert_candidate as cabin_record_candidate,
     _atomic_write as cabin_atomic_write,
+    patrol_legs as cabin_patrol_legs,
 )
 from core.models import FlightDeal
 from core.version import CODE_VERSION
@@ -677,6 +678,134 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
     return deals
 
 
+def _cabin_absorb(cw, leg, hid, biz_rows, cfg, state, log, push_enabled):
+    """v0.66: shared business-cabin collector + alert core.
+
+    Route-scan legs (direct/mirror) and standalone patrol legs both
+    land here: business-tagged offers join the ring history, then
+    record-low / threshold pushes fire under one cooldown. The caller
+    owns the state dict; only cabin_history.json is written here."""
+    biz = [d for d in (biz_rows or [])
+           if (d.cabin or "") == "business"
+           and d.source not in NON_REAL_SOURCES]
+    ch = cabin_history_load(DATA_DIR)
+    tax_cfg = cfg.get("tax", {})
+    new_records = []
+    for d in biz:
+        ob = cabin_record_low(
+            ch, hid, leg["from_city"], leg["to_city"], "business",
+            d.date, total_price(d.bare_price, tax_cfg))
+        if ob.get("record"):
+            new_records.append(ob)
+    if biz:
+        cabin_atomic_write(
+            os.path.join(DATA_DIR, "cabin_history.json"), ch)
+    hits = cabin_evaluate_alert(ch, cw)
+    st = state.setdefault("_cabin", {})
+    prev = st.get("last_alert_ts")
+    # v0.52: a fresh all-time low alerts even above the threshold;
+    # alerted_low[hid] makes each successive record alert exactly once
+    # (same price never twice).
+    rec_hit = None
+    if cw.get("alert_record_low", True) and new_records:
+        rec_hit = cabin_record_candidate(
+            new_records, st.setdefault("alerted_low", {}).get(hid))
+    if ((rec_hit or hits) and push_enabled
+            and cabin_cooldown_ok(prev, cw)):
+        if rec_hit is not None:
+            under = (" · 已低于阈值 ¥{t}".format(
+                t=int(cw.get("threshold_total") or 0))
+                if rec_hit["price"]
+                <= (cw.get("threshold_total") or 0) else "")
+            push_all(cfg, log,
+                     "公务舱历史新低 {fc}到{tc}".format(
+                         fc=leg["from_city"], tc=leg["to_city"]),
+                     "{d} 公务舱 ¥{p} 历史新低(前低 ¥{q}){x}".format(
+                         d=rec_hit["date"], p=int(rec_hit["price"]),
+                         q=int(rec_hit.get("record_prev")
+                               or rec_hit["price"]), x=under),
+                     route_id=hid, kind="cabin-record")
+            st.setdefault("alerted_low", {})[hid] = rec_hit["price"]
+            st["last_hit"] = {
+                "route_id": hid,
+                "from_city": leg["from_city"],
+                "to_city": leg["to_city"],
+                "date": rec_hit["date"],
+                "price": rec_hit["price"],
+                "kind": "record"}
+        else:
+            h = hits[0]
+            push_all(cfg, log,
+                     "公务舱低价 {fn}{fc}到{tc}".format(
+                         fn="", fc=h["from_city"], tc=h["to_city"]),
+                     "{d} 公务舱 ¥{p} (阈值 ¥{t})".format(
+                         d=h["date"], p=int(h["price"]),
+                         t=int(cw.get("threshold_total") or 0)),
+                     route_id=h["route_id"], kind="cabin")
+            st["last_hit"] = h
+        st["last_alert_ts"] = dt.datetime.now().isoformat()
+    return len(biz)
+
+
+def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
+    """v0.66: standalone business-cabin patrol on its own cadence.
+
+    watch_from_cities x to_cities legs no configured route feeds get
+    fetched directly - a departure city joins the business watch
+    without adding a reverse route. Route-covered legs stay with the
+    scan (no double fetch). Status lands in state['_cabin_patrol']
+    for /api/cabin; the caller persists state."""
+    cw = cabin_cfg_load(cfg)
+    legs = cabin_patrol_legs(cw, cfg.get("routes") or [])
+    info = {
+        "last_run": dt.datetime.now().isoformat(timespec="seconds"),
+        "interval_minutes": int(cw.get("refresh_minutes") or 30),
+        "legs": legs, "offers": 0, "legs_ok": 0,
+    }
+    ama_cfg = ((cfg.get("sources") or {}).get("amadeus")) or {}
+    ready = bool((ama_cfg.get("client_id") or "").strip()
+                 and (ama_cfg.get("client_secret") or "").strip())
+    if not cw.get("enabled") or not legs:
+        info["last_status"] = (
+            "skip: 无独立巡检腿 (出发城市未配置或均已由监控路线覆盖)")
+    elif not ready:
+        info["last_status"] = "skip: Amadeus 密钥未配置"
+    else:
+        session = session or make_session(cfg)
+        today = dt.date.today()
+        date_from = (today + dt.timedelta(days=1)).isoformat()
+        date_to = (today + dt.timedelta(days=60)).isoformat()
+        errs = 0
+        for leg in legs:
+            hid = "patrol-{fc}-{tc}".format(
+                fc=leg["from_city"], tc=leg["to_city"])
+            try:
+                fi = city_iata(leg["from_city"])
+                ti = city_iata(leg["to_city"])
+                if not (fi and ti):
+                    errs += 1
+                    log.warning("cabin patrol iata unknown [{}->{}]".format(
+                        leg["from_city"], leg["to_city"]))
+                    continue
+                biz = fetch_cabin_offers(
+                    session, cfg.get("network", {}), ama_cfg,
+                    cfg.get("tax", {}), fi, ti, date_from, date_to,
+                    cabin=(cw.get("cabins") or ["business"])[0],
+                    data_dir=DATA_DIR)
+                info["offers"] += _cabin_absorb(
+                    cw, leg, hid, biz, cfg, state, log, push_enabled)
+                info["legs_ok"] += 1
+            except Exception as e:
+                errs += 1
+                log.warning("cabin patrol failed [{}->{}]: {}".format(
+                    leg["from_city"], leg["to_city"], e))
+        info["last_status"] = (
+            "ok" if not errs and info["legs_ok"]
+            else ("partial" if info["legs_ok"] else "error: 采集全部失败"))
+    state["_cabin_patrol"] = info
+    return info
+
+
 def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
     """One full cycle. Returns snapshot dict (also written to data/snapshot.json)."""
     rec = CrawlRecorder(DATA_DIR)
@@ -707,6 +836,14 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                          (time.time() - t0b) * 1000, error=e)
     snapshot_routes = []
     pending_push = []
+
+    # v0.66: standalone cabin patrol rides every full cycle (manual
+    # refresh included); --loop additionally fires it between scans
+    # when its own refresh_minutes cadence is shorter.
+    try:
+        cabin_patrol_once(cfg, state, log, push_enabled, session=session)
+    except Exception as e:
+        log.warning("cabin patrol cycle failed: {}".format(e))
 
     for route in cfg.get("routes", []):
         date_from = (today + dt.timedelta(days=1)).isoformat()
@@ -876,83 +1013,20 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
 
         alert_dates = {d.date for _, d in to_alert}
         # v0.42: business-cabin low-fare collection + threshold alert.
-        # Cabin-tagged deals (source rows carrying cabin='business') feed
-        # the ring history; hits re-use the push guard (key configured).
         # v0.50: mirror legs record under "<id>-rev" with the watch
-        # leg's own cities, so CKG->HGH history never collides with the
-        # HGH->CKG economy route id and alerts read the right direction.
+        # leg's own cities. v0.66: the collector/alert core moved to
+        # _cabin_absorb so route legs and standalone patrol legs share
+        # one history-key scheme, cooldown and push semantics.
         cw = cabin_cfg_load(cfg)
         leg = cabin_watch_leg(route, cw)
         if leg:
+            hid = (route_snap["id"] if leg["mode"] == "direct"
+                   else route_snap["id"] + "-rev")
             try:
-                ch = cabin_history_load(DATA_DIR)
-                tax_cfg = cfg.get("tax", {})
-                biz = ([d for d in deals
-                        if (d.cabin or "") == "business"
-                        and d.source not in NON_REAL_SOURCES]
-                       if leg["mode"] == "direct" else mirror_cabin)
-                hid = (route_snap["id"] if leg["mode"] == "direct"
-                       else route_snap["id"] + "-rev")
-                new_records = []
-                for d in biz:
-                    ob = cabin_record_low(
-                        ch, hid,
-                        leg["from_city"], leg["to_city"], "business",
-                        d.date, total_price(d.bare_price, tax_cfg))
-                    if ob.get("record"):
-                        new_records.append(ob)
-                if biz:
-                    cabin_atomic_write(
-                        os.path.join(DATA_DIR, "cabin_history.json"), ch)
-                hits = cabin_evaluate_alert(ch, cw)
-                st = state.setdefault("_cabin", {})
-                prev = st.get("last_alert_ts")
-                # v0.52: a fresh all-time low alerts even above the
-                # threshold; alerted_low[hid] makes each successive
-                # record alert exactly once (same price never twice).
-                rec_hit = None
-                if cw.get("alert_record_low", True) and new_records:
-                    rec_hit = cabin_record_candidate(
-                        new_records,
-                        st.setdefault("alerted_low", {}).get(hid))
-                if ((rec_hit or hits) and push_enabled
-                        and cabin_cooldown_ok(prev, cw)):
-                    if rec_hit is not None:
-                        under = (" · 已低于阈值 ¥{t}".format(
-                            t=int(cw.get("threshold_total") or 0))
-                            if rec_hit["price"]
-                            <= (cw.get("threshold_total") or 0) else "")
-                        push_all(cfg, log,
-                                 "公务舱历史新低 {fc}到{tc}".format(
-                                     fc=leg["from_city"],
-                                     tc=leg["to_city"]),
-                                 "{d} 公务舱 ¥{p} 历史新低(前低 ¥{q}){x}".format(
-                                     d=rec_hit["date"],
-                                     p=int(rec_hit["price"]),
-                                     q=int(rec_hit.get("record_prev")
-                                           or rec_hit["price"]), x=under),
-                                 route_id=hid, kind="cabin-record")
-                        st.setdefault("alerted_low", {})[hid] = \
-                            rec_hit["price"]
-                        st["last_hit"] = {
-                            "route_id": hid,
-                            "from_city": leg["from_city"],
-                            "to_city": leg["to_city"],
-                            "date": rec_hit["date"],
-                            "price": rec_hit["price"],
-                            "kind": "record"}
-                    else:
-                        h = hits[0]
-                        push_all(cfg, log,
-                                 "公务舱低价 {fn}{fc}到{tc}".format(
-                                     fn="", fc=h["from_city"],
-                                     tc=h["to_city"]),
-                                 "{d} 公务舱 ¥{p} (阈值 ¥{t})".format(
-                                     d=h["date"], p=int(h["price"]),
-                                     t=int(cw.get("threshold_total") or 0)),
-                                 route_id=h["route_id"], kind="cabin")
-                        st["last_hit"] = h
-                    st["last_alert_ts"] = dt.datetime.now().isoformat()
+                _cabin_absorb(cw, leg, hid,
+                              deals if leg["mode"] == "direct"
+                              else mirror_cabin,
+                              cfg, state, log, push_enabled)
             except Exception as e:
                 log.warning("cabin monitor failed [{}]: {}".format(
                     route_snap["id"], e))
@@ -1127,14 +1201,37 @@ def main():
     if args.loop:
         interval = int(cfg.get("schedule", {}).get("interval_minutes", 45)) * 60
         jitter = int(cfg.get("schedule", {}).get("jitter_minutes", 10)) * 60
+        # v0.66: the cabin patrol keeps its own clock - when its
+        # refresh_minutes is shorter than the scan interval it fires
+        # between scans (sleep sliced <=60s, no extra thread so state
+        # writes stay single-threaded).
+        patrol_gap = max(5, int((cfg.get("cabin_watch") or {})
+                                .get("refresh_minutes", 30))) * 60
         while True:
+            next_patrol = time.time() + patrol_gap
             try:
                 run_once(cfg, log)
                 _write_heartbeat(True)
             except Exception as e:
                 log.error("cycle error: " + str(e))
                 _write_heartbeat(False)
-            time.sleep(interval + random.randint(0, jitter))
+            deadline = time.time() + interval + random.randint(0, jitter)
+            while time.time() < deadline:
+                wake = min(next_patrol, deadline)
+                if wake > time.time():
+                    time.sleep(min(wake - time.time(), 60.0))
+                if time.time() >= deadline:
+                    break
+                if time.time() >= next_patrol:
+                    try:
+                        st = load_state(
+                            os.path.join(DATA_DIR, "state.json"))
+                        cabin_patrol_once(cfg, st, log)
+                        save_state(
+                            os.path.join(DATA_DIR, "state.json"), st)
+                    except Exception:
+                        log.exception("cabin patrol cycle failed")
+                    next_patrol = time.time() + patrol_gap
         return
     run_once(cfg, log)
     _write_heartbeat(True)

@@ -263,6 +263,12 @@ def _validate_config(body, current):
         raise ValueError("watch_from_cities必须是列表")
     cwt["watch_from_cities"] = sorted(
         {str(c).strip() for c in wfc if str(c).strip()})
+    # v0.66: standalone patrol cadence in minutes (clamped 5-720)
+    try:
+        cw_rm = int(float(cwt.get("refresh_minutes", 30)))
+    except (TypeError, ValueError):
+        cw_rm = 30
+    cwt["refresh_minutes"] = min(720, max(5, cw_rm))
     cfg["cabin_watch"] = cwt
 
     w = cfg.get("webui") or {}
@@ -636,6 +642,7 @@ def api_cabin():
     from core.cabin_monitor import load_history as ch_load
     from core.cabin_monitor import cabin_leg as cw_leg
     from core.cabin_monitor import history_board as cw_board
+    from core.cabin_monitor import patrol_legs as cw_patrol
     cfg = load_config(CONFIG_PATH) if CONFIG_PATH else {}
     cw = cw_load(cfg)
     ch = ch_load(DATA_DIR)
@@ -662,11 +669,22 @@ def api_cabin():
     ama = (cfg.get("sources") or {}).get("amadeus") or {}
     ama_ready = bool((ama.get("client_id") or "").strip()
                      and (ama.get("client_secret") or "").strip())
+    # v0.66: standalone patrol echo - which watch_from x to legs run on
+    # their own clock (no route needed) + last run status from state.
+    pstate = state.get("_cabin_patrol") or {}
+    patrol = {
+        "interval_minutes": int(cw.get("refresh_minutes") or 30),
+        "legs": cw_patrol(cw, cfg.get("routes") or []),
+        "last_run": pstate.get("last_run"),
+        "last_status": pstate.get("last_status"),
+        "offers": pstate.get("offers"),
+    }
     return jsonify({"config": cw, "history": ch,
                     "board": cw_board(ch),
                     "last_alert": last.get("last_hit"),
                     "qualifying_routes": qual,
                     "amadeus_ready": ama_ready,
+                    "patrol": patrol,
                     "refresh": {
                         "interval_minutes": interval,
                         "last_cycle_ts": last_ts or None,
