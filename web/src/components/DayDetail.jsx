@@ -62,10 +62,40 @@ export default function DayDetail({ route, date }) {
   }, [route && route.id, route && route.from_city,
       route && route.to_city, date]);
   const schedStrip = sched && sched.rows && sched.rows.length ? (
-    <div class="dd-meta">
+    <div class="dd-meta tl-box">
       <span class="ft-alts-label">
-        当日班期表 · {sched.rows.length}班
+        当日班期表 · {sched.rows.length}班 · 24小时时间线
       </span>
+      <div class="tl-rail" aria-label="当日班次起飞时刻 24 小时分布">
+        {[0, 3, 6, 9, 12, 15, 18, 21].map((h) => (
+          <span class="tl-tick" style={{ left: (h / 24 * 100) + "%" }} />
+        ))}
+        {[0, 6, 12, 18].map((h) => (
+          <span class="tl-lab" style={{ left: (h / 24 * 100) + "%" }}>
+            {String(h).padStart(2, "0")}
+          </span>
+        ))}
+        <span class="tl-lab end">24</span>
+        {sched.rows.map((a, i) => {
+          const mm = ((parseInt((a.dep || "").slice(0, 2), 10) || 0) * 60)
+            + (parseInt((a.dep || "").slice(3, 5), 10) || 0);
+          return (
+            <a
+              class={"tl-dot" + (a.exact ? "" : " x") + (i % 2 ? " up" : "")}
+              style={{ left: Math.min(100, Math.max(0, mm / 1440 * 100)) + "%" }}
+              href={dayListUrl(route, date)}
+              target="_blank"
+              rel="noopener"
+              title={(a.exact ? "" : "参考·") + a.no + " " + a.dep
+                + (a.arr ? "→" + a.arr : "")
+                + ((a.airline || a.craft)
+                  ? " · " + [a.airline, a.craft].filter(Boolean).join(" ")
+                  : "")
+                + " · 点击直达去哪儿当日列表"}
+            />
+          );
+        })}
+      </div>
       {sched.rows.map((a) => (
         <a
           class={"ft-alt" + (a.exact ? "" : " x")}

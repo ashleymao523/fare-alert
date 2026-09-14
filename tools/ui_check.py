@@ -491,6 +491,14 @@ checks["v0.71 班期航司机型+ghcr发布"] = (("ft-alt-craft" in _dd_src)
     and ("docker-publish" in open(_ci_path, encoding="utf-8").read())
     and ("ghcr.io" in open(_ci_path, encoding="utf-8").read()))
 
+checks["v0.72 班期24h时间线"] = (("tl-rail" in _dd_src)
+    and ("tl-dot" in _dd_src)
+    and ("24小时" in _dd_src)
+    and ("tl-rail" in _dist_js)
+    and ("tl-dot" in _dist_js)
+    and ("tl-dot" in _dist_css)
+    and ("tl-lab" in _dist_css))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:
