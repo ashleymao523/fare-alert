@@ -523,6 +523,18 @@ checks["v0.75 起降区间+自动备份"] = (("flight_duration_hm" in _sb_src)
     and ("backups" in _webui_src)
     and ("次日到达" in _dd_src))
 
+_dist_html = open(os.path.join("web", "dist", "index.html"),
+                  encoding="utf-8").read()
+_doctor_src = open(os.path.join("tools", "doctor.py"),
+                   encoding="utf-8").read()
+checks["v0.76 PWA+doctor+精点补查"] = (
+    ("manifest.webmanifest" in _dist_html)
+    and ("apple-touch-icon" in _dist_html)
+    and ("check_pwa" in _doctor_src)
+    and ("point-fill" in _dist_js)
+    and ("/api/point-fill" in _webui_src)
+    and ("/api/point-gaps" in _webui_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

@@ -8,6 +8,7 @@ const SRC_NAMES = {
   "amadeus-intl": "Amadeus · 国际低价",
   "amadeus-fill": "Amadeus · 缺价补全",
   "amadeus-times": "Amadeus · 时刻增强",
+  "point-fill": "精点核价 · 实抓",
   "hgh-board-times": "机场板期 · 参考时刻",
   "nearby-ref": "临近日参考价",
   interp: "插值估算价",

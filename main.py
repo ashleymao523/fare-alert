@@ -31,6 +31,8 @@ from core.cabin_monitor import (
     _atomic_write as cabin_atomic_write,
     patrol_legs as cabin_patrol_legs,
 )
+from core.point_fill import load_cache as load_point_cache
+from core.point_fill import merge_point_fill
 from core.models import FlightDeal
 from core.version import CODE_VERSION
 from core.notify import has_channel, push_all
@@ -890,6 +892,9 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                          (time.time() - t0b) * 1000, error=e)
     snapshot_routes = []
     pending_push = []
+    # v0.76: point-fill cache - real-browser captured prices replay
+    # over reference-only rows on every cycle (zero network).
+    point_cache = load_point_cache(DATA_DIR)
 
     # v0.66: standalone cabin patrol rides every full cycle (manual
     # refresh included); --loop additionally fires it between scans
@@ -952,6 +957,11 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 deals = _fill_reference_deals(
                     deals, date_from, date_to,
                     route.get("from_city", ""), route.get("to_city", ""))
+                deals, npt = merge_point_fill(
+                    deals, point_cache, route_snap["id"])
+                if npt and rec:
+                    rec.step("point-fill", route_snap["id"],
+                             "point cache replay", "ok", 0, count=npt)
                 deals = _attach_alt_times(
                     deals, route.get("to_city", ""), load_sched_db(DATA_DIR))
                 rec.step(flight_key, route_snap["id"], "fetch calendar", "ok",
@@ -975,6 +985,12 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                     return_deals = _fill_reference_deals(
                         return_deals, date_from, date_to,
                         route.get("to_city", ""), route.get("from_city", ""))
+                    return_deals, nptr = merge_point_fill(
+                        return_deals, point_cache, route_snap["id"])
+                    if nptr and rec:
+                        rec.step("point-fill", route_snap["id"],
+                                 "point cache replay (ret)", "ok", 0,
+                                 count=nptr)
                     # v0.49: return legs get reference departures from the
                     # arrive board's preschtime rows (CITY->HGH) - the same
                     # zero-key db, zero extra requests

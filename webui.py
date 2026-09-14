@@ -482,6 +482,70 @@ def api_run():
                     "push_pending": _push_pending()})
 
 
+@app.get("/api/point-gaps")
+def api_point_gaps():
+    """v0.76: reference-only dates per route - the precise-query
+    capture targets. A bookmarklet / agent / human that CAN run the
+    per-date OTA search (real browser) posts results to
+    /api/point-fill; this lists which dates still need that."""
+    from core.point_fill import fresh_entries, gap_dates, load_cache
+    snap = _read_json(SNAPSHOT_PATH, None) or {}
+    cache = load_cache(DATA_DIR)
+    out = []
+    for r in snap.get("routes") or []:
+        gaps = gap_dates(r.get("deals") or [], r.get("window") or ["", ""])
+        if not gaps:
+            continue
+        cached = fresh_entries(cache, r.get("id") or "", )
+        out.append({
+            "id": r.get("id"),
+            "from_city": r.get("from_city"),
+            "to_city": r.get("to_city"),
+            "intl": bool(r.get("intl")),
+            "window": r.get("window"),
+            "gaps": [{"date": g, "cached": g in cached} for g in gaps],
+        })
+    return jsonify({"ok": True, "routes": out})
+
+
+@app.post("/api/point-fill")
+def api_point_fill():
+    """v0.76: accept real-browser captured point prices for gap dates.
+    Body: {route_id, rows: [{date, total, flight_no?, dep_time?,
+    arr_time?}]}; total is the pay price (tax included). Plain-text
+    POSTs (bookmarklet no-cors fire-and-forget) parse fine too.
+    Patches the live snapshot immediately; the crawl replays the
+    same cache afterwards, so nothing is lost on the next poll."""
+    from core.alerts import tax_amount
+    from core.point_fill import (_atomic_write, load_cache,
+                                 patch_snapshot_deals, put_rows)
+    body = request.get_json(silent=True, force=True) or {}
+    route_id = str(body.get("route_id") or "").strip()
+    rows = body.get("rows") or []
+    if not route_id or not isinstance(rows, list) or not rows:
+        return jsonify({"ok": False,
+                        "error": "route_id and non-empty rows required"}), 400
+    with _lock:
+        cfg = load_config(CONFIG_PATH)
+        cache, stored = put_rows(DATA_DIR, route_id, rows,
+                                 tax=tax_amount(cfg.get("tax", {})))
+        snap = _read_json(SNAPSHOT_PATH, None)
+        patched = 0
+        if snap and isinstance(snap.get("routes"), list):
+            for r in snap["routes"]:
+                if r.get("id") != route_id:
+                    continue
+                patched += patch_snapshot_deals(
+                    r.get("deals") or [], cache, route_id)
+                patched += patch_snapshot_deals(
+                    r.get("return_deals") or [], cache, route_id)
+            if patched:
+                snap["updated_at"] = datetime.datetime.now().isoformat(
+                    timespec="seconds")
+                _atomic_write(SNAPSHOT_PATH, snap)
+    return jsonify({"ok": True, "stored": stored, "patched": patched})
+
+
 @app.post("/api/test-push")
 def api_test_push():
     cfg = load_config(CONFIG_PATH)

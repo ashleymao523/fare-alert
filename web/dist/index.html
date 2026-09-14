@@ -4,9 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f5fa" />
+  <!-- v0.76: PWA parity with v1 - lost in the v0.29 v2 migration; iPhone
+       "Add to Home Screen" needs manifest + apple-touch-icon + capable meta
+       to open full-screen with an icon instead of a browser tab. -->
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/static/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="FareAlert" />
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
   <title>FareAlert v2 · 低价出行提醒</title>
-  <script type="module" crossorigin src="/v2/assets/index-CPs2jxGf.js"></script>
+  <script type="module" crossorigin src="/v2/assets/index-DCL-bQ09.js"></script>
   <link rel="stylesheet" crossorigin href="/v2/assets/index-y5z73cfO.css">
 </head>
 <body>
