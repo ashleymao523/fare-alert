@@ -702,6 +702,27 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 .poll-err { color: var(--red); }
 .tc-v { width: 2.5em; text-align: right; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
 
+/* v0.78 CrawlView: point-fill gap chips + per-route time sedimentation */
+.gap-route { padding: var(--sp-sm) 0; border-bottom: 1px dashed var(--line); }
+.gap-route:last-of-type { border-bottom: none; }
+.gap-rt { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-2); font-size: var(--fs-sm); flex-wrap: wrap; }
+.gap-dates { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.gap-chip {
+  font-size: var(--fs-sm); font-variant-numeric: tabular-nums;
+  border: 1px solid var(--line); border-radius: var(--r-pill);
+  padding: var(--sp-xs) var(--sp-sm); cursor: pointer;
+  color: var(--text-2); background: var(--card2);
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.gap-chip:hover { border-color: var(--accent); color: var(--accent-ink); }
+.gap-chip.cached { cursor: default; color: var(--green-d); border-color: var(--green); background: var(--green-bg); }
+.gap-chip.sel { border-color: var(--accent); color: var(--accent-ink); box-shadow: var(--ring); }
+.pf-box { border: 1px solid var(--line); border-radius: var(--r-xs); padding: var(--sp-md) var(--sp-md) var(--sp-sm); margin: var(--sp-md) 0; background: var(--card2); }
+.pf-head { display: flex; align-items: center; gap: var(--sp-md); flex-wrap: wrap; margin-bottom: var(--sp-2); }
+.pf-link { font-size: var(--fs-sm); }
+.sed-bar { flex: 1; height: var(--sp-md); background: var(--card2); border-radius: var(--r-pill); overflow: hidden; display: flex; }
+.sed-dows { margin-top: var(--sp-md); }
+
 @media (max-width: 720px) {
   .hd-in { padding: var(--sp-sm) var(--sp-2); }
   .wrap { padding: 0 var(--sp-2) var(--sp-2xl); }

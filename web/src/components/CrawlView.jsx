@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
-import { fetchCrawl } from "../lib/api.js";
+import { fetchCrawl, fetchSnapshot, fetchHealth,
+  fetchPointGaps, postPointFill } from "../lib/api.js";
 
 const SRC_NAMES = {
   "qunar-calendar": "去哪儿 · 低价日历",
@@ -76,6 +77,197 @@ function RunCard({ run, live }) {
   );
 }
 
+// v0.78: qunar per-date point-search deep link (same shape as DayDetail).
+function qunarPointUrl(from, to, date) {
+  return "https://m.flight.qunar.com/ncs/page/flightlist?depCity="
+    + encodeURIComponent(from) + "&arrCity=" + encodeURIComponent(to)
+    + "&goDate=" + date + "&from=touch_index_search";
+}
+
+/* v0.78 point-fill UI: aggregated-calendar gap dates are often NOT sold
+ * out - the OTA gateway just has no cached floor price yet (recon in
+ * core/point_fill.py). One precise per-date query in a real browser
+ * usually returns live prices; this card lists gap dates per route and
+ * posts the captured pay price into the v0.76 point-fill cache. */
+function PointFillCard() {
+  const [gaps, setGaps] = useState(null);
+  const [err, setErr] = useState("");
+  const [sel, setSel] = useState(null);
+  const [total, setTotal] = useState("");
+  const [fno, setFno] = useState("");
+  const [dep, setDep] = useState("");
+  const [arr, setArr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const load = () => fetchPointGaps()
+    .then((d) => { setGaps(d.routes || []); setErr(""); })
+    .catch((e) => setErr(String(e.message || e)));
+  useEffect(() => { load(); }, []);
+  const pick = (rt, date) => {
+    setSel({ id: rt.id, from: rt.from_city, to: rt.to_city, date });
+    setTotal(""); setFno(""); setDep(""); setArr(""); setMsg("");
+  };
+  const submit = () => {
+    const v = parseFloat(total);
+    if (!sel || !(v > 0)) { setMsg("请填最终付款价(数字)"); return; }
+    setBusy(true); setMsg("提交中…");
+    postPointFill({ route_id: sel.id, rows: [{
+      date: sel.date, total: v,
+      flight_no: fno.trim() || undefined,
+      dep_time: dep.trim() || undefined,
+      arr_time: arr.trim() || undefined,
+    }] })
+      .then((r) => {
+        setMsg("已入库 " + (r.stored || 0) + " 条, 快照已热更新 ✅");
+        setSel(null); load();
+      })
+      .catch((e) => setMsg("失败: " + (e.message || e)))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div class="card">
+      <div class="card-head">
+        <h3>🎯 精点补查 · 缺价日期回填</h3>
+        <span class="sub">聚合日历未出价 ≠ 售罄 · 单日精点直查通常有票</span>
+      </div>
+      {err ? <div class="muted">加载失败: {err}</div> : null}
+      {gaps === null ? <div class="muted">加载中…</div>
+        : !gaps.length
+          ? <div class="muted">✅ 各路线当前无缺价日期, 或已全部回填。</div>
+          : gaps.map((rt) => (
+            <div class="gap-route" key={rt.id}>
+              <div class="gap-rt">
+                <b>{rt.from_city} → {rt.to_city}</b>
+                {rt.intl ? <span class="muted">国际</span> : null}
+                <span class="muted">{(rt.gaps || []).length} 个缺价日</span>
+              </div>
+              <div class="gap-dates">
+                {(rt.gaps || []).map((g) => (
+                  <span key={g.date}
+                    class={"gap-chip" + (g.cached ? " cached" : "")
+                      + (sel && sel.id === rt.id && sel.date === g.date ? " sel" : "")}
+                    title={g.cached ? "已回填(48h 内有效)" : "点击选中后回填"}
+                    onClick={() => { if (!g.cached) pick(rt, g.date); }}>
+                    {g.date.slice(5)}{g.cached ? " ✓" : ""}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+      {sel ? (
+        <div class="pf-box">
+          <div class="pf-head">
+            回填 <b>{sel.from} → {sel.to} · {sel.date}</b>
+            <a class="pf-link" target="_blank" rel="noopener noreferrer"
+              href={qunarPointUrl(sel.from, sel.to, sel.date)}>
+              先去单日精点查询 ↗</a>
+          </div>
+          <div class="push-grid">
+            <label class="field2"><span class="f-label2">最终付款价 ¥ · 含税必填</span>
+              <input type="number" min="1" step="0.1" placeholder="如 480"
+                value={total} onInput={(e) => setTotal(e.target.value)} />
+            </label>
+            <label class="field2"><span class="f-label2">航班号 · 选填</span>
+              <input type="text" placeholder="如 GJ5401" maxlength="8"
+                value={fno} onInput={(e) => setFno(e.target.value)} />
+            </label>
+            <label class="field2"><span class="f-label2">起飞时刻 · 选填</span>
+              <input type="text" placeholder="07:45" maxlength="5"
+                value={dep} onInput={(e) => setDep(e.target.value)} />
+            </label>
+            <label class="field2"><span class="f-label2">落地时刻 · 选填</span>
+              <input type="text" placeholder="10:30" maxlength="5"
+                value={arr} onInput={(e) => setArr(e.target.value)} />
+            </label>
+          </div>
+          <div class="row-btns">
+            <button class="btn primary" disabled={busy} onClick={submit}>
+              回填并热更新</button>
+            <button class="btn" disabled={busy} onClick={() => setSel(null)}>取消</button>
+            {msg ? <span class="muted push-msg">{msg}</span> : null}
+          </div>
+        </div>
+      ) : null}
+      <div class="muted">
+        口径: 填「选中乘机人后的最终付款价」, 系统自动扣除机建+燃油得裸价;
+        回填缓存 48 小时, 期间若聚合源出价则以真实源优先。
+      </div>
+    </div>
+  );
+}
+
+/* v0.78 per-route time sedimentation: exact vs borrowed dep-time share
+ * per route + the dow board fill-up forecast. A board run on day D seeds
+ * dow(D) AND dow(D+1) (core/sched_board.py), so every missing weekday
+ * has a predictable auto-fill date. */
+function nextRunForDow(target, now) {
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    const dow = (d.getDay() + 6) % 7; // 0 = Monday, python-aligned
+    if (dow === target) return { date: d, via: "当日" };
+    if ((dow + 1) % 7 === target) return { date: d, via: "次日沉淀" };
+  }
+  return null;
+}
+
+function TimeSedimentCard() {
+  const [snap, setSnap] = useState(null);
+  const [hb, setHb] = useState(null);
+  useEffect(() => {
+    fetchSnapshot().then(setSnap).catch(() => {});
+    fetchHealth().then(setHb).catch(() => {});
+  }, []);
+  const routes = (((snap || {}).routes) || [])
+    .filter((r) => r.time_coverage && r.time_coverage.total);
+  const dows = (((hb || {}).board) || {}).dows || {};
+  const miss = [];
+  for (let i = 0; i < 7; i++) {
+    if (!dows[String(i)] && !dows[i]) miss.push(i);
+  }
+  const now = new Date();
+  const DOW = ["一", "二", "三", "四", "五", "六", "日"];
+  const fmt = (d) => (d.getMonth() + 1) + "/" + d.getDate();
+  return (
+    <div class="card">
+      <div class="card-head">
+        <h3>⏱ 时刻沉淀 · 按路线透明度</h3>
+        <span class="sub">起飞时刻: 精确(当日板) vs 跨日参考(借班期)</span>
+      </div>
+      {routes.length ? routes.map((r) => {
+        const c = r.time_coverage;
+        const pe = Math.round((c.dep_exact / c.total) * 100);
+        const pb = Math.round((c.dep_borrow / c.total) * 100);
+        return (
+          <div class="tc-row" key={r.id}>
+            <span class="tc-k">{r.from_city} → {r.to_city}</span>
+            <div class="sed-bar">
+              <div class="tc-fill ok" style={"width:" + pe + "%"} />
+              <div class="tc-fill mid" style={"width:" + pb + "%"} />
+            </div>
+            <span class="tc-v" title={"精确 " + c.dep_exact + " · 借用 "
+              + c.dep_borrow + " · 缺失 " + c.dep_missing}>{pe}%</span>
+          </div>
+        );
+      }) : <div class="muted">跑一次查询后展示各路线起飞时刻来源构成。</div>}
+      <div class="dow-row sed-dows">
+        {DOW.map((w, i) => (
+          <span class={"dow-chip" + (dows[String(i)] ? " has" : "")} key={i}>周{w}
+            {dows[String(i)] ? <b>{dows[String(i)]}</b> : null}
+          </span>
+        ))}
+      </div>
+      <div class="muted">
+        {miss.length
+          ? "缺口自动补齐预测: " + miss.map((i) => {
+              const n = nextRunForDow(i, now);
+              return "周" + DOW[i] + " → " + (n ? fmt(n.date) + " 轮(" + n.via + ")" : "待排班");
+            }).join(" · ") + " · 借用时刻在日详情中已打「借周X」标"
+          : "✅ 七个星期全部长满, 所有班期拥有当日板精确时刻。"}
+      </div>
+    </div>
+  );
+}
+
 export default function CrawlView() {
   const [doc, setDoc] = useState(null);
   const [err, setErr] = useState("");
@@ -108,6 +300,8 @@ export default function CrawlView() {
         {srcs.map((s) => <HealthRow s={s} key={s.source} />)}
         {!srcs.length ? <div class="muted">暂无健康数据, 跑一次查询后出现</div> : null}
       </div>
+      <PointFillCard />
+      <TimeSedimentCard />
       {runs.length
         ? runs.map(({ run, live, rk }) => <RunCard run={run} live={live} key={rk} />)
         : <div class="card"><div class="empty">暂无抓取记录: 点面板「立即查询」或等计划任务触发</div></div>}

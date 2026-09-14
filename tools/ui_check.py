@@ -546,6 +546,17 @@ checks["v0.77 全功能容器+借班透明"] = (
     and ("借周" in _dist_js)
     and ("borrow_dow" in _dist_js))
 
+_crawl_src = open(os.path.join("web", "src", "components", "CrawlView.jsx"),
+                  encoding="utf-8").read()
+checks["v0.78 精点补查UI+时刻沉淀"] = (
+    ("精点补查" in _crawl_src)
+    and ("nextRunForDow" in _crawl_src)
+    and ("fetchPointGaps" in _api_js_src)
+    and ("postPointFill" in _api_js_src)
+    and ("精点补查" in _dist_js)
+    and ("缺口自动补齐预测" in _dist_js)
+    and ("gap-chip" in _dist_css))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

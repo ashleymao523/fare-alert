@@ -27,6 +27,10 @@ export function fetchCityPhoto(name) {
 
 export function fetchCrawl() { return fetch("/api/crawl-status").then(j); }
 
+export function fetchPointGaps() { return fetch("/api/point-gaps").then(j); }
+
+export function postPointFill(body) { return post("/api/point-fill", body); }
+
 export function fetchWeekly() { return fetch("/api/weekly-report").then(j); }
 
 export function pushWeekly() { return post("/api/weekly-push", {}); }
