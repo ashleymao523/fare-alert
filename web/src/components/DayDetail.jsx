@@ -64,7 +64,7 @@ export default function DayDetail({ route, date }) {
   const schedStrip = sched && sched.rows && sched.rows.length ? (
     <div class="dd-meta tl-box">
       <span class="ft-alts-label">
-        当日班期表 · {sched.rows.length}班 · 24小时时间线
+        当日班期表 · {sched.total || sched.rows.length}班 · 24小时时间线
       </span>
       <div class="tl-rail" aria-label="当日班次起飞时刻 24 小时分布">
         {[0, 3, 6, 9, 12, 15, 18, 21].map((h) => (
@@ -91,6 +91,7 @@ export default function DayDetail({ route, date }) {
                 + ((a.airline || a.craft)
                   ? " · " + [a.airline, a.craft].filter(Boolean).join(" ")
                   : "")
+                + (a.via ? " · 经停" + a.via : "")
                 + " · 点击直达去哪儿当日列表"}
             />
           );
@@ -108,12 +109,25 @@ export default function DayDetail({ route, date }) {
             + ((a.airline || a.craft)
               ? " · " + [a.airline, a.craft].filter(Boolean).join(" ")
               : "")
+            + (a.via ? " · 经停" + a.via : "")
             + " · 点击直达去哪儿当日列表"}
         >
           {a.no} {a.dep}{a.arr ? "→" + a.arr : ""}
           {a.craft ? <span class="ft-alt-craft">{a.craft.split("(")[0]}</span> : null}
+          {!a.arr && a.via ? <span class="ft-alt-craft">经停{a.via}</span> : null}
         </a>
       ))}
+      {sched.has_more && (
+        <a
+          class="ft-alt x"
+          href={dayListUrl(route, date)}
+          target="_blank"
+          rel="noopener"
+          title={"班期过多, 此处展示前30班 · 点击直达去哪儿当日列表查看全部"}
+        >
+          +另有{(sched.total || sched.rows.length) - sched.rows.length}班
+        </a>
+      )}
     </div>
   ) : null;
   if (!route || !date) return null;

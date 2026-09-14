@@ -605,6 +605,23 @@ class TestCityDepTimes(unittest.TestCase):
         self.assertEqual(out2[0]["airline"], "")
         self.assertEqual(out2[0]["craft"], "")
 
+    def test_via_rides_along_and_full_limit(self):
+        # v0.73: stopover rows carry via/via_arr (arr stays empty by
+        # design); limit=None returns the full deduped list instead
+        # of silently truncating at the default 4
+        rows = [("CZ00{}".format(i), 4, "06:{:02d}".format(i * 10),
+                 "", "杭州", "重庆") for i in range(1, 7)]
+        db = self._db(*rows)
+        db["flights"]["CZ001"]["dows"]["4"]["via"] = "武汉"
+        db["flights"]["CZ001"]["dows"]["4"]["via_arr"] = "08:10"
+        out = sb.city_dep_times(db, "重庆", "2026-09-11")
+        self.assertEqual(len(out), 4)      # default limit unchanged
+        full = sb.city_dep_times(db, "重庆", "2026-09-11", limit=None)
+        self.assertEqual(len(full), 6)
+        self.assertEqual(full[0]["via"], "武汉")
+        self.assertEqual(full[0]["via_arr"], "08:10")
+        self.assertEqual(full[1]["via"], "")
+
     def test_return_dep_times_mirror(self):
         # v0.49: return legs read CITY->HGH rows (arrive-board
         # preschtime entries); 2026-09-11 is a Friday (dow=4)

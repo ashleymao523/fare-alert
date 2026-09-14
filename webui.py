@@ -846,19 +846,23 @@ def api_day_schedule():
         return jsonify({"ok": False, "error": "date 需为 YYYY-MM-DD"}), 400
     db = load_sched_db(DATA_DIR)
     if from_city == "杭州":
-        rows = city_dep_times(db, to_city, date, limit=12)
+        rows = city_dep_times(db, to_city, date, limit=None)
     else:
-        rows = city_return_dep_times(db, from_city, date, limit=12)
+        rows = city_return_dep_times(db, from_city, date, limit=None)
+    total = len(rows)
     return jsonify({"ok": True, "date": date,
                     "from": from_city, "to": to_city,
                     "covered": bool(rows),
+                    "total": total,
+                    "has_more": total > 30,
                     "rows": [{"no": a.get("no"),
                               "dep": a.get("dep"),
                               "arr": a.get("arr"),
                               "airline": a.get("airline") or "",
                               "craft": a.get("craft") or "",
+                              "via": a.get("via") or "",
                               "exact": bool(a.get("exact"))}
-                             for a in rows]})
+                             for a in rows[:30]]})
 
 
 @app.get("/api/health")

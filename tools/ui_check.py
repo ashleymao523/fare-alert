@@ -499,6 +499,14 @@ checks["v0.72 班期24h时间线"] = (("tl-rail" in _dd_src)
     and ("tl-dot" in _dist_css)
     and ("tl-lab" in _dist_css))
 
+checks["v0.73 全量班期+经停标注"] = ((
+    '"via": str(ent.get("via") or "")' in _sb_src)
+    and ('"via": a.get("via")' in _webui_src)
+    and ("经停" in _dd_src)
+    and ("has_more" in _dd_src)
+    and ("经停" in _dist_js)
+    and ("has_more" in _dist_js))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

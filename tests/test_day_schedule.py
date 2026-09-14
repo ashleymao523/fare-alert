@@ -24,6 +24,11 @@ class DayScheduleTests(unittest.TestCase):
             "GJ8021": {"dows": {"0": {"dep": "13:00", "arr": "17:30",
                                     "from": "杭州",
                                     "to": "曼谷素万那普机场"}}},
+            # monday stopover row: arr empty by design, via carries the stop
+            "JD8888": {"dows": {"0": {"dep": "15:00", "arr": "",
+                                    "from": "杭州",
+                                    "to": "曼谷素万那普机场",
+                                    "via": "深圳", "via_arr": "17:00"}}},
             # sunday: CKG -> HGH return-board row
             "GJ8692": {"dows": {"6": {"dep": "07:20", "arr": "10:05",
                                     "from": "重庆", "to": "杭州"}}},
@@ -79,6 +84,20 @@ class DayScheduleTests(unittest.TestCase):
         self.assertTrue(j["ok"])
         self.assertFalse(j["covered"])
         self.assertEqual(j["rows"], [])
+
+    def test_full_count_and_via_fields(self):
+        # v0.73: total/has_more expose the full deduped count;
+        # stopover rows serialize via so chips can label them
+        r = self.client.get("/api/day-schedule?from=杭州"
+                            "&to=曼谷&date=2026-10-19")
+        self.assertEqual(r.status_code, 200)
+        j = r.get_json()
+        self.assertTrue(j["ok"])
+        self.assertEqual(j["total"], 2)
+        self.assertFalse(j["has_more"])
+        via_rows = [x for x in j["rows"] if x["via"]]
+        self.assertEqual(via_rows[0]["no"], "JD8888")
+        self.assertEqual(via_rows[0]["via"], "深圳")
 
 
 if __name__ == "__main__":

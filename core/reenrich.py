@@ -121,6 +121,7 @@ def reenrich_snapshot(base_dir, dry=False, log=None):
                                          "arr": a.get("arr"),
                                          "airline": a.get("airline"),
                                          "craft": a.get("craft"),
+                                         "via": a.get("via"),
                                          "exact": bool(a.get("exact"))}
                                         for a in (d2.alt_times or [])][:4]
                             else:
@@ -146,6 +147,7 @@ def reenrich_snapshot(base_dir, dry=False, log=None):
                                  "arr": a.get("arr"),
                                  "airline": a.get("airline"),
                                  "craft": a.get("craft"),
+                                 "via": a.get("via"),
                                  "exact": bool(a.get("exact"))}
                                 for a in (d.alt_times or [])][:4]
                     else:
@@ -153,7 +155,17 @@ def reenrich_snapshot(base_dir, dry=False, log=None):
             # v0.42: alt_times (codeshare reference departures) moves
             # without changing coverage counts - compare those too, else
             # the widened _attach_alt_times never persists.
-            alt_after = {d.date: (d.alt_times or []) for d in out}
+            # v0.73: compare the same 7-key projection the write-back
+            # stores (_ref_deps entries also carry via_arr, which never
+            # reaches the snapshot - raw lists would differ forever).
+            alt_after = {d.date: [{"no": a.get("no"), "dep": a.get("dep"),
+                                   "arr": a.get("arr"),
+                                   "airline": a.get("airline"),
+                                   "craft": a.get("craft"),
+                                   "via": a.get("via"),
+                                   "exact": bool(a.get("exact"))}
+                                  for a in (d.alt_times or [])][:4]
+                          for d in out}
             if (r.get("time_coverage") != cov
                     or any(alt_after.get(k) != v
                            for k, v in alt_before.items())):
