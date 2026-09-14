@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { saveConfig, testPush, fetchAlerts, fetchWeekly } from "../lib/api.js";
+import { saveConfig, testPush, fetchAlerts, fetchWeekly, fetchLanInfo } from "../lib/api.js";
 
 function Field({ label, children }) {
   return <label class="field2"><span class="f-label2">{label}</span>{children}</label>;
@@ -7,6 +7,38 @@ function Field({ label, children }) {
 
 function fmtTs(s) {
   return s ? String(s).replace("T", " ").slice(0, 16) : "";
+}
+
+function LanCard() {
+  const [lan, setLan] = useState(null);
+  useEffect(() => { fetchLanInfo().then(setLan).catch(() => {}); }, []);
+  if (!lan) return null;
+  return (
+    <div class="card">
+      <div class="card-head">
+        <h3>📱 手机访问</h3>
+        <span class="sub">同一 Wi-Fi 下 iPhone / 其他设备直接打开</span>
+      </div>
+      <div class="push-status">
+        <span class={"chip2 " + (lan.lan_open ? "ok" : "plan")}>
+          {lan.lan_open ? "局域网已开放" : "仅本机可访问"}
+        </span>
+        {lan.url ? <span class="chip2 hero">{lan.url}</span> : null}
+      </div>
+      {lan.lan_open ? (
+        <div class="muted perm-note">
+          手机浏览器打开上方地址,「添加到主屏幕」即得 App 图标;
+          Bark 推送不依赖页面在线, 关屏也能收到低价提醒。
+        </div>
+      ) : (
+        <div class="warn-box">
+          当前只绑定了 127.0.0.1, 手机无法访问。在本机 PowerShell 运行
+          <b> tools/enable_lan.ps1 </b>一键开放(改绑定+防火墙+重启),
+          加 <b>-Revert</b> 可随时收回。仅建议在家庭 Wi-Fi 下开放。
+        </div>
+      )}
+    </div>
+  );
 }
 
 // cfg is lifted to App: shared with SourcesView so saving here cannot
@@ -53,6 +85,7 @@ export default function PushView({ cfg, setCfg, cfgErr }) {
   const weeklyOn = !!(rep && rep.push_enabled);
   return (
     <div>
+      <LanCard />
       <div class="card">
         <div class="card-head">
           <h3>推送状态</h3>

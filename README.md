@@ -182,6 +182,7 @@ fare-alert/
 - [x] **v0.51 部署对齐: worker 代码版本热替换**: 修复"页面反复看不到起飞时间"的真根因——旧 worker 进程(PID 15300, 早于 v0.48 启动)一直活着, autostart 只在无 loop 时拉起、revive 只救死 loop, 升级永远传不到活进程, 每轮用旧逻辑覆盖快照(293 有价票 110 缺起飞)。① core/version.py 单一版本源, worker 心跳盖章 code_ver, /api/health 暴露 code_synced; ② revive 守护每轮先比心跳版本(文件比对零成本), 落后即热替换 kill+relaunch(30 分钟冷却+心跳时间戳守卫防误杀长首轮), supervisor 快照记录 last_stale_restart; ③ 数据源页心跳卡"Worker 代码落后"琥珀警告+已热替换 vX→vY 提示; ④ tools/restart_worker.ps1/restart_all.ps1 一键强杀重拉(部署后必跑); ⑤ 实测 restart_all 后 code_synced=true, 缺起飞 110→0。单测 179→188, acceptance 13/13。
 
 - [x] **v0.52 公务舱历史新低提醒**: "出发地历史最低公务舱价"此前只对照固定阈值——创了历史新低但仍在阈值上方时不会提醒。① record_low 记账时打 record 标(首样本不算, 防引导期全量误报), 携带前低 record_prev; ② record_alert_candidate 纯函数: 新低必须严格低于"已提醒过的最低价"才再提醒(alerted_low 持久化于 state.json, 同价重观测永不重复提醒); ③ main 提醒优先级: 历史新低 > 阈值命中, 文案"公务舱历史新低 重庆到杭州 · 10-02 ¥1650 (前低 ¥1800)", 若同时低于阈值追加标注; ④ cabin_watch.alert_record_low 开关(默认开, /api/config 校验+回显), CabinCard 编辑面板复选框, 表格历史最低列"新低"徽标(最近一轮创新低时), 最近提醒行显示提醒类型; ⑤ 实测 /api/cabin 回显 alert_record_low=true, 4 条镜像腿(重庆/郑州/曼谷/成都→杭州)在采。单测 188→192, acceptance 13/13。
+- [x] **v0.53 手机局域网可达闭环**: iPhone 上看板+提醒此前卡在两处隐性知识——webui 默认绑 127.0.0.1(改 config+防火墙+重启三步手工), 手机上也不知道该输哪个地址。① /api/lan-info: 返回绑定 host/port、本机局域网 IP(UDP connect 探路由, 零发包)、lan_open 与拼好的手机 URL; ② PushView 手机访问卡: chip 展示"局域网已开放/仅本机可访问"+可直接抄的 URL, 未开放时提示一键脚本; ③ tools/enable_lan.ps1 一键开放(改绑定 0.0.0.0+防火墙规则+重启 webui, 打印手机地址), -Revert 一键收回; ④ PWA 已有(添加到主屏幕即 App 图标), Bark 推送不依赖页面在线。单测 192→195(lan-info 契约/开放拼 URL/仅本机隐藏 URL), ui_check v0.53×2, acceptance 13/13。
 
 ## 常见问题
 

@@ -4,6 +4,7 @@ import json
 import datetime
 import os
 import re
+import socket
 import threading
 import time
 
@@ -740,6 +741,37 @@ def api_health():
         "revive": revive,
         "push_pending": _push_pending(),
     })
+
+
+def _lan_ip():
+    """v0.53: best-effort LAN IPv4 of this box without sending a packet."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))  # route pick only, no traffic
+        ip = s.getsockname()[0]
+        return None if ip.startswith("127.") else ip
+    except Exception:
+        return None
+    finally:
+        s.close()
+
+
+@app.get("/api/lan-info")
+def api_lan_info():
+    """v0.53: phone-reachability card data.
+
+    Tells the Push tab whether the webui binds 0.0.0.0 (LAN open for
+    an iPhone on the same Wi-Fi) or 127.0.0.1 (local only), and hands
+    back the ready-made URL, so mobile access stops being tribal
+    knowledge of config.json + firewall rules."""
+    web = load_config(CONFIG_PATH).get("webui") or {}
+    host = str(web.get("host") or "127.0.0.1")
+    port = int(web.get("port") or 8765)
+    lan_open = host in ("0.0.0.0", "::", "")
+    ip = _lan_ip() or ""
+    url = ("http://%s:%s/" % (ip, port)) if (lan_open and ip) else None
+    return jsonify({"host": host, "port": port, "lan_ip": ip or None,
+                    "lan_open": lan_open, "url": url})
 
 
 @app.get("/api/log")

@@ -338,6 +338,18 @@ checks["v0.52 record-low api+ui"] = (("alert_record_low" in _webui_src)
     and ("alertRecordLow" in _cabin_card_src)
     and ("新低" in _cabin_card_src))
 
+_push_src = open(os.path.join("web", "src", "components",
+                              "PushView.jsx"), encoding="utf-8").read()
+_lan_ps1 = (open(os.path.join("tools", "enable_lan.ps1"),
+                 encoding="utf-8").read()
+            if os.path.exists(os.path.join("tools", "enable_lan.ps1")) else "")
+checks["v0.53 lan-info api"] = (("/api/lan-info" in _webui_src)
+    and ("_lan_ip" in _webui_src))
+checks["v0.53 lan card + one-shot script"] = (("手机访问" in _push_src)
+    and ("enable_lan" in _push_src)
+    and ("advfirewall" in _lan_ps1)
+    and ("-Revert" in _lan_ps1))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:
