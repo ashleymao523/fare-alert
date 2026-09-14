@@ -89,6 +89,15 @@ class TestDbAndLookup(unittest.TestCase):
         self.dir = tempfile.mkdtemp(prefix="sb_test_")
         self.addCleanup(shutil.rmtree, self.dir, True)
         fix = _fixture()
+        # v0.46: rows file under the weekday parsed from their own
+        # jhsj date, so the fixture must look like a real today-board
+        today_iso = dt.date.today().isoformat()
+        for rows in (fix.get("leave"), fix.get("arrive")):
+            for row in rows or []:
+                for k in ("jhsj", "preschtime", "nextschtime"):
+                    v = str(row.get(k) or "")
+                    if len(v) >= 10:
+                        row[k] = today_iso + v[10:]
         patcher = mock.patch.object(
             sb, "fetch_board",
             side_effect=lambda s, n, kind, d, force=False: (fix[kind], False))
@@ -98,6 +107,33 @@ class TestDbAndLookup(unittest.TestCase):
         self.today = dt.date.today()
         self.today_iso = self.today.isoformat()
         self.dow = str(self.today.weekday())
+
+    def test_row_dow_inline_date_and_fallback(self):
+        # 2026-09-15 is a Tuesday (dow 1)
+        self.assertEqual(sb._row_dow({"jhsj": "2026-09-15 06:00:00"}, "3"), "1")
+        self.assertEqual(sb._row_dow({"jhsj": "garbage"}, "3"), "3")
+        self.assertEqual(sb._row_dow({}, "4"), "4")
+
+    def test_board_spans_two_days_files_both_dows(self):
+        # v0.46: a fetch-day board carrying tomorrow rows deposits
+        # each row under its OWN weekday - two dows per fetch
+        d2 = tempfile.mkdtemp(prefix="sb_tmr_")
+        self.addCleanup(shutil.rmtree, d2, True)
+        tmr = self.today + dt.timedelta(days=1)
+        fix2 = _fixture()
+        for rows in (fix2.get("leave"), fix2.get("arrive")):
+            for row in rows or []:
+                for k in ("jhsj", "preschtime", "nextschtime"):
+                    v = str(row.get(k) or "")
+                    if len(v) >= 10:
+                        row[k] = tmr.isoformat() + v[10:]
+        with mock.patch.object(
+                sb, "fetch_board",
+                side_effect=lambda s, n, kind, d, force=False:
+                    (fix2[kind], False)):
+            db2 = sb.update_sched_db(None, {}, d2)
+        dows = db2["flights"]["GJ8888"]["dows"]
+        self.assertEqual(list(dows.keys()), [str(tmr.weekday())])
 
     def test_db_built_for_today_dow(self):
         self.assertIn(self.dow, self.db["flights"]["GJ8888"]["dows"])
@@ -579,6 +615,9 @@ class TestHopOffArrivalAndBackfill(unittest.TestCase):
         # replay: merge rules make it a no-op
         st2 = sb.backfill_from_cache(self.dir)
         self.assertFalse(st2["changed"])
+        # v0.46: pre-fmt dbs are wiped + rebuilt (mixed-date rows were
+        # filed under wrong dows); the fmt marker makes it one-shot
+        self.assertEqual(sb.load_sched_db(self.dir).get("fmt"), 2)
 
 
 if __name__ == "__main__":

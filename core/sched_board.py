@@ -197,23 +197,55 @@ def _entry_from_arrive(row):
     }
 
 
+def _row_dow(row, fallback_dow):
+    """v0.46: derive each row's REAL weekday from its own date field.
+    Board responses span two calendar days (today + tomorrow): filing
+    every row under the fetch-day dow put tomorrow-only flights into
+    the wrong weekday bucket (bad exact hits + wasted free data). The
+    leave board carries the departure date in jhsj, the arrive board
+    the arrival date - both identify the operating weekday. Rows whose
+    date cannot be parsed fall back to the fetch-day dow (old behavior).
+    """
+    raw = str(row.get("jhsj") or "")[:10]
+    try:
+        return str(_dt.date.fromisoformat(raw).weekday())
+    except ValueError:
+        return fallback_dow
+
+
+def _ensure_fmt2(db):
+    """v0.46 migration: dbs built before per-row dow derivation filed
+    mixed-date rows under the fetch-day weekday. Such a db cannot be
+    fixed in place (wrong-dow entries are indistinguishable from right
+    ones), so reset it once - the 7-day board cache replays through the
+    fixed merge and rebuilds every dow the window ever saw (offline).
+    Idempotent via the fmt marker."""
+    if db.get("fmt") == 2:
+        return db, False
+    db = {"fmt": 2, "updated": 0, "flights": {}}
+    return db, True
+
+
 def _merge_board_rows(db, rows, conv, dow):
     """Merge one board's rows into db under dow. Returns True when the
-    db actually changed (idempotent for identical replays)."""
+    db actually changed (idempotent for identical replays). dow is only
+    the fallback: each row files under the weekday parsed from its own
+    jhsj date (v0.46), so one fetch can deposit two dows at once."""
     changed = False
     for row in rows or []:
         ent = conv(row)
         if not ent:
             continue
+        row_dow = _row_dow(row, dow)
         nos = {_norm_no(row.get("hbh")), _norm_no(row.get("main_hbh"))}
         for no in nos:
             if not no:
                 continue
             fdb = db["flights"].setdefault(no, {"dows": {}})
-            cur = fdb["dows"].get(dow)
+            cur = fdb["dows"].get(row_dow)
             if cur is None:
                 # dict(ent): codeshare aliases must not share one object
-                fdb["dows"][dow] = dict(ent)
+                fdb["dows"][row_dow] = dict(ent)
                 changed = True
             elif ent.get("dep") and ent.get("arr"):
                 # richest row (dual-time) replaces a dep-only one; only
@@ -228,7 +260,7 @@ def _merge_board_rows(db, rows, conv, dow):
                 if any(merged.get(k) != cur.get(k)
                        for k in ("dep", "arr", "via", "via_arr",
                                  "from", "to")):
-                    fdb["dows"][dow] = merged
+                    fdb["dows"][row_dow] = merged
                     changed = True
             else:
                 # partial row (missing one time): only FILL missing
@@ -271,9 +303,12 @@ def backfill_from_cache(data_dir, log=None, db=None):
             except Exception:
                 pass
             if log:
-                log.warning("sched db unreadable, backed up + rebuilding: %s"
-                            % e)
+                    log.warning("sched db unreadable, backed up + rebuilding: %s"
+                                % e)
             pass
+        db, _mig = _ensure_fmt2(db)
+        if _mig and log:
+            log.info("sched db pre-v0.46 format: rebuilt from board cache")
     changed = False
     files = 0
     for path in sorted(glob.glob(os.path.join(data_dir, "board_*.json"))):
@@ -326,6 +361,11 @@ def update_sched_db(session, net_cfg, data_dir, log=None):
         if log:
             log.warning("sched db unreadable, backed up + rebuilding: %s" % e)
         pass
+    db, _mig = _ensure_fmt2(db)
+    if _mig:
+        if log:
+            log.info("sched db pre-v0.46 format: rebuilt from board cache")
+        # the wiped db rebuilds from the cache replay right below
     today = _dt.date.today()
     dow = str(today.weekday())
     changed = backfill_from_cache(data_dir, log, db=db)["changed"]

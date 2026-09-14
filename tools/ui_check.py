@@ -283,6 +283,12 @@ checks["v0.45 coverage archive+trend"] = (("coverage_trend" in _hist_src)
 checks["v0.45 coverage-trend API"] = "/api/coverage-trend" in _webui_src
 checks["v0.45 v2 city chips+cov trend"] = (("cw-chip" in _dist_js)
     and ("cov-trend" in _dist_js) and ("cvt-line" in _dist_css))
+_sb_src = open(os.path.join("core", "sched_board.py"),
+               encoding="utf-8").read()
+checks["v0.46 board row-date dow"] = (("_row_dow" in _sb_src)
+    and ("row_dow = _row_dow(row, dow)" in _sb_src))
+checks["v0.46 pre-fmt db migrated"] = (("_ensure_fmt2" in _sb_src)
+    and ('"fmt": 2' in _sb_src))
 
 bad = 0
 for k, v in checks.items():
