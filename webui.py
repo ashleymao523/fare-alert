@@ -832,7 +832,7 @@ def api_day_schedule():
     "该日每个班次几点起飞" even when the cheapest deal row itself is a
     reference price without a flight number."""
     from core.sched_board import (load_sched_db, city_dep_times,
-                                  city_return_dep_times)
+                                  city_return_dep_times, flight_duration)
     from_city = (request.args.get("from") or "").strip()
     to_city = (request.args.get("to") or "").strip()
     date = (request.args.get("date") or "").strip()
@@ -858,6 +858,8 @@ def api_day_schedule():
                     "rows": [{"no": a.get("no"),
                               "dep": a.get("dep"),
                               "arr": a.get("arr"),
+                              "dur": flight_duration(a.get("dep"),
+                                                     a.get("arr")),
                               "airline": a.get("airline") or "",
                               "craft": a.get("craft") or "",
                               "via": a.get("via") or "",

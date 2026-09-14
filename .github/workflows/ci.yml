@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [master]
+    tags: ["v*"]
   pull_request:
 
 jobs:
@@ -49,7 +50,7 @@ jobs:
         run: docker build --build-arg PIP_INDEX_URL=https://pypi.org/simple -t fare-alert:ci .
 
   docker-publish:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,11 +62,34 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: compute image tags
+        id: t
+        shell: bash
+        run: |
+          {
+            echo "tags<<EOF"
+            echo "ghcr.io/${{ github.repository }}:latest"
+            echo "ghcr.io/${{ github.repository }}:${{ github.sha }}"
+            if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+              echo "ghcr.io/${{ github.repository }}:${GITHUB_REF#refs/tags/}"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         with:
           context: .
           build-args: PIP_INDEX_URL=https://pypi.org/simple
           push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          tags: ${{ steps.t.outputs.tags }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: create github release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

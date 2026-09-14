@@ -88,6 +88,7 @@ export default function DayDetail({ route, date }) {
               rel="noopener"
               title={(a.exact ? "" : "参考·") + a.no + " " + a.dep
                 + (a.arr ? "→" + a.arr : "")
+                + (a.dur ? " · 历时" + a.dur : "")
                 + ((a.airline || a.craft)
                   ? " · " + [a.airline, a.craft].filter(Boolean).join(" ")
                   : "")
@@ -106,6 +107,7 @@ export default function DayDetail({ route, date }) {
           title={(a.exact
             ? "该航班当日星期有班期实录: 起飞→落地"
             : "同号航班其他班期时刻, 同航季通常一致, 仅供参考")
+            + (a.dur ? " · 历时" + a.dur : "")
             + ((a.airline || a.craft)
               ? " · " + [a.airline, a.craft].filter(Boolean).join(" ")
               : "")
@@ -113,6 +115,7 @@ export default function DayDetail({ route, date }) {
             + " · 点击直达去哪儿当日列表"}
         >
           {a.no} {a.dep}{a.arr ? "→" + a.arr : ""}
+          {a.dur ? <span class="ft-alt-craft">{a.dur}</span> : null}
           {a.craft ? <span class="ft-alt-craft">{a.craft.split("(")[0]}</span> : null}
           {!a.arr && a.via ? <span class="ft-alt-craft">经停{a.via}</span> : null}
         </a>

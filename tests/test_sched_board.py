@@ -712,5 +712,19 @@ class TestHopOffArrivalAndBackfill(unittest.TestCase):
         self.assertEqual(sb.load_sched_db(self.dir).get("fmt"), 2)
 
 
+class FlightDurationTests(unittest.TestCase):
+    def test_duration_matrix(self):
+        # v0.74: exact board times -> '2h35m'; red-eye lands next day
+        self.assertEqual(sb.flight_duration("08:20", "11:05"), "2h45m")
+        self.assertEqual(sb.flight_duration("23:50", "01:05"), "1h15m")
+        self.assertEqual(sb.flight_duration("13:00", "17:30"), "4h30m")
+        # stopover rows carry no final arr -> unknown, never invented
+        self.assertEqual(sb.flight_duration("15:00", ""), "")
+        self.assertEqual(sb.flight_duration("", "12:10"), "")
+        # equal/garbage times are a data smell, not a zero flight
+        self.assertEqual(sb.flight_duration("09:00", "09:00"), "")
+        self.assertEqual(sb.flight_duration("九点", "12:10"), "")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

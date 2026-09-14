@@ -610,6 +610,25 @@ def prior_minutes_for(priors, city):
     return cands[0][1]
 
 
+def flight_duration(dep, arr):
+    """v0.74: real dep+arr board times -> '2h35m' duration string.
+    Arrival earlier than departure means the plane lands the next
+    calendar day (+24h red-eye). Missing/garbage/equal times -> ''
+    (a zero-minute flight is a data smell, not a duration)."""
+    try:
+        d = _dt.datetime.strptime(str(dep or "")[:5], "%H:%M")
+        a = _dt.datetime.strptime(str(arr or "")[:5], "%H:%M")
+    except ValueError:
+        return ""
+    mins = int((a - d).total_seconds() // 60)
+    if mins < 0:
+        mins += 1440
+    if mins <= 0:
+        return ""
+    h, m = divmod(mins, 60)
+    return "%dh%02dm" % (h, m)
+
+
 def _ref_deps(db, origin_city, dest_city, date_iso, limit=4):
     """v0.49 shared lister behind city_dep_times / city_return_dep_times:
     board entries whose from~origin_city and to~dest_city, filed under

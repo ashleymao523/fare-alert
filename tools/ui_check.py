@@ -507,6 +507,13 @@ checks["v0.73 全量班期+经停标注"] = ((
     and ("经停" in _dist_js)
     and ("has_more" in _dist_js))
 
+checks["v0.74 班次历时+tag发布"] = (("flight_duration" in _sb_src)
+    and ('"dur": flight_duration' in _webui_src)
+    and ("历时" in _dd_src)
+    and ("a.dur" in _dd_src)
+    and ("历时" in _dist_js)
+    and ("refs/tags" in open(_ci_path, encoding="utf-8").read()))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

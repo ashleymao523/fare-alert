@@ -10,4 +10,4 @@ without the alt-ref promotion for hours while the freshly rebuilt
 webui showed the new UI, so departure times kept "coming back
 missing" no matter how many fixes shipped."""
 
-CODE_VERSION = "0.73"
+CODE_VERSION = "0.74"

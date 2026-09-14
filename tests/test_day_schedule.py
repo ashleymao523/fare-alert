@@ -64,6 +64,7 @@ class DayScheduleTests(unittest.TestCase):
         self.assertEqual(row["no"], "GJ8021")
         self.assertEqual(row["dep"], "13:00")
         self.assertEqual(row["arr"], "17:30")
+        self.assertEqual(row["dur"], "4h30m")  # v0.74 exact duration
         self.assertTrue(row["exact"])
 
     def test_return_direction_uses_arrive_board(self):
@@ -98,6 +99,8 @@ class DayScheduleTests(unittest.TestCase):
         via_rows = [x for x in j["rows"] if x["via"]]
         self.assertEqual(via_rows[0]["no"], "JD8888")
         self.assertEqual(via_rows[0]["via"], "深圳")
+        # stopover rows have no final arr -> no invented duration
+        self.assertEqual(via_rows[0]["dur"], "")
 
 
 if __name__ == "__main__":
