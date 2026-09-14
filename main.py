@@ -21,7 +21,7 @@ from core.flights import (airline_name, booking_url, estimate_arrival_time,
                           merge_fill_deals, time_coverage, window_dates,
                           NON_REAL_SOURCES)
 from core.intl import city_iata, fetch_intl_calendar, fetch_schedule_times
-from core.intl import fetch_cabin_offers
+from core.intl import fetch_cabin_offers, fetch_fill_offers
 from core.cabin_monitor import (
     load_config as cabin_cfg_load, load_history as cabin_history_load,
     record_low as cabin_record_low, route_qualifies as cabin_route_qualifies,
@@ -341,7 +341,87 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
         if rec:
             rec.step("amadeus-fill", route_id, "fill gaps", "error",
                      (time.time() - t0f) * 1000, error=e)
+    # v0.44: offer-exact last resort - dates the cheapest calendar also
+    # missed get real flight offers (price + exact times + numbers),
+    # cached per date for a day so the poll loop stays quota-safe.
+    covered2 = {d.date for d in deals if (d.cabin or "") == ""}
+    still = [d for d in gaps if d not in covered2]
+    if not still:
+        return deals
+    t0o = time.time()
+    try:
+        off = _cached_fill_offers(session, net, cfg, ama_cfg,
+                                  fi2, ti2, still, DATA_DIR)
+        if off:
+            deals, _ = merge_fill_deals(
+                deals, off, lambda d: booking_url(fc, tc, d))
+        if rec:
+            rec.step("amadeus-fill-offer", route_id, "offer fill", "ok",
+                     (time.time() - t0o) * 1000, count=len(off))
+    except Exception as e:
+        if rec:
+            rec.step("amadeus-fill-offer", route_id, "offer fill", "skip",
+                     (time.time() - t0o) * 1000, error=e)
     return deals
+
+
+def _cached_fill_offers(session, net, cfg, ama_cfg, fi, ti,
+                        gap_dates, data_dir, max_days=6):
+    """v0.44: offer-exact gap fill with per-date 24h cache.
+
+    Each still-missing date costs one flight-offers call, so results
+    (and negative answers) are cached per date for a day - a 45min poll
+    loop stays quota-safe. Rows keep the 'amadeus-fill' source tag the
+    pipeline already understands.
+    """
+    path = os.path.join(data_dir, FILL_CACHE_FILE)
+    now = time.time()
+    cache = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            cache = json.load(f)
+    except Exception:
+        cache = {}
+    prefix = "OFFER-{}-{}-".format(fi, ti)
+    todo, out = [], []
+    for d in gap_dates[:max_days]:
+        ent = cache.get(prefix + d)
+        if ent and now - float(ent.get("ts", 0)) < FILL_CACHE_TTL:
+            if ent.get("p") is not None:
+                out.append(FlightDeal(
+                    date=d, bare_price=ent["p"],
+                    flight_no=ent.get("fn", ""),
+                    dep_time=ent.get("dep", ""), arr_time=ent.get("arr", ""),
+                    duration_text=ent.get("dur", ""),
+                    time_src="amadeus" if ent.get("dep") else "",
+                    dep_src="amadeus" if ent.get("dep") else "",
+                    arr_src="amadeus" if ent.get("arr") else "",
+                    stop_kind="transfer" if ent.get("stop") else "",
+                    stop_city=ent.get("stop", ""),
+                    source="amadeus-fill"))
+        else:
+            todo.append(d)
+    if todo:
+        fresh = fetch_fill_offers(session, net, ama_cfg, cfg.get("tax", {}),
+                                  fi, ti, todo, data_dir)
+        by_date = {x.date: x for x in fresh}
+        for d in todo:
+            x = by_date.get(d)
+            if x:
+                out.append(x)
+                cache[prefix + d] = {
+                    "ts": now, "p": x.bare_price, "fn": x.flight_no,
+                    "dep": x.dep_time, "arr": x.arr_time,
+                    "dur": x.duration_text, "stop": x.stop_city}
+            else:
+                cache[prefix + d] = {"ts": now, "p": None}  # negative 24h
+        try:
+            os.makedirs(data_dir, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(cache, f, ensure_ascii=False)
+        except Exception:
+            pass
+    return out
 
 
 def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,

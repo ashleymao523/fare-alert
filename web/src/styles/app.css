@@ -469,6 +469,18 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   font: inherit;
   resize: vertical;
 }
+
+.cabin-spark { display: block; }
+
+.spark-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.spark-min { fill: var(--green); }
 .btn.danger { color: var(--red); border-color: var(--red-line); }
 .btn.danger:hover { background: var(--red-bg); }
 

@@ -539,6 +539,13 @@ def api_history():
     return jsonify({"history": load_history(os.path.join(DATA_DIR, "history.json"))})
 
 
+@app.get("/api/amadeus-usage")
+def api_amadeus_usage():
+    """v0.44: daily Amadeus call count (quota transparency)."""
+    from core.intl import usage_snapshot
+    return jsonify(usage_snapshot(DATA_DIR))
+
+
 @app.get("/api/cabin")
 def api_cabin():
     """v0.42: business-cabin watch status - ring history + config echo."""

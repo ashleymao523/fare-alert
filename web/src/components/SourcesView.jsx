@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { saveConfig, fetchSchedStats, fetchHealth } from "../lib/api.js";
+import { saveConfig, fetchSchedStats, fetchHealth, fetchAmaUsage } from "../lib/api.js";
 
 const DOW_NAMES = ["一", "二", "三", "四", "五", "六", "日"]; // /api/sched-stats: 0=周一
 
@@ -17,12 +17,14 @@ function CovBar({ label, val, total, cls }) {
 // cfg/meta are lifted to App so unsaved edits survive tab switches (no cross-tab overwrite)
 export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }) {
   const [stats, setStats] = useState(null);
+  const [usage, setUsage] = useState(null);
   const [hb, setHb] = useState(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     fetchSchedStats().then(setStats).catch(() => {});
     fetchHealth().then(setHb).catch(() => {});
+    fetchAmaUsage().then(setUsage).catch(() => {});
   }, []);
   if (!cfg) return <div class="card"><div class="empty">{cfgErr || "加载中…"}</div></div>;
   const enabled = (cfg.sources && cfg.sources.enabled) || {};
@@ -97,6 +99,9 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
             </label>
           </div>
           <div class="muted">配置后国际线获得真实起降时刻与缺价补全; 注册入口见经典版数据源页。</div>
+          {(usage && usage.today != null) ? (
+            <div class="muted">Amadeus 今日调用 {usage.today} 次(14 天滚动计数, 含缓存命中前的真实请求)。</div>
+          ) : null}
         </div>
         <div class="row-btns">
           <button class="btn primary" disabled={busy} onClick={doSave}>保存配置</button>

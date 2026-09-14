@@ -268,6 +268,14 @@ checks["v0.43 监控配置校验"] = ("cabin_watch必须是对象" in open(
     "webui.py", encoding="utf-8").read())
 checks["v0.43 v2产物监控编辑"] = (("保存监控配置" in _dist_js)
     and ("监控出发城市" in _dist_js))
+checks["v0.44 经济舱offer兜底"] = (("fetch_fill_offers" in _intl_src)
+    and ('"travelClass": "ECONOMY"' in _intl_src))
+checks["v0.44 兜底按日缓存"] = (("OFFER-" in _main_src)
+    and ("negative 24h" in _main_src))
+checks["v0.44 用量计数端点"] = ("/api/amadeus-usage" in open(
+    "webui.py", encoding="utf-8").read())
+checks["v0.44 v2产物用量与走势"] = (("Amadeus 今日调用" in _dist_js)
+    and ("spark-line" in _dist_js))
 
 bad = 0
 for k, v in checks.items():

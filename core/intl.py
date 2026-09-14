@@ -17,6 +17,49 @@ BASE_URLS = {
     "prod": "https://api.amadeus.com",
 }
 TOKEN_FILE = "amadeus_token.json"
+USAGE_FILE = "amadeus_usage.json"
+
+
+def _bump_usage(data_dir, n=1):
+    """v0.44: daily Amadeus call counter (quota transparency)."""
+    if not data_dir:
+        return 0
+    path = os.path.join(data_dir, USAGE_FILE)
+    day = time.strftime("%Y-%m-%d")
+    days = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            days = (json.load(f) or {}).get("days") or {}
+    except Exception:
+        days = {}
+    days[day] = int(days.get(day, 0)) + int(n)
+    for k in sorted(days)[:-14]:  # keep a rolling 14-day window
+        del days[k]
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"days": days}, f, ensure_ascii=False)
+    except Exception:
+        pass
+    return days[day]
+
+
+def usage_snapshot(data_dir):
+    """Today's call count + the rolling daily history."""
+    path = os.path.join(data_dir, USAGE_FILE)
+    try:
+        with open(path, encoding="utf-8") as f:
+            days = (json.load(f) or {}).get("days") or {}
+    except Exception:
+        days = {}
+    today = time.strftime("%Y-%m-%d")
+    return {"today": int(days.get(today, 0)), "days": days}
+
+
+def _api_get(session, url, data_dir, **kw):
+    """session.get + daily usage accounting."""
+    _bump_usage(data_dir)
+    return session.get(url, **kw)
 
 
 def _base_url(ama_cfg):
@@ -91,6 +134,20 @@ def _cabin_offer_times(off):
     return "/".join(nos), dep_at[11:16], arr_at[11:16], dur, stop
 
 
+def _best_offer(j):
+    """Cheapest parseable data[] offer; returns (total, offer) or None."""
+    best = None
+    for off in (j.get("data") or [])[:3]:
+        total = (((off.get("price") or {}).get("grandTotal")) or "")
+        try:
+            total = float(total)
+        except (TypeError, ValueError):
+            continue
+        if best is None or total < best[0]:
+            best = (total, off)
+    return best
+
+
 def fetch_cabin_offers(session, net_cfg, ama_cfg, tax_cfg,
                        from_iata, to_iata, date_from, date_to,
                        cabin="business", data_dir=None, max_days=8):
@@ -116,8 +173,9 @@ def fetch_cabin_offers(session, net_cfg, ama_cfg, tax_cfg,
             "currencyCode": "CNY",
             "max": 3,
         }
-        r = session.get(
-            _base_url(ama_cfg) + "/v2/shopping/flight-offers",
+        r = _api_get(
+            session, _base_url(ama_cfg) + "/v2/shopping/flight-offers",
+            data_dir,
             params=params,
             headers={"Authorization": "Bearer " + token,
                      "Accept": "application/json"},
@@ -127,15 +185,7 @@ def fetch_cabin_offers(session, net_cfg, ama_cfg, tax_cfg,
         j = r.json()
         if "errors" in j:
             continue
-        best = None
-        for off in (j.get("data") or [])[:3]:
-            total = (((off.get("price") or {}).get("grandTotal")) or "")
-            try:
-                total = float(total)
-            except (TypeError, ValueError):
-                continue
-            if best is None or total < best[0]:
-                best = (total, off)
+        best = _best_offer(j)
         if best:
             fn, dep, arr, dur, stop = _cabin_offer_times(best[1])
             deals.append(FlightDeal(
@@ -148,6 +198,60 @@ def fetch_cabin_offers(session, net_cfg, ama_cfg, tax_cfg,
                 stop_city=stop,
                 source="amadeus-cabin", cabin=cabin,
                 url=google_flights_url(from_iata, to_iata, d)))
+    deals.sort(key=lambda x: (x.bare_price, x.date))
+    return deals
+
+
+def fetch_fill_offers(session, net_cfg, ama_cfg, tax_cfg,
+                      from_iata, to_iata, gap_dates, data_dir,
+                      max_days=6):
+    """v0.44: offer-exact last resort for economy calendar holes.
+
+    The cheapest-dates calendar carries prices only. For the few dates
+    it also missed, probe each with flight-offers (ECONOMY, max=3) to
+    get price + exact dep/arr + flight numbers in one shot. Prices are
+    tax-inclusive grand totals, converted to the same virtual bare
+    price the domestic pipeline expects. Returns rows already tagged
+    source='amadeus-fill' (url is rewritten by merge_fill_deals).
+    """
+    token = get_token(session, net_cfg, ama_cfg, data_dir)
+    tax = tax_amount(tax_cfg)
+    deals = []
+    for d in [x for x in (gap_dates or []) if x][:max_days]:
+        params = {
+            "originLocationCode": from_iata,
+            "destinationLocationCode": to_iata,
+            "departureDate": d,
+            "adults": 1,
+            "travelClass": "ECONOMY",
+            "currencyCode": "CNY",
+            "max": 3,
+        }
+        r = _api_get(
+            session, _base_url(ama_cfg) + "/v2/shopping/flight-offers",
+            data_dir,
+            params=params,
+            headers={"Authorization": "Bearer " + token,
+                     "Accept": "application/json"},
+            timeout=net_cfg.get("timeout_seconds", 25),
+        )
+        r.raise_for_status()
+        j = r.json()
+        if "errors" in j:
+            continue
+        best = _best_offer(j)
+        if not best:
+            continue
+        fn, dep, arr, dur, stop = _cabin_offer_times(best[1])
+        deals.append(FlightDeal(
+            date=d, bare_price=round(best[0] - tax, 1), flight_no=fn,
+            dep_time=dep, arr_time=arr, duration_text=dur,
+            time_src="amadeus" if dep else "",
+            dep_src="amadeus" if dep else "",
+            arr_src="amadeus" if arr else "",
+            stop_kind="transfer" if stop else "",
+            stop_city=stop,
+            source="amadeus-fill", url=""))
     deals.sort(key=lambda x: (x.bare_price, x.date))
     return deals
 
@@ -189,8 +293,9 @@ def fetch_intl_calendar(session, net_cfg, ama_cfg, tax_cfg,
     currency = (ama_cfg.get("currency") or "").strip()
     if currency:
         params["currency"] = currency.upper()
-    r = session.get(
-        _base_url(ama_cfg) + "/v1/shopping/flight-dates/cheapest",
+    r = _api_get(
+        session, _base_url(ama_cfg) + "/v1/shopping/flight-dates/cheapest",
+        data_dir,
         params=params,
         headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
         timeout=net_cfg.get("timeout_seconds", 25),
@@ -286,8 +391,9 @@ def fetch_schedule_times(session, net_cfg, ama_cfg, from_iata, to_iata,
         ent = cache.get(key)
         if not (ent and now - float(ent.get("ts", 0)) < SCHEDULE_TTL):
             try:
-                r = session.get(
-                    _base_url(ama_cfg) + "/v1/schedules",
+                r = _api_get(
+                    session, _base_url(ama_cfg) + "/v1/schedules",
+                    data_dir,
                     params={"origin": from_iata.upper(),
                             "destination": to_iata.upper(),
                             "month": month},

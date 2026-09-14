@@ -5,6 +5,27 @@ const fmt = (n) => (typeof n === "number" ? "¥" + Math.round(n) : "-");
 const splitCities = (t) =>
   String(t || "").split(/[、,,\n]/).map((s) => s.trim()).filter(Boolean);
 
+function Spark({ obs }) {
+  const pts = (obs || []).slice(-10).map((o) => o.price)
+    .filter((n) => typeof n === "number");
+  if (pts.length < 2) return <span class="muted">-</span>;
+  const min = Math.min(...pts), max = Math.max(...pts);
+  const W = 84, H = 22, PAD = 2;
+  const x = (i) => PAD + (i * (W - 2 * PAD)) / (pts.length - 1);
+  const y = (v) => (max === min ? H / 2
+    : PAD + ((max - v) / (max - min)) * (H - 2 * PAD));
+  const d = pts.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1)
+    + " " + y(v).toFixed(1)).join(" ");
+  const minI = pts.indexOf(min);
+  return (
+    <svg viewBox={"0 0 " + W + " " + H} width={W} height={H}
+      class="cabin-spark" aria-hidden="true">
+      <path class="spark-line" d={d} />
+      <circle cx={x(minI)} cy={y(min)} r="2.6" class="spark-min" />
+    </svg>
+  );
+}
+
 export default function CabinCard({ cfg, setCfg }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
@@ -130,7 +151,7 @@ export default function CabinCard({ cfg, setCfg }) {
           {rows.length ? (
             <table class="tbl">
               <thead>
-                <tr><th>出发</th><th>到达</th><th>历史最低</th><th>样本</th><th>状态</th></tr>
+                <tr><th>出发</th><th>到达</th><th>历史最低</th><th>走势</th><th>样本</th><th>状态</th></tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
@@ -138,6 +159,7 @@ export default function CabinCard({ cfg, setCfg }) {
                     <td>{r.from_city}</td>
                     <td>{r.to_city}</td>
                     <td class="price">{fmt(r.lowest)}</td>
+                    <td><Spark obs={r.obs} /></td>
                     <td>{r.n}</td>
                     <td>
                       <span class={"badge " + (r.lowest <= (cw.threshold_total || 0) ? "green" : "gray")}>
