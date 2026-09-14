@@ -179,6 +179,8 @@ fare-alert/
 
 - [x] **v0.50 公务舱监控自动反采(镜像腿)**: "出发地历史最低公务舱价+目的地默认杭州可改+定时刷新"在 v0.42~v0.47 已成型, 但存量路线全是"杭州→外地"方向, to_cities=[杭州] 时一条都不匹配——此前必须手动添加反向路线才会真正采集。① cabin_leg 纯函数: 路线 to_city 被监控→直采本腿, from_city 被监控→自动派生镜像腿(外地→杭州), watch_from_cities 按监控腿自身出发城市过滤; ② 采集块 direction=out 独占(顺带修复往返模式下 ret 调用会采错方向的历史问题), 镜像腿换 IATA 对调后 fetch_cabin_offers(购票链接自动指向正确方向), 镜像行经 cabin_out 独立通道回传——绝不混入经济舱 deals(不污染 cheapest/告警口径); ③ 历史记录键 "<id>-rev" 与经济舱路线 id 不冲突, 提醒文案用监控腿城市("公务舱低价 重庆到杭州"); ④ /api/cabin qualifying_routes 改报真实监控腿+mirror 标记, CabinCard 加"镜像"徽标; ⑤ 实测开启后存量 4 路线自动派生 重庆/郑州/曼谷/成都→杭州 四条镜像采集腿。单测 176→179, acceptance 13/13。
 
+- [x] **v0.51 部署对齐: worker 代码版本热替换**: 修复"页面反复看不到起飞时间"的真根因——旧 worker 进程(PID 15300, 早于 v0.48 启动)一直活着, autostart 只在无 loop 时拉起、revive 只救死 loop, 升级永远传不到活进程, 每轮用旧逻辑覆盖快照(293 有价票 110 缺起飞)。① core/version.py 单一版本源, worker 心跳盖章 code_ver, /api/health 暴露 code_synced; ② revive 守护每轮先比心跳版本(文件比对零成本), 落后即热替换 kill+relaunch(30 分钟冷却+心跳时间戳守卫防误杀长首轮), supervisor 快照记录 last_stale_restart; ③ 数据源页心跳卡"Worker 代码落后"琥珀警告+已热替换 vX→vY 提示; ④ tools/restart_worker.ps1/restart_all.ps1 一键强杀重拉(部署后必跑); ⑤ 实测 restart_all 后 code_synced=true, 缺起飞 110→0。单测 179→188, acceptance 13/13。
+
 ## 常见问题
 
 - **机票起降时刻从哪来?** 去哪儿低价日历只返回每日最低价+航班号(列表页需签名,按合规原则不破解)。v0.18 起杭州相关线路自动用机场官网公开班期板按「航班号+星期几」沉淀计划时刻(零密钥);v0.19 起目标星期未沉淀时自动借用同号航班其他班期时刻(跨日班期·参考),仅有起飞时落地按大圆估算(~ 前缀);配置 Amadeus 后优先实时刻。车次时刻/历时来自 12306, 原生即有。

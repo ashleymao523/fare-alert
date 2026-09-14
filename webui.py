@@ -15,6 +15,7 @@ import main as runner
 from core import travel
 from core.config import load_config, save_config
 from core.cities import CITIES
+from core.version import CODE_VERSION
 from core.intl import get_token as amadeus_get_token
 from core.trains import get_stations
 from core.notify import push_all
@@ -709,9 +710,16 @@ def api_health():
     worker = None
     if hb and hb.get("ts"):
         try:
+            wver = str(hb.get("code_ver") or "").strip()
             worker = {"ok": bool(hb.get("ok")),
                       "age_min": round((time.time() - float(hb["ts"])) / 60.0, 1),
-                      "pid": hb.get("pid")}
+                      "pid": hb.get("pid"),
+                      # v0.51: a long-lived worker silently running older
+                      # code than the webui rewrote snapshots without the
+                      # newest enrichment for hours - surface the skew so
+                      # deploys stop requiring tribal knowledge.
+                      "code_ver": wver or None,
+                      "code_synced": bool(wver) and wver == CODE_VERSION}
         except (TypeError, ValueError):
             worker = None
     revive = None

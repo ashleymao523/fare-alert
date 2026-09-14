@@ -5,6 +5,7 @@ import os
 import threading
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -19,9 +20,114 @@ class ReviveSupervisorTests(unittest.TestCase):
     def setUp(self):
         for k in ("last_check", "last_start", "last_probe",
                   "started_pid", "last_error",
+                  "last_stale_restart",
                   "patrol_enabled", "patrol_done_day", "patrol_last",
                   "patrol_last_error", "catchup_done_day"):
             revive._state[k] = None
+
+    def test_stale_worker_hot_swapped_in_window(self):
+        """v0.51: a worker heartbeat stamped with older code gets
+        killed + relaunched immediately (root cause: autostart never
+        restarted a live-but-stale worker, so deploys never landed)."""
+        p0 = mock.patch.object(revive, "stale_code_running",
+                               return_value=True)
+        p1 = mock.patch.object(revive, "stop_loop")
+        p2 = mock.patch.object(revive, "start_loop")
+        with p0, p1 as st, p2 as sl:
+            sl.return_value = 9001
+            rv = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 7, 30))
+        self.assertEqual(rv, "restarted-stale-code")
+        st.assert_called_once()
+        sl.assert_called_once_with("/repo")
+        lsr = revive.supervisor_snapshot()["last_stale_restart"]
+        self.assertEqual(lsr["to"], revive.CODE_VERSION)
+        self.assertEqual(revive._state["started_pid"], 9001)
+
+    def test_stale_worker_hot_swapped_out_of_window(self):
+        """Deploys propagate within one 5-min pass even midday - not
+        only during the 07:00 launch window."""
+        p0 = mock.patch.object(revive, "stale_code_running",
+                               return_value=True)
+        p1 = mock.patch.object(revive, "stop_loop")
+        p2 = mock.patch.object(revive, "start_loop")
+        with p0, p1, p2 as sl:
+            sl.return_value = 9002
+            rv = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 15, 0))
+        self.assertEqual(rv, "restarted-stale-code")
+        self.assertEqual(revive._state["catchup_done_day"], "2026-09-14")
+
+    def test_stale_swap_error_recorded_not_raised(self):
+        p0 = mock.patch.object(revive, "stale_code_running",
+                               return_value=True)
+        p1 = mock.patch.object(revive, "stop_loop")
+        p2 = mock.patch.object(revive, "loop_running",
+                               return_value=True)
+        p3 = mock.patch.object(revive, "start_loop",
+                               side_effect=OSError("spawn denied"))
+        with p0, p1, p2, p3:
+            rv = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 7, 30))
+        self.assertEqual(rv, "already-running")  # fell through safely
+        self.assertIn("spawn denied", revive._state["last_error"])
+
+    def test_stale_detected_for_old_heartbeat(self):
+        p0 = mock.patch.object(revive, "_worker_code_ver",
+                               return_value="0.48")
+        p1 = mock.patch.object(revive, "loop_running",
+                               return_value=True)
+        with p0, p1:
+            self.assertTrue(revive.stale_code_running("/repo"))
+
+    def test_stale_cooldown_blocks_second_swap(self):
+        revive._state["last_stale_restart"] = {
+            "ts": time.time(), "from": "0.48", "to": revive.CODE_VERSION}
+        p0 = mock.patch.object(revive, "_worker_code_ver",
+                               return_value="0.48")
+        p1 = mock.patch.object(revive, "loop_running")
+        with p0, p1 as lr:
+            self.assertFalse(revive.stale_code_running("/repo"))
+        lr.assert_not_called()  # cooldown short-circuits before probing
+
+    def test_pre_restart_heartbeat_never_killed_twice(self):
+        """After a swap the old heartbeat lingers until the new
+        worker's first pass finishes; that must not trigger a second
+        kill of the fresh worker mid-pass."""
+        revive._state["last_stale_restart"] = {
+            "ts": time.time(), "from": "0.48", "to": revive.CODE_VERSION}
+        p0 = mock.patch.object(revive, "_worker_code_ver",
+                               return_value="0.48")
+        p1 = mock.patch.object(revive, "_worker_hb_ts",
+                               return_value=time.time() - 600)
+        p2 = mock.patch.object(revive, "loop_running")
+        with p0, p1, p2 as lr:
+            self.assertFalse(revive.stale_code_running("/repo"))
+        lr.assert_not_called()
+
+    def test_stale_redetected_when_heartbeat_newer_than_swap(self):
+        revive._state["last_stale_restart"] = {
+            "ts": time.time() - 4000, "from": "0.48",
+            "to": revive.CODE_VERSION}
+        p0 = mock.patch.object(revive, "_worker_code_ver",
+                               return_value="0.48")
+        p1 = mock.patch.object(revive, "_worker_hb_ts",
+                               return_value=time.time() - 300)
+        p2 = mock.patch.object(revive, "loop_running",
+                               return_value=True)
+        with p0, p1, p2:
+            self.assertTrue(revive.stale_code_running("/repo"))
+
+    def test_stale_skips_absent_heartbeat_and_same_version(self):
+        p1 = mock.patch.object(revive, "loop_running")
+        with mock.patch.object(revive, "_worker_code_ver",
+                               return_value=None), p1 as lr:
+            self.assertFalse(revive.stale_code_running("/repo"))
+        with mock.patch.object(
+                revive, "_worker_code_ver",
+                return_value=revive.CODE_VERSION), p1:
+            self.assertFalse(revive.stale_code_running("/repo"))
+        lr.assert_not_called()
 
     def test_out_of_window_never_starts(self):
         p1 = mock.patch.object(revive, "loop_running")

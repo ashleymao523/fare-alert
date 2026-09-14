@@ -114,6 +114,10 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
   const alive = !!(wk && wk.ok && wk.age_min < 120);
   const pt = (hb && hb.revive && hb.revive.supervisor
     && hb.revive.supervisor.patrol) || null;
+  // v0.51: worker runs older code than the webui -> amber banner; the
+  // supervisor hot-swaps it within one 5-min pass (or restart_all.ps1).
+  const sr = (hb && hb.revive && hb.revive.supervisor
+    && hb.revive.supervisor.last_stale_restart) || null;
   const hbState = !hb ? "未知" : alive ? "运行中" : wk ? "心跳过期" : "未启动";
   return (
     <div>
@@ -174,6 +178,11 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
             {wk ? <span> · 最近轮次 {wk.ok ? "成功" : "失败"} · {Math.round(wk.age_min)} 分钟前</span> : null}
           </span>
         </div>
+        {(wk && wk.code_synced === false) ? (
+          <div class="warn-box">
+            ⚠ Worker 代码落后（心跳 v{wk.code_ver || "旧版"}）：守护线程将自动热替换为最新代码，或运行 tools/restart_all.ps1 立即生效。
+          </div>
+        ) : null}
         <div class="muted">
           {!wk ? ((hb.revive && ((hb.revive.supervisor && hb.revive.supervisor.enabled)
               || (hb.revive.task && hb.revive.task.installed)))
@@ -188,6 +197,7 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
               ? "面板守护已启用, 每日 07:00 后自动拉活后台抓取"
               : "面板守护未启用(config deploy.supervise_worker)"}
             {(hb.revive.task && hb.revive.task.installed) ? " · 计划任务已装" : ""}
+            {(sr && sr.ts) ? " · 已自动热替换 " + (sr.from || "?") + "→" + (sr.to || "?") : ""}
           </div>
         ) : null}
         {pt ? (

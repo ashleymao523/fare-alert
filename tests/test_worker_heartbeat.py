@@ -34,6 +34,7 @@ class WorkerHeartbeatTests(unittest.TestCase):
             hb = json.load(f)
         self.assertTrue(hb["ok"])
         self.assertEqual(hb["pid"], os.getpid())
+        self.assertEqual(hb["code_ver"], app_main.CODE_VERSION)
         self.assertLess(time.time() - hb["ts"], 5)
 
     def test_health_exposes_worker(self):
@@ -45,6 +46,22 @@ class WorkerHeartbeatTests(unittest.TestCase):
         self.assertIsNotNone(w)
         self.assertTrue(w["ok"])
         self.assertGreaterEqual(w["age_min"], 0.0)
+        self.assertEqual(w["code_ver"], app_main.CODE_VERSION)
+        self.assertTrue(w["code_synced"])
+
+    def test_health_flags_pre_versioned_worker(self):
+        """A heartbeat without code_ver = definitely-old worker: the
+        dashboard must show the skew (v0.51 stale-worker incident)."""
+        with open(os.path.join(self._tmp.name,
+                               "worker_heartbeat.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump({"ts": time.time(), "pid": 1, "ok": True}, f)
+        with webui.app.test_client() as c:
+            r = c.get("/api/health")
+        w = r.get_json().get("worker")
+        self.assertIsNotNone(w)
+        self.assertIsNone(w["code_ver"])
+        self.assertFalse(w["code_synced"])
 
     def test_health_without_heartbeat_is_null(self):
         with webui.app.test_client() as c:

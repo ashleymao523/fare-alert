@@ -27,10 +27,13 @@ can tell "will self-heal tomorrow morning" from "needs manual action".
 import datetime
 import json
 import os
+import signal
 import subprocess
 import sys
 import threading
 import time
+
+from core.version import CODE_VERSION
 
 TASK_NAME = "FareAlertWorkerRevive"
 REVIVE_HOUR = 7          # launch window = 07:00-07:59 local time
@@ -48,9 +51,13 @@ _PS_PROC_QUERY = """(Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'"
  | Where-Object { $_.CommandLine -match 'main\\.py' -and $_.CommandLine -match '--loop' }
  | Select-Object -First 1).ProcessId"""
 
+_PS_PROC_PIDS_QUERY = """@(Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'"
+ | Where-Object { $_.CommandLine -match 'main\\.py' -and $_.CommandLine -match '--loop' }
+ | Select-Object -ExpandProperty ProcessId) -join ' '"""
+
 _state = {"enabled": False, "thread": None, "last_check": None,
           "last_start": None, "last_probe": None, "started_pid": None,
-          "last_error": None,
+          "last_error": None, "last_stale_restart": None,
           "patrol_enabled": False, "patrol_done_day": None,
           "patrol_last": None, "patrol_last_error": None,
           "catchup_done_day": None}
@@ -114,6 +121,67 @@ def loop_running():
     return bool((out.stdout or "").strip())
 
 
+def _worker_code_ver(repo_dir):
+    """Heartbeat code_ver, "" for pre-v0.51 heartbeats (definitely old),
+    None when no heartbeat file exists yet (fresh worker mid-cycle:
+    skip the stale check rather than kill a healthy restart)."""
+    try:
+        with open(os.path.join(repo_dir, "data",
+                               "worker_heartbeat.json"),
+                  encoding="utf-8") as f:
+            hb = json.load(f) or {}
+        if "code_ver" not in hb:
+            return ""
+        return str(hb.get("code_ver") or "").strip()
+    except Exception:
+        return None
+
+
+def _worker_hb_ts(repo_dir):
+    """Heartbeat write time, or None when unreadable."""
+    try:
+        with open(os.path.join(repo_dir, "data",
+                               "worker_heartbeat.json"),
+                  encoding="utf-8") as f:
+            return float((json.load(f) or {}).get("ts") or 0)
+    except Exception:
+        return None
+
+
+def _stale_cooldown_ok():
+    """True when >=30 min passed since the last stale restart."""
+    ts = ((_state.get("last_stale_restart") or {}).get("ts"))
+    try:
+        return (not ts) or (time.time() - float(ts)) >= 1800.0
+    except (TypeError, ValueError):
+        return True
+
+
+def stale_code_running(repo_dir):
+    """True when the heartbeat PROVES a running-but-stale worker.
+
+    v0.51 root cause this closes: autostart only launches when nothing
+    runs, so a worker that survived a deploy kept executing old fetch
+    code for hours. Conservative by design - no heartbeat file skips
+    (fresh worker mid first pass), and a heartbeat written BEFORE our
+    last stale restart also skips (pre-restart info), so a long first
+    fetch cycle can never be killed twice."""
+    wver = _worker_code_ver(repo_dir)
+    if wver is None or wver == CODE_VERSION:
+        return False
+    if not _stale_cooldown_ok():
+        return False
+    lsr = (_state.get("last_stale_restart") or {}).get("ts")
+    if lsr:
+        hb_ts = _worker_hb_ts(repo_dir)
+        if hb_ts is not None and hb_ts <= float(lsr):
+            return False  # old worker's heartbeat, new one still working
+    try:
+        return loop_running()
+    except Exception:
+        return False
+
+
 def start_loop(repo_dir):
     """Launch a detached worker loop; returns its pid."""
     kw = {"cwd": repo_dir, "stdout": subprocess.DEVNULL,
@@ -127,6 +195,36 @@ def start_loop(repo_dir):
     return p.pid
 
 
+def stop_loop():
+    """Kill every running worker loop (pid-targeted, cmdline-matched).
+    Returns the pid list; best-effort, never raises."""
+    try:
+        if os.name == "nt":
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 _PS_PROC_PIDS_QUERY],
+                capture_output=True, text=True, timeout=20)
+            pids = [int(x) for x in str(out.stdout or "").split()
+                    if x.isdigit()]
+            for pid in pids:
+                subprocess.run(["taskkill", "/PID", str(pid),
+                                "/F", "/T"],
+                               capture_output=True, timeout=15)
+            return pids
+        out = subprocess.run(["pgrep", "-f", "main.py.*--loop"],
+                             capture_output=True, text=True, timeout=10)
+        pids = [int(x) for x in (out.stdout or "").split()
+                if x.isdigit()]
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except Exception:
+                pass
+        return pids
+    except Exception:
+        return []
+
+
 def supervise_once(repo_dir, now=None):
     """One supervision pass; returns the action taken (test seam).
 
@@ -136,9 +234,30 @@ def supervise_once(repo_dir, now=None):
     it had already seen (observed: 2/7 with the last heartbeat 2.6 days
     old). Now, outside the window, a stale heartbeat (>6h) still probes
     and revives once per day, so dow coverage keeps growing on any boot
-    schedule."""
+    schedule.
+
+    v0.51: every pass ALSO hot-swaps a worker whose heartbeat proves
+    older code than the webui (cheap file compare first; the process
+    probe + restart only fire on a real mismatch), so a deploy
+    propagates within one 5-min supervisor pass instead of at the next
+    07:00 window."""
     _state["last_check"] = time.time()
     in_window = _in_launch_window(now)
+    if stale_code_running(repo_dir):
+        try:
+            stop_loop()
+            _state["started_pid"] = start_loop(repo_dir)
+            _state["last_start"] = time.time()
+            _state["last_stale_restart"] = {
+                "ts": time.time(),
+                "from": _worker_code_ver(repo_dir) or "(pre-0.51)",
+                "to": CODE_VERSION}
+            if not in_window:
+                _state["catchup_done_day"] = (
+                    now or datetime.datetime.now()).date().isoformat()
+            return "restarted-stale-code"
+        except Exception as e:
+            _state["last_error"] = str(e)  # next pass retries the swap
     if not in_window:
         day = (now or datetime.datetime.now()).date().isoformat()
         if _state.get("catchup_done_day") == day:
@@ -268,6 +387,7 @@ def supervisor_snapshot():
             "last_start": _state["last_start"],
             "last_probe": _state["last_probe"],
             "started_pid": _state["started_pid"],
+            "last_stale_restart": _state.get("last_stale_restart"),
             "patrol": {"enabled": bool(_state.get("patrol_enabled")),
                        "window": "09:00-09:59",
                        "last": _state.get("patrol_last"),

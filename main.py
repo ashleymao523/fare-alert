@@ -30,6 +30,7 @@ from core.cabin_monitor import (
     _atomic_write as cabin_atomic_write,
 )
 from core.models import FlightDeal
+from core.version import CODE_VERSION
 from core.notify import has_channel, push_all
 from core.report import write_report
 from core.sched_board import (board_lookup_x, build_route_priors,
@@ -1019,7 +1020,8 @@ def _write_heartbeat(ok=True):
         with open(os.path.join(DATA_DIR, "worker_heartbeat.json"), "w",
                   encoding="utf-8") as f:
             json.dump({"ts": time.time(), "pid": os.getpid(),
-                       "ok": bool(ok)}, f)
+                       "ok": bool(ok),
+                       "code_ver": CODE_VERSION}, f)
     except Exception:
         pass  # heartbeat is best-effort observability, never fatal
 
