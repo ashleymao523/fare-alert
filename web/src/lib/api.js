@@ -39,6 +39,7 @@ export function testPush() { return post("/api/test-push", {}); }
 
 export function fetchSchedStats() { return fetch("/api/sched-stats").then(j); }
 export function fetchAmaUsage() { return fetch("/api/amadeus-usage").then(j); }
+export function fetchCovTrend() { return fetch("/api/coverage-trend").then(j); }
 export function fetchHealth() { return fetch("/api/health").then(j); }
 
 export function fetchAlerts() { return fetch("/api/alerts").then(j); }

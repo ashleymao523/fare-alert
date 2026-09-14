@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
-import { saveConfig, fetchSchedStats, fetchHealth, fetchAmaUsage } from "../lib/api.js";
+import { saveConfig, fetchSchedStats, fetchHealth, fetchAmaUsage,
+  fetchCovTrend } from "../lib/api.js";
 
 const DOW_NAMES = ["一", "二", "三", "四", "五", "六", "日"]; // /api/sched-stats: 0=周一
 
@@ -14,10 +15,61 @@ function CovBar({ label, val, total, cls }) {
   );
 }
 
+// v0.45: dep-time exactness over archived days (flat fill, no gradient
+// tricks) - shows whether goal-1 coverage is actually growing.
+function CovTrend({ pts }) {
+  if (pts && pts.length === 1) {
+    return (
+      <div class="cvt-sub cov-trend">
+        趋势基线已记录（今日起飞精确 {pts[0].pct}%），
+        明日起绘制覆盖率曲线。
+      </div>
+    );
+  }
+  if (!pts || pts.length < 2) return null;
+  const W = 320, H = 72, PL = 8, PR = 34, PT = 8, PB = 14;
+  const x = (i) => PL + (i * (W - PL - PR)) / (pts.length - 1);
+  const y = (p) => PT + ((100 - p) / 100) * (H - PT - PB);
+  const line = pts.map((p, i) => (i ? "L" : "M") + x(i).toFixed(1)
+    + " " + y(p.pct).toFixed(1)).join(" ");
+  const area = line + " L" + x(pts.length - 1).toFixed(1) + " " + (H - PB)
+    + " L" + PL + " " + (H - PB) + " Z";
+  const last = pts[pts.length - 1];
+  return (
+    <div class="cov-trend">
+      <svg class="cvt-svg" viewBox={"0 0 " + W + " " + H} role="img"
+        aria-label="起飞时刻精确占比趋势">
+        <line class="cvt-guide" x1={PL} y1={y(100)} x2={W - PR} y2={y(100)} />
+        <line class="cvt-guide" x1={PL} y1={y(50)} x2={W - PR} y2={y(50)} />
+        <path class="cvt-area" d={area} />
+        <path class="cvt-line" d={line} />
+        {pts.map((p, i) => (
+          <circle key={p.date}
+            class={"cvt-dot" + (i === pts.length - 1 ? " cvt-last" : "")}
+            cx={x(i)} cy={y(p.pct)} r={i === pts.length - 1 ? 3 : 2} />
+        ))}
+        <text class="cvt-cap" x={W - PR + 4} y={y(last.pct) + 3}>
+          {Math.round(last.pct)}%
+        </text>
+        <text class="cvt-cap" x={PL} y={H - 3}>{pts[0].date.slice(5)}</text>
+        <text class="cvt-cap" x={W - PR} y={H - 3} text-anchor="end">
+          {last.date.slice(5)}
+        </text>
+      </svg>
+      <div class="cvt-sub">
+        近{pts.length}天 起飞精确占比 {pts[0].pct}% → {last.pct}%
+        <span> · 跨日参考 {Math.round(last.db * 100 / last.tot)}%</span>
+        <span> · 缺失 {Math.round(last.dm * 100 / last.tot)}%</span>
+      </div>
+    </div>
+  );
+}
+
 // cfg/meta are lifted to App so unsaved edits survive tab switches (no cross-tab overwrite)
 export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }) {
   const [stats, setStats] = useState(null);
   const [usage, setUsage] = useState(null);
+  const [covT, setCovT] = useState(null);
   const [hb, setHb] = useState(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -25,6 +77,7 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
     fetchSchedStats().then(setStats).catch(() => {});
     fetchHealth().then(setHb).catch(() => {});
     fetchAmaUsage().then(setUsage).catch(() => {});
+    fetchCovTrend().then((x) => setCovT(x.trend || [])).catch(() => {});
   }, []);
   if (!cfg) return <div class="card"><div class="empty">{cfgErr || "加载中…"}</div></div>;
   const enabled = (cfg.sources && cfg.sources.enabled) || {};
@@ -177,6 +230,7 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
         </div>
         {tot ? (
           <div>
+            <CovTrend pts={covT} />
             <CovBar label="起飞 · 精确" val={de} total={tot} cls="ok" />
             <CovBar label="起飞 · 跨日参考" val={db} total={tot} cls="mid" />
             <CovBar label="起飞 · 缺失" val={dm} total={tot} cls="miss" />

@@ -481,6 +481,43 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 }
 
 .spark-min { fill: var(--green); }
+
+/* v0.45 cabin city chips + coverage trend */
+.cw-chips {
+  display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center;
+  border: 1px solid var(--line); border-radius: var(--rad-sm);
+  padding: var(--sp-2) var(--sp-sm); background: var(--card);
+  cursor: text;
+}
+.cw-chips:focus-within { border-color: var(--accent); }
+.cw-chip {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  background: var(--accent-soft); color: var(--accent-ink);
+  border-radius: var(--r-pill); padding: var(--sp-1) var(--sp-md);
+  font-size: var(--fs-sm); line-height: 1.4;
+}
+.cw-chip button {
+  border: none; background: none; cursor: pointer; padding: 0;
+  color: inherit; font-size: var(--fs-md); line-height: 1;
+}
+.cw-chip button:hover { color: var(--red); }
+.cw-ac { flex: 1; min-width: 132px; }
+.cw-ac input {
+  border: none; outline: none; width: 100%; font: inherit;
+  background: transparent; color: var(--text);
+}
+.cov-trend { margin: var(--sp-md) 0 var(--sp-2); }
+.cvt-svg { width: 100%; height: auto; display: block; }
+.cvt-area { fill: var(--accent-soft); }
+.cvt-line {
+  fill: none; stroke: var(--accent); stroke-width: 2;
+  stroke-linejoin: round; stroke-linecap: round;
+}
+.cvt-dot { fill: var(--card); stroke: var(--accent); stroke-width: 1.5; }
+.cvt-last { fill: var(--green); stroke: var(--green-d); }
+.cvt-guide { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
+.cvt-cap { font-size: var(--fs-2xs); fill: var(--faint); }
+.cvt-sub { font-size: var(--fs-sm); color: var(--muted); margin-top: var(--sp-1); }
 .btn.danger { color: var(--red); border-color: var(--red-line); }
 .btn.danger:hover { background: var(--red-bg); }
 

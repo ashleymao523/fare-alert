@@ -1,9 +1,8 @@
 import { useEffect, useState } from "preact/hooks";
-import { saveConfig } from "../lib/api.js";
+import { saveConfig, fetchCities } from "../lib/api.js";
+import AcField, { filterAC } from "./AcField.jsx";
 
 const fmt = (n) => (typeof n === "number" ? "¥" + Math.round(n) : "-");
-const splitCities = (t) =>
-  String(t || "").split(/[、,,\n]/).map((s) => s.trim()).filter(Boolean);
 
 function Spark({ obs }) {
   const pts = (obs || []).slice(-10).map((o) => o.price)
@@ -23,6 +22,92 @@ function Spark({ obs }) {
       <path class="spark-line" d={d} />
       <circle cx={x(minI)} cy={y(min)} r="2.6" class="spark-min" />
     </svg>
+  );
+}
+
+// v0.45: watch-cities chips input - pick from the same curated city list
+// as the route form (exact match, no fuzzy fallback); Enter adds free
+// text too, Backspace on empty input removes the last chip.
+function CityPicker({ cities, onChange }) {
+  const [q, setQ] = useState("");
+  const [list, setList] = useState(null);
+  const [items, setItems] = useState([]);
+  const [active, setActive] = useState(-1);
+  const [open, setOpen] = useState(false);
+  const refresh = (v) => {
+    if (list == null) {
+      fetchCities().then((x) => {
+        setList(x);
+        const f = filterAC(x, v);
+        setItems(f);
+        setActive(f.length ? 0 : -1);
+      }).catch(() => {});
+      setOpen(true);
+      return;
+    }
+    const f = filterAC(list, v);
+    setItems(f);
+    setActive(f.length ? 0 : -1);
+    setOpen(true);
+  };
+  const add = (name) => {
+    const n = String(name || "").trim();
+    if (!n) return;
+    if (!cities.includes(n)) onChange(cities.concat([n]));
+    setQ("");
+    setOpen(false);
+  };
+  const onKey = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (open && active >= 0 && items[active]) add(items[active].name);
+      else if (q.trim()) add(q);
+    } else if (e.key === "Backspace" && !q && cities.length) {
+      onChange(cities.slice(0, -1));
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    } else if (e.key === "ArrowDown" && items.length) {
+      e.preventDefault();
+      setActive((active + 1) % items.length);
+    } else if (e.key === "ArrowUp" && items.length) {
+      e.preventDefault();
+      setActive((active - 1 + items.length) % items.length);
+    }
+  };
+  return (
+    <div class="cw-chips">
+      {cities.map((c) => (
+        <span class="cw-chip" key={c}>{c}
+          <button type="button" aria-label={"移除" + c}
+            onClick={() => onChange(cities.filter((x) => x !== c))}>×</button>
+        </span>
+      ))}
+      <div class="ac-wrap2 cw-ac">
+        <input type="text" value={q} placeholder="输入城市, 回车或点选添加"
+          role="combobox" aria-expanded={open}
+          onFocus={() => refresh(q)}
+          onInput={(e) => { setQ(e.target.value); refresh(e.target.value); }}
+          onKeyDown={onKey}
+          onBlur={() => setTimeout(() => setOpen(false), 150)} />
+        {open ? (
+          <div class="ac-list2" role="listbox">
+            {list == null ? (
+              <div class="ac-item2">加载中…</div>
+            ) : items.length ? items.map((it, i) => (
+              <div key={it.name} role="option" aria-selected={i === active}
+                class={"ac-item2" + (i === active ? " active" : "")}
+                onMouseDown={(e) => { e.preventDefault(); add(it.name); }}
+                onMouseEnter={() => setActive(i)}>
+                <span class="ac-label2">{it.name}</span>
+                {it.pinyin ? <span class="ac-sub2">{it.pinyin}</span> : null}
+              </div>
+            )) : (
+              <div class="ac-item2">无匹配, 回车直接添加</div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -56,19 +141,18 @@ export default function CabinCard({ cfg, setCfg }) {
       cooldown_hours:
         live.cooldown_hours != null ? live.cooldown_hours
           : (cw.cooldown_hours != null ? cw.cooldown_hours : 12),
-      fromText: (live.watch_from_cities || []).join("、"),
+      cities: (live.watch_from_cities || []).slice(),
     });
   };
   const cancelEdit = () => { setEditing(false); setMsg(""); };
   const doSave = () => {
-    const cities = splitCities(draft.fromText);
     const nextCw = {
       enabled: !!draft.enabled,
       cabins: (live.cabins && live.cabins.length) ? live.cabins : ["business"],
       default_to_city: (draft.default_to_city || "").trim() || "杭州",
       threshold_total: Number(draft.threshold_total) || 1500,
       cooldown_hours: Number(draft.cooldown_hours) || 0,
-      watch_from_cities: cities,
+      watch_from_cities: draft.cities.slice(),
     };
     const next = Object.assign({}, cfg, { cabin_watch: nextCw });
     setBusy(true);
@@ -110,11 +194,9 @@ export default function CabinCard({ cfg, setCfg }) {
               <input type="checkbox" checked={!!draft.enabled}
                 onChange={(e) => setD("enabled", e.target.checked)} />
             </label>
-            <label class="field2">
-              <span class="f-label2">目的地城市</span>
-              <input type="text" value={draft.default_to_city}
-                onInput={(e) => setD("default_to_city", e.target.value)} />
-            </label>
+            <AcField label="目的地城市" value={draft.default_to_city}
+              ensure={fetchCities}
+              onChange={(v) => setD("default_to_city", v)} />
             <label class="field2">
               <span class="f-label2">心理价位 (总价)</span>
               <input type="number" min="1" value={draft.threshold_total}
@@ -126,13 +208,11 @@ export default function CabinCard({ cfg, setCfg }) {
                 onInput={(e) => setD("cooldown_hours", e.target.value)} />
             </label>
           </div>
-          <label class="field2">
-            <span class="f-label2">
-              监控出发城市 (顿号/逗号/换行分隔, 留空 = 路线内全部出发地)
-            </span>
-            <textarea rows="2" value={draft.fromText}
-              onInput={(e) => setD("fromText", e.target.value)} />
-          </label>
+          <div class="field2">
+            <span class="f-label2">监控出发城市 (点选或回车添加, 留空 = 全部出发地)</span>
+            <CityPicker cities={draft.cities}
+              onChange={(cs) => setD("cities", cs)} />
+          </div>
           <div class="row-btns">
             <button class="btn primary" disabled={busy} onClick={doSave}>
               保存监控配置

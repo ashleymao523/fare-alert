@@ -276,6 +276,13 @@ checks["v0.44 用量计数端点"] = ("/api/amadeus-usage" in open(
     "webui.py", encoding="utf-8").read())
 checks["v0.44 v2产物用量与走势"] = (("Amadeus 今日调用" in _dist_js)
     and ("spark-line" in _dist_js))
+_hist_src = open(os.path.join("core", "history.py"),
+                 encoding="utf-8").read()
+checks["v0.45 coverage archive+trend"] = (("coverage_trend" in _hist_src)
+    and ('m["cov"]' in _hist_src))
+checks["v0.45 coverage-trend API"] = "/api/coverage-trend" in _webui_src
+checks["v0.45 v2 city chips+cov trend"] = (("cw-chip" in _dist_js)
+    and ("cov-trend" in _dist_js) and ("cvt-line" in _dist_css))
 
 bad = 0
 for k, v in checks.items():

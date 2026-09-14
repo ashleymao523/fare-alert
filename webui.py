@@ -546,6 +546,16 @@ def api_amadeus_usage():
     return jsonify(usage_snapshot(DATA_DIR))
 
 
+@app.get("/api/coverage-trend")
+def api_coverage_trend():
+    """v0.45: daily dep-time coverage series (goal-1 progress curve).
+    Reads the same daily KPI archive as the weekly report; days without
+    cov blocks (pre-v0.45) are skipped instead of plotted as 0%."""
+    from core.history import coverage_trend, load_history
+    hist = load_history(os.path.join(DATA_DIR, "history.json"))
+    return jsonify({"ok": True, "trend": coverage_trend(hist, 30)})
+
+
 @app.get("/api/cabin")
 def api_cabin():
     """v0.42: business-cabin watch status - ring history + config echo."""

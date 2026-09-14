@@ -34,7 +34,7 @@ def _route_metrics(route):
         return None
     totals = [float(d["total_price"]) for d in deals]
     best = min(deals, key=lambda d: d["total_price"])
-    return {
+    m = {
         "from_city": route.get("from_city", ""),
         "to_city": route.get("to_city", ""),
         "threshold": route.get("threshold_total"),
@@ -44,6 +44,39 @@ def _route_metrics(route):
         "best_date": best.get("date"),
         "n_deals": len(deals),
     }
+    # v0.45: archive dep-time coverage so the sources tab can chart how
+    # exact-departure coverage grows day over day (goal-1 progress curve).
+    cov = route.get("time_coverage") or {}
+    if cov.get("total"):
+        m["cov"] = {"dx": int(cov.get("dep_exact") or 0),
+                    "db": int(cov.get("dep_borrow") or 0),
+                    "dm": int(cov.get("dep_missing") or 0)}
+    return m
+
+
+def coverage_trend(history, days=30):
+    """v0.45: daily dep-time coverage ratio series (pure, CI-testable).
+
+    Aggregates per-route cov blocks per archived day. Days without cov
+    (pre-v0.45 archives) are skipped rather than plotted as 0%. Returns
+    [{date, de, db, dm, tot, pct}] ascending, capped to the last `days`.
+    """
+    out = []
+    for day, rec in sorted((history.get("days") or {}).items()):
+        de = db = dm = 0
+        for m in ((rec.get("routes") or {}).values()):
+            c = m.get("cov")
+            if not c:
+                continue
+            de += int(c.get("dx") or 0)
+            db += int(c.get("db") or 0)
+            dm += int(c.get("dm") or 0)
+        tot = de + db + dm
+        if not tot:
+            continue
+        out.append({"date": day, "de": de, "db": db, "dm": dm,
+                    "tot": tot, "pct": round(de * 100.0 / tot, 1)})
+    return out[-days:] if days else out
 
 
 def append_history(snapshot, path):
