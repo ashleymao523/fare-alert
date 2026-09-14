@@ -51,6 +51,18 @@ export default function OverviewCard({ routes, drops, currentId, onPick }) {
     return a.ratio - b.ratio;
   });
   if (rows.length < 2) return null;
+  // v0.64: rows are ratio-sorted, so the head IS the global best buy
+  // across every watched route - surface it as a hero row so "which
+  // one should I actually book" has one answer, times included.
+  const bestRow = rows[0];
+  const daysToGo = (() => {
+    if (!bestRow.best || !bestRow.best.date) return null;
+    const t = new Date(bestRow.best.date + "T00:00:00");
+    if (isNaN(t)) return null;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return Math.round((t - now) / 86400000);
+  })();
   return (
     <div class="card">
       <div class="card-head">
@@ -58,6 +70,40 @@ export default function OverviewCard({ routes, drops, currentId, onPick }) {
         <span class="sub">按接近心理价位排序 · 点击行直达路线</span>
       </div>
       <div class="ov-list">
+        {bestRow.ratio != null && bestRow.best ? (
+          <button type="button" class="ov-best"
+            onClick={() => onPick(bestRow.r.id, bestRow.best.date)}>
+            <span class="ov-best-tag">🏆 全局最优</span>
+            <span class="d-route">
+              {bestRow.r.from_city}
+              {bestRow.r.trip_type === "roundtrip" ? " ⇄ " : " → "}
+              {bestRow.r.to_city}
+            </span>
+            <span class="num">
+              {fmt(bestRow.cheapest)}
+              {" (" + String(bestRow.best.date).slice(5) + ")"}
+            </span>
+            {bestRow.best.dep_time || bestRow.best.arr_time ? (
+              <span class="ov-times">
+                {(bestRow.best.dep_time || "--:--")
+                  + "-" + (bestRow.best.arr_time || "")}
+              </span>
+            ) : null}
+            {daysToGo != null && daysToGo >= 0 ? (
+              <span class="ov-times">{daysToGo + " 天后出发"}</span>
+            ) : null}
+            {bestRow.cheapest <= bestRow.th ? (
+              <span class="chip2 ok">
+                已破线 {fmt(bestRow.th - bestRow.cheapest)}
+              </span>
+            ) : (
+              <span class="chip2 plan">
+                差 {fmt(bestRow.cheapest - bestRow.th)}
+              </span>
+            )}
+            <span class="ov-arrow">→</span>
+          </button>
+        ) : null}
         {rows.map(({ r, th, cheapest, best, ratio, drop }) => {
           const pts = (r.deals || [])
             .filter((d) => typeof d.total_price === "number")

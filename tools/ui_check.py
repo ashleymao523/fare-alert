@@ -432,6 +432,11 @@ checks["v0.63 overview times + spark"] = (("ov-times" in _ov_src)
     and ("ov-times" in _dist_js)
     and ("ov-times" in h))
 
+checks["v0.64 global best hero"] = (("全局最优" in _ov_src)
+    and ("ov-best" in _ov_src)
+    and ("全局最优" in _dist_js)
+    and ("全局最优" in h))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

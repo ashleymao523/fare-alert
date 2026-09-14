@@ -121,7 +121,7 @@ export function App() {
         {tab === "dash" ? (
           <OverviewCard routes={routes} drops={drops}
             currentId={route && route.id}
-            onPick={(id) => { setRouteId(id); setSelDate(null); }} />
+            onPick={(id, date) => { setRouteId(id); setSelDate(date || null); }} />
         ) : null}
         {routes.length > 1 && tab === "dash" && (
           <div class="route-tabs">
