@@ -309,6 +309,50 @@ function TimeSedimentCard() {
   );
 }
 
+function BackupCard() {
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const onFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setBusy(true);
+    setMsg("导入中… 先校验 sha256 清单, 再安全备份当前状态");
+    const fd = new FormData();
+    fd.append("bundle", file);
+    fetch("/api/bundle/import", { method: "POST", body: fd })
+      .then((r) => r.json().then((d) => ({ ok: r.status === 200, d })))
+      .then(({ ok, d }) => setMsg(ok && d.ok
+        ? "✅ 已恢复 " + d.restored + " 个文件 (清单校验通过) · 重启 worker 与页面后生效"
+        : "❌ " + (d.error || "导入失败")))
+      .catch((e) => setMsg("❌ " + (e.message || e)))
+      .finally(() => setBusy(false));
+    e.target.value = "";
+  };
+  return (
+    <div class="card">
+      <div class="card-head">
+        <h3>📦 备份与迁移</h3>
+        <span class="sub">跨设备一键搬家 · sha256 清单校验 · 导入前自动安全备份</span>
+      </div>
+      <div class="gap-dates">
+        <a class="gap-chip link" href="/api/bundle/export"
+          target="_blank" rel="noopener noreferrer"
+          title="下载包含路线配置/班期库/价格历史/公务舱环形库/精点缓存/养板队列的迁移包">
+          ⬇ 下载迁移包 ↗
+        </a>
+        <label class={"gap-chip" + (busy ? " cached" : "")}
+          title="上传迁移包 zip: 校验通过才恢复, 恢复前先备份当前状态">
+          {busy ? "⬆ 导入中…" : "⬆ 导入迁移包"}
+          <input type="file" accept=".zip" style="display:none"
+            disabled={busy} onChange={onFile} />
+        </label>
+      </div>
+      <div class="muted">{msg || "迁移包含: 路线配置 · 班期库 · 价格历史 · "
+        + "公务舱环形库 · 精点回填缓存 · 养板队列; 传输损坏或被改动的包会被拒收。"}</div>
+    </div>
+  );
+}
+
 export default function CrawlView() {
   const [doc, setDoc] = useState(null);
   const [err, setErr] = useState("");
@@ -343,6 +387,7 @@ export default function CrawlView() {
       </div>
       <PointFillCard />
       <TimeSedimentCard />
+      <BackupCard />
       {runs.length
         ? runs.map(({ run, live, rk }) => <RunCard run={run} live={live} key={rk} />)
         : <div class="card"><div class="empty">暂无抓取记录: 点面板「立即查询」或等计划任务触发</div></div>}

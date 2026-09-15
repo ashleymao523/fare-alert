@@ -5,12 +5,14 @@ import datetime
 import os
 import re
 import socket
+import sys
 import threading
 import time
 
 import requests
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import (Flask, jsonify, render_template, request,
+                   send_file, send_from_directory)
 
 import main as runner
 from core import travel
@@ -30,6 +32,10 @@ ALERTS_PATH = os.path.join(DATA_DIR, "alerts.json")
 LOG_PATH = os.path.join(DATA_DIR, "run.log")
 REPORT_DIR = os.path.join(DATA_DIR, "report")
 CRAWL_PATH = os.path.join(DATA_DIR, "crawl_status.json")
+
+sys.path.insert(0, os.path.join(BASE_DIR, "tools"))
+import backup as _backup  # noqa: E402  (v0.86 bundle export/import)
+import restore as _restore  # noqa: E402
 
 MASK = "***"
 SECRET_KEYS = ("bark_key", "serverchan_sendkey")
@@ -602,6 +608,61 @@ def api_test_push():
                        "推送通道配置成功!这是一条测试消息。", url="",
                        route_id="test-push", kind="test")
     return jsonify({"ok": True, "results": results})
+
+
+@app.get("/api/bundle/export")
+def api_bundle_export():
+    """v0.86: download a sealed migration bundle (config + durable
+    data + sha256 manifest) straight from the browser - no SSH/RDP
+    needed to move the component to another device."""
+    try:
+        zpath, included, _skipped = _backup.make_backup(
+            root=BASE_DIR, dest_dir=os.path.join(BASE_DIR, "backups"))
+    except OSError as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    _log.info("bundle export: %d items -> %s", len(included), zpath)
+    return send_file(zpath, mimetype="application/zip",
+                     as_attachment=True,
+                     download_name=os.path.basename(zpath))
+
+
+@app.post("/api/bundle/import")
+def api_bundle_import():
+    """v0.86: upload a bundle zip, verify its sha256 manifest, safety
+    -backup the current state, then restore. Refuses tampered or
+    corrupted archives with 409."""
+    f = request.files.get("bundle")
+    if f is None or not (f.filename or "").lower().endswith(".zip"):
+        return jsonify({"ok": False,
+                        "error": "请上传 .zip 迁移包"}), 400
+    data = f.read()
+    if not data or len(data) > 64 * 1024 * 1024:
+        return jsonify({"ok": False,
+                        "error": "迁移包为空或超过 64MB"}), 400
+    import tempfile
+    fd, tmp = tempfile.mkstemp(suffix=".zip")
+    try:
+        with os.fdopen(fd, "wb") as out:
+            out.write(data)
+        try:
+            mf = _restore.verify_manifest(tmp)
+        except _restore.ManifestError as e:
+            return jsonify({"ok": False,
+                            "error": "完整性校验失败: " + str(e)}), 409
+        safety = _restore.safety_backup(root=BASE_DIR)
+        with _lock:
+            restored, skipped = _restore.restore(tmp, root=BASE_DIR)
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    _log.info("bundle import: %d restored, %d skipped, safety=%s",
+              len(restored), len(skipped), safety)
+    return jsonify({"ok": True, "restored": len(restored),
+                    "skipped": len(skipped), "safety": safety or "",
+                    "code_ver": (mf or {}).get("code_ver", ""),
+                    "hint": "已恢复, 重启 worker 与页面后生效"})
 
 
 @app.post("/api/reverse-search")

@@ -263,6 +263,8 @@ python tools/acceptance.py
 
 - [x] **v0.85 推送带上起飞时刻 + 可信度标记**: 手机端最需要时刻的三个触点全部补齐——① 阈值提醒标题带可信起降窗口(exact 或 ≥2 票一致才上标题, 单 dow 借用/分歧时刻只留在正文带标记, 不在锁屏冒充事实); ② 提醒正文逐航班行插入 "07:45-10:20(3票)" 式窗口+可信度——exact 无标记 / 跨 dow 一致 N票 / 单 dow 借用或 alt 参考"参考" / dow 分歧"⚠", 无时刻不加噪; ③ 周报全局最优行同步同一套标记 "(19:45-22:25·3票)"; 实现上 core/alerts 新增 dep_arr_text/conf_mark 双态助手(FlightDeal 属性与快照 dict 同一实现), 周报与阈值提醒共享; global_best 提取器补齐 borrow 三键。新增 tests/test_alert_msg.py 10 用例(窗口三态/五种来源标记/dict 形态/标题门控/正文标记/周报三态), 全套 281 单测绿。
 
+- [x] **v0.86 迁移包完整性升级 + Web 一键导出导入**: 「部署分量」与跨设备迁移收口——① v0.41 的备份清单落后于数据演进: history.json(周报/骤降历史)、cabin_history.json(公务舱环形库)、point_fill_cache.json(精点回填缓存)、sched_deposit.json(养板队列)统统不在包里, 迁到新设备会静默丢四大耐久状态, 全部补回 ITEMS; ② 迁移包带 bundle_manifest.json(format/code_ver/逐成员 sha256), restore 先验签再落盘——传输损坏或被改动的包直接拒收(--force 可强行, 自担风险), v0.41 无封条的旧包仍兼容; ③ 导入前自动落 pre-restore-safety-*.zip 安全备份, 坏导入本身一条命令可回滚; ④ 新增 GET /api/bundle/export(浏览器直接下载迁移包, 手机/Mac 无需 SSH)与 POST /api/bundle/import(sha256 校验→安全备份→恢复, 篡改包 409), 运维页新增「📦 备份与迁移」卡片。新增 9 项单测(清单回归/封条覆盖全部成员/篡改拒收/旧包兼容/manifest 不落盘/安全备份/导出流 PK 头/探针往返/非 zip 拒收), 全套 290 单测绿。
+
 ## 免责声明
 
 本项目仅聚合公开接口数据做个人出行比价提醒,不保证价格实时准确,不构成购票建议;购票请以航司/12306/平台下单页为准。请遵守各数据源服务条款,合理控制查询频率。

@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """v0.41 backup/restore roundtrip tests (tmp dirs, no repo state)."""
 import json
+import io
 import os
 import sys
 import tempfile
 import unittest
+import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -95,6 +97,147 @@ class BackupRestoreTests(unittest.TestCase):
                 self.assertEqual(f.read(), "keep me")
         finally:
             os.chmod(locked, 0o666)  # before tearDown wipes the tmp dir
+
+
+class ManifestTests(unittest.TestCase):
+    """v0.86: sealed bundles - sha256 manifest, tamper refusal,
+    manifest itself never restored, safety backup on import."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        root = self._tmp.name
+        os.makedirs(os.path.join(root, "data"))
+        with open(os.path.join(root, "config.json"), "w",
+                  encoding="utf-8") as f:
+            f.write('{"webui": {"port": 1}}')
+        with open(os.path.join(root, "data", "history.json"), "w",
+                  encoding="utf-8") as f:
+            f.write('{"days": {}}')
+        self.root = root
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _zip(self):
+        return backup.make_backup(
+            self.root, dest_dir=os.path.join(self.root, "backups"))[0]
+
+    def test_items_regained_post_v041_state(self):
+        for rel in ("data/history.json", "data/cabin_history.json",
+                    "data/point_fill_cache.json",
+                    "data/sched_deposit.json"):
+            self.assertIn(rel, backup.ITEMS)
+
+    def test_manifest_seals_every_member(self):
+        zpath = self._zip()
+        mf = restore.read_manifest(zpath)
+        self.assertEqual(mf["format"], 2)
+        with zipfile.ZipFile(zpath) as z:
+            names = {n.replace(os.sep, "/") for n in z.namelist()
+                     if n != backup.MANIFEST_NAME}
+        self.assertEqual(set(mf["sha256"]), names)
+        restore.verify_manifest(zpath)  # quiet pass
+
+    def test_tampered_member_refused(self):
+        import hashlib
+        zpath = self._zip()
+        # rewrite config.json inside the archive, keep the old seal
+        raw = os.path.join(self.root, "tampered.zip")
+        with zipfile.ZipFile(zpath) as z, \
+                zipfile.ZipFile(raw, "w") as out:
+            for info in z.infolist():
+                body = (b'{"webui": {"port": 999}}'
+                        if info.filename == "config.json"
+                        else z.read(info.filename))
+                out.writestr(info.filename, body)
+        with self.assertRaises(restore.ManifestError):
+            restore.verify_manifest(raw)
+        # digest math sanity: the probe file's own sha is stable
+        self.assertEqual(
+            hashlib.sha256(b"probe").hexdigest(),
+            hashlib.sha256(b"probe").hexdigest())
+
+    def test_unsealed_v041_archive_still_restores(self):
+        legacy = os.path.join(self.root, "legacy.zip")
+        with zipfile.ZipFile(legacy, "w") as z:
+            z.writestr("config.json", '{"webui": {"port": 2}}')
+        self.assertIsNone(restore.read_manifest(legacy))
+        self.assertIsNone(restore.verify_manifest(legacy))
+        restored, _skipped = restore.restore(legacy, root=self.root)
+        self.assertIn("config.json", restored)
+
+    def test_manifest_not_restored_and_safety_backup(self):
+        zpath = self._zip()
+        restored, _skipped = restore.restore(zpath, root=self.root)
+        self.assertNotIn(backup.MANIFEST_NAME, restored)
+        safety = restore.safety_backup(root=self.root)
+        self.assertTrue(safety and os.path.exists(safety))
+        self.assertIn("pre-restore-safety", os.path.basename(safety))
+
+
+class BundleApiTests(unittest.TestCase):
+    """v0.86 web endpoints: browser-exported zip stream + guarded
+    import (409 on tamper, probe file roundtrip)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import webui
+        cls.client = webui.app.test_client()
+        cls.repo_root = os.path.dirname(os.path.abspath(webui.__file__))
+
+    def _probe_zip(self, digest=None):
+        import hashlib
+        import io
+        body = b'{"probe": true}'
+        want = digest or hashlib.sha256(body).hexdigest()
+        mf = {"format": 2, "code_ver": "test",
+              "sha256": {"data/__bundle_probe__.json": want}}
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("data/__bundle_probe__.json", body)
+            z.writestr(backup.MANIFEST_NAME,
+                       json.dumps(mf, ensure_ascii=False))
+        return buf.getvalue()
+
+    def test_export_streams_zip(self):
+        r = self.client.get("/api/bundle/export")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.get_data().startswith(b"PK"))
+        r.close()
+
+    def test_import_probe_roundtrip_and_cleanup(self):
+        probe = os.path.join(self.repo_root, "data",
+                             "__bundle_probe__.json")
+        try:
+            r = self.client.post(
+                "/api/bundle/import",
+                data={"bundle": (io.BytesIO(self._probe_zip()),
+                                 "probe.zip")},
+                content_type="multipart/form-data")
+            self.assertEqual(r.status_code, 200)
+            d = r.get_json()
+            self.assertTrue(d["ok"])
+            self.assertGreaterEqual(d["restored"], 1)
+            self.assertTrue(os.path.exists(probe))
+        finally:
+            if os.path.exists(probe):
+                os.remove(probe)
+
+    def test_import_tampered_is_409(self):
+        r = self.client.post(
+            "/api/bundle/import",
+            data={"bundle": (io.BytesIO(self._probe_zip(
+                digest="0" * 64)), "probe.zip")},
+            content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 409)
+        self.assertFalse(r.get_json()["ok"])
+
+    def test_import_rejects_non_zip(self):
+        r = self.client.post(
+            "/api/bundle/import",
+            data={"bundle": (io.BytesIO(b"nope"), "probe.txt")},
+            content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 400)
 
 
 if __name__ == "__main__":

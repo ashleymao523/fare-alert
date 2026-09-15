@@ -630,6 +630,24 @@ checks["v0.85 推送时刻+可信度标记"] = (
     and ("borrow_votes" in _weekly_src)
     and os.path.exists(os.path.join("tests", "test_alert_msg.py")))
 
+_backup86_src = open(os.path.join("tools", "backup.py"),
+                     encoding="utf-8").read()
+_restore86_src = open(os.path.join("tools", "restore.py"),
+                      encoding="utf-8").read()
+_webui86_src = open(os.path.join("webui.py"), encoding="utf-8").read()
+_crawl86_src = open(os.path.join("web", "src", "components",
+                                 "CrawlView.jsx"), encoding="utf-8").read()
+checks["v0.86 迁移包+Web一键导出导入"] = (
+    ("data/history.json" in _backup86_src)
+    and ("data/sched_deposit.json" in _backup86_src)
+    and ("bundle_manifest.json" in _backup86_src)
+    and ("verify_manifest" in _restore86_src)
+    and ("safety_backup" in _restore86_src)
+    and ("/api/bundle/export" in _webui86_src)
+    and ("/api/bundle/import" in _webui86_src)
+    and ("BackupCard" in _crawl86_src)
+    and ("备份与迁移" in _dist_js))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:
