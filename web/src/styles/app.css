@@ -722,6 +722,16 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
 .pf-link { font-size: var(--fs-sm); }
 .sed-bar { flex: 1; height: var(--sp-md); background: var(--card2); border-radius: var(--r-pill); overflow: hidden; display: flex; }
 .sed-dows { margin-top: var(--sp-md); }
+.bm-box { border: 1px dashed var(--line-strong); border-radius: var(--r-xs); padding: var(--sp-md); margin-top: var(--sp-md); background: var(--card2); }
+.bm-head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-2); }
+.bm-code {
+  width: 100%; margin-top: var(--sp-2); resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: var(--fs-xs); color: var(--text-2);
+  border: 1px solid var(--line); border-radius: var(--r-xs);
+  background: var(--card); padding: var(--sp-2); word-break: break-all;
+}
+.bm-code:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 
 @media (max-width: 720px) {
   .hd-in { padding: var(--sp-sm) var(--sp-2); }

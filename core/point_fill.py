@@ -107,6 +107,55 @@ def put_rows(data_dir, route_id, rows, tax=0.0, now=None):
     return cache, n
 
 
+# v0.79: bookmarklet that runs ON the qunar flight-list page, mines the
+# cheapest price straight out of the rendered DOM and fires a no-cors
+# POST back to the panel. __FA_ORIGIN__ is swapped at generation time
+# (request.host_url), so a phone Safari copying it from the LAN URL
+# posts to the desktop box, not to 127.0.0.1.
+_BOOKMARKLET_TEMPLATE = r"""(function(){
+var ORIGIN="__FA_ORIGIN__";
+var q={};
+location.search.replace(/[?&]([^=&]+)=([^&]*)/g,function(_,k,v){q[k]=decodeURIComponent(v);});
+var from=q.depCity||"",to=q.arrCity||"",date=q.goDate||"";
+function toast(msg,ok){
+var t=document.createElement("div");
+t.textContent=msg;
+t.style.cssText="position:fixed;z-index:99999;right:12px;bottom:12px;background:"+(ok?"#0a8554":"#c0392b")+";color:#fff;padding:10px 14px;border-radius:8px;font:13px/1.4 -apple-system,sans-serif;max-width:80vw;box-shadow:0 4px 14px rgba(0,0,0,.25)";
+document.body.appendChild(t);
+setTimeout(function(){t.remove();},3500);
+}
+if(!from||!to||!date){toast("这不是去哪儿航班列表页(缺城市/日期参数)",false);return;}
+var prices=[],nodes=document.querySelectorAll("[class*=price]");
+for(var i=0;i<nodes.length;i++){
+var m=(nodes[i].textContent||"").replace(/[,\uFF0C\s]/g,"").match(/(?:\u00A5|\uFFE5)?(\d{2,5})/);
+if(m){var p=parseInt(m[1],10);if(p>=50&&p<=99999)prices.push(p);}
+}
+var best=prices.length?Math.min.apply(null,prices):0;
+if(!best){
+var inp=prompt("未抓到价格, 请输入 "+from+"-"+to+" "+date+" 最低含税总价(数字):");
+if(!inp)return;
+best=parseInt(inp.replace(/[^\d]/g,""),10);
+if(!best){toast("无效价格",false);return;}
+}
+var txt=document.body.innerText||"";
+var fm=txt.match(/([A-Z][A-Z0-9])\s?(\d{3,4})/);
+var fno=fm?fm[1]+fm[2]:"";
+var tm=txt.match(/(?:^|[^\d])(\d{1,2}:\d{2})(?=[^\d]|$)/g)||[];
+var dep=tm.length?tm[0].match(/\d{1,2}:\d{2}/)[0]:"";
+var arr=tm.length>1?tm[1].match(/\d{1,2}:\d{2}/)[0]:"";
+var body=JSON.stringify({from_city:from,to_city:to,rows:[{date:date,total:best,flight_no:fno,dep_time:dep,arr_time:arr}]});
+fetch(ORIGIN+"/api/point-fill",{method:"POST",headers:{"Content-Type":"text/plain"},body:body,mode:"no-cors"})
+.then(function(){toast("已回填 "+from+"-"+to+" "+date+" \u00A5"+best+" (含航班号/时刻则一并带上, 面板已热更新)",true);})
+.catch(function(){toast("回填失败: 面板不可达 "+ORIGIN,false);});
+})();"""
+
+
+def build_bookmarklet(origin):
+    """v0.79: full javascript: URL bound to one panel origin."""
+    return "javascript:" + _BOOKMARKLET_TEMPLATE.replace(
+        "__FA_ORIGIN__", str(origin).rstrip("/"))
+
+
 def merge_point_fill(deals, cache, route_id, now=None):
     """Replace reference-only rows (interp/nearby-ref) with fresh
     point-fill rows. Real rows (qunar/amadeus/point) always win.

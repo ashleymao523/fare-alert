@@ -31,6 +31,8 @@ export function fetchPointGaps() { return fetch("/api/point-gaps").then(j); }
 
 export function postPointFill(body) { return post("/api/point-fill", body); }
 
+export function fetchBookmarklet() { return fetch("/api/bookmarklet").then(j); }
+
 export function fetchWeekly() { return fetch("/api/weekly-report").then(j); }
 
 export function pushWeekly() { return post("/api/weekly-push", {}); }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { fetchCrawl, fetchSnapshot, fetchHealth,
-  fetchPointGaps, postPointFill } from "../lib/api.js";
+  fetchPointGaps, postPointFill, fetchBookmarklet } from "../lib/api.js";
 
 const SRC_NAMES = {
   "qunar-calendar": "去哪儿 · 低价日历",
@@ -99,6 +99,8 @@ function PointFillCard() {
   const [arr, setArr] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [bm, setBm] = useState("");
+  const [bmMsg, setBmMsg] = useState("");
   const load = () => fetchPointGaps()
     .then((d) => { setGaps(d.routes || []); setErr(""); })
     .catch((e) => setErr(String(e.message || e)));
@@ -123,6 +125,17 @@ function PointFillCard() {
       })
       .catch((e) => setMsg("失败: " + (e.message || e)))
       .finally(() => setBusy(false));
+  };
+  const genBm = () => {
+    setBmMsg("生成中…");
+    fetchBookmarklet()
+      .then((d) => { setBm(d.code || ""); setBmMsg(""); })
+      .catch((e) => setBmMsg("失败: " + (e.message || e)));
+  };
+  const copyBm = () => {
+    navigator.clipboard.writeText(bm)
+      .then(() => setBmMsg("已复制 ✅ 去收藏栏「新建书签」把它粘为网址"))
+      .catch(() => setBmMsg("复制失败: 手动全选下方代码复制"));
   };
   return (
     <div class="card">
@@ -188,6 +201,21 @@ function PointFillCard() {
           </div>
         </div>
       ) : null}
+      <div class="bm-box">
+        <div class="bm-head">
+          <b>半自动 · 精点回填书签</b>
+          <button class="btn" onClick={genBm}>{bm ? "重新生成" : "生成书签脚本"}</button>
+          {bm ? <button class="btn primary" onClick={copyBm}>复制</button> : null}
+          {bmMsg ? <span class="muted push-msg">{bmMsg}</span> : null}
+        </div>
+        <div class="muted">
+          ① 在本面板(手机用局域网地址打开)点生成+复制 → ② 浏览器收藏栏「新建书签」
+          把代码粘为网址 → ③ 在去哪儿精查页点这本书签, 自动抓最低价回填,
+          抓不到会弹窗让你手输。脚本自动指向当前面板地址, 换设备重新生成即可。
+        </div>
+        {bm ? <textarea class="bm-code" readonly rows="4"
+          onFocus={(e) => e.target.select()} value={bm} /> : null}
+      </div>
       <div class="muted">
         口径: 填「选中乘机人后的最终付款价」, 系统自动扣除机建+燃油得裸价;
         回填缓存 48 小时, 期间若聚合源出价则以真实源优先。

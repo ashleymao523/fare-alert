@@ -522,6 +522,16 @@ def api_point_fill():
     body = request.get_json(silent=True, force=True) or {}
     route_id = str(body.get("route_id") or "").strip()
     rows = body.get("rows") or []
+    if not route_id:
+        # v0.79: the bookmarklet only knows the city pair from the qunar
+        # URL - resolve the unique matching snapshot route for it.
+        fc = str(body.get("from_city") or "").strip()
+        tc = str(body.get("to_city") or "").strip()
+        cands = [r for r in
+                 ((_read_json(SNAPSHOT_PATH, None) or {}).get("routes") or [])
+                 if r.get("from_city") == fc and r.get("to_city") == tc]
+        if len(cands) == 1:
+            route_id = str(cands[0].get("id") or "")
     if not route_id or not isinstance(rows, list) or not rows:
         return jsonify({"ok": False,
                         "error": "route_id and non-empty rows required"}), 400
@@ -544,6 +554,17 @@ def api_point_fill():
                     timespec="seconds")
                 _atomic_write(SNAPSHOT_PATH, snap)
     return jsonify({"ok": True, "stored": stored, "patched": patched})
+
+
+@app.get("/api/bookmarklet")
+def api_bookmarklet():
+    """v0.79: generate the point-fill bookmarklet bound to THIS host.
+    Copy it from the LAN URL on a phone and it posts back to the
+    desktop box; no secrets inside, just the origin swap."""
+    from core.point_fill import build_bookmarklet
+    origin = request.host_url.rstrip("/")
+    return jsonify({"ok": True, "origin": origin,
+                    "code": build_bookmarklet(origin)})
 
 
 @app.post("/api/test-push")

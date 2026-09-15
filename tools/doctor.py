@@ -13,6 +13,7 @@ import argparse
 import io
 import json
 import os
+import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -137,6 +138,53 @@ def check_deploy():
     return PASS, "本机部署 (worker 由 restart_all/计划任务拉起)"
 
 
+def check_autostart():
+    """v0.79: reboot survivability - if neither the HKCU Run entries nor
+    the scheduled tasks exist, a reboot silently kills both the panel
+    and the board sedimentation loop."""
+    if os.name != "nt":
+        return PASS, "非 Windows (见部署指南对应形态)"
+    found = []
+    try:
+        import winreg
+        k = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run")
+        names = set()
+        i = 0
+        while True:
+            try:
+                names.add(winreg.EnumValue(k, i)[0])
+                i += 1
+            except OSError:
+                break
+        for n in ("FareAlertWebUI", "FareAlertWorker"):
+            if n in names:
+                found.append(n)
+    except OSError:
+        pass
+    if len(found) == 2:
+        return PASS, "开机自启已装 (webui+worker, HKCU Run)"
+    if not found:
+        # task-mode installs (install_autostart.ps1 -Mode task) land in
+        # the scheduler instead of the registry - probe it once.
+        try:
+            out = subprocess.run(
+                ["schtasks", "/query", "/fo", "csv", "/nh"],
+                capture_output=True, text=True, timeout=8).stdout or ""
+            if "FareAlertWebUI" in out and "FareAlertWorker" in out:
+                return PASS, "开机自启已装 (webui+worker, 计划任务)"
+            if "FareAlert" in out:
+                found = [x for x in ("FareAlertWebUI", "FareAlertWorker")
+                         if x in out]
+        except Exception:
+            pass
+    if not found:
+        return WARN, "未装开机自启 - 重启后面板与班期沉淀停摆; 运行 tools/install_autostart.ps1"
+    return WARN, ("自启不完整(%s) - 再跑一次 tools/install_autostart.ps1 补齐"
+                  % ",".join(found))
+
+
 def check_pwa(base):
     html = fetch_text(base, "/v2/")
     if html is None:
@@ -166,6 +214,7 @@ def run_all(base, local=True):
     cfg = _load_json(os.path.join(ROOT, "config.json")) if local else None
     rows = [
         ("deploy", check_deploy()),
+        ("autostart", check_autostart()),
         ("webui", check_webui(h)),
         ("snapshot", check_snapshot(h)),
         ("worker", check_worker(h)),

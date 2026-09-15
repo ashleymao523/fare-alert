@@ -9,8 +9,8 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from tools.doctor import (FAIL, PASS, WARN, check_backup, check_board,
                           check_code_sync, check_deploy, check_interval,
-                          check_push, check_snapshot, check_webui,
-                          check_worker)
+                          check_autostart, check_push, check_snapshot,
+                          check_webui, check_worker)
 
 fails = []
 
@@ -65,6 +65,9 @@ check("interval unset = WARN", check_interval({})[0] == WARN)
 _dep_lvl, _dep_msg = check_deploy()
 check("deploy is PASS/WARN", _dep_lvl in (PASS, WARN))
 check("deploy msg mentions form", ("容器" in _dep_msg) or ("本机" in _dep_msg))
+_as_lvl, _as_msg = check_autostart()
+check("autostart is PASS/WARN", _as_lvl in (PASS, WARN))
+check("autostart msg actionable", ("自启" in _as_msg) or ("Windows" in _as_msg))
 
 if fails:
     print("test_doctor FAILED: %d" % len(fails))

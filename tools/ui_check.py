@@ -527,6 +527,8 @@ _dist_html = open(os.path.join("web", "dist", "index.html"),
                   encoding="utf-8").read()
 _doctor_src = open(os.path.join("tools", "doctor.py"),
                    encoding="utf-8").read()
+_pf_src = open(os.path.join("core", "point_fill.py"),
+               encoding="utf-8").read()
 checks["v0.76 PWA+doctor+精点补查"] = (
     ("manifest.webmanifest" in _dist_html)
     and ("apple-touch-icon" in _dist_html)
@@ -556,6 +558,15 @@ checks["v0.78 精点补查UI+时刻沉淀"] = (
     and ("精点补查" in _dist_js)
     and ("缺口自动补齐预测" in _dist_js)
     and ("gap-chip" in _dist_css))
+
+checks["v0.79 书签回填+自启体检"] = (
+    ("build_bookmarklet" in _pf_src)
+    and ("/api/bookmarklet" in _webui_src)
+    and ("from_city" in _webui_src)
+    and ("check_autostart" in _doctor_src)
+    and ("fetchBookmarklet" in _api_js_src)
+    and ("书签" in _dist_js)
+    and ("bm-code" in _dist_css))
 
 bad = 0
 for k, v in checks.items():
