@@ -348,13 +348,63 @@ class TestBookingUpgrade(unittest.TestCase):
         out = fill_gaps(s, {}, cfg, "HGH", "CKG", ["2026-10-13"],
                         120, dd, "rt1", stats=st,
                         sleeper=lambda x: None)
-        self.assertEqual(out, [])
+        # v0.93: a failed upgrade on a GAP date still replays the
+        # cached quote (a stale GDS reference beats a grey dot), and
+        # ts refreshes so the retry cools down for POS_TTL.
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0].source, BOOKING_REF)
+        self.assertAlmostEqual(out[0].bare_price, 1153.0)
         self.assertEqual(st["probed"], 1)
         self.assertEqual(st["deferred"], 1)
         with open(cache_path(dd), encoding="utf-8") as f:
             e = json.load(f)["rt1"]["2026-10-13"]
         self.assertEqual(e["cny"], 1273.0)
         self.assertEqual(e["dep"], "18:40")
+        self.assertGreaterEqual(e["ts"], time.time() - 60)
+        import shutil
+        shutil.rmtree(dd, ignore_errors=True)
+
+    def test_zombie_4key_replays_cold_on_gap(self):
+        # v0.93 fix B: a pre-v0.88 zombie entry (cny only, NO dep
+        # key at all) must replay on gap dates WITHOUT a probe - the
+        # live deadlock where far grey dates starved forever.
+        dd = self._dd()
+        from core.booking_fill import _save
+        _save(dd, {"rt1": {"2026-11-05": {
+            "ts": time.time(), "cny": 1862.0,
+            "airline": "3U", "n": 378}}})
+        s = _Session(_payload())
+        cfg = {"booking_fill": {"fx_eur_cny": 8.0,
+                                "max_per_cycle": 6, "call_interval": 0}}
+        st = {}
+        out = fill_gaps(s, {}, cfg, "HGH", "CKG", ["2026-11-05"],
+                        120, dd, "rt1", stats=st,
+                        sleeper=lambda x: None)
+        self.assertEqual(st["probed"], 0)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0].dep_time, "")  # no itinerary yet
+        self.assertAlmostEqual(out[0].bare_price, 1742.0)
+        self.assertEqual(len(s.calls), 0)
+        import shutil
+        shutil.rmtree(dd, ignore_errors=True)
+
+    def test_gap_dates_outrank_extra_dates(self):
+        # v0.93 fix A: with a 1-probe budget, a FAR gap date must be
+        # probed before a NEAR extra date - the old flat sort() let
+        # time-gaps eat the whole budget and starve grey dots.
+        dd = self._dd()
+        s = _Session(_payload())
+        cfg = {"booking_fill": {"fx_eur_cny": 8.0,
+                                "max_per_cycle": 1, "call_interval": 0}}
+        st = {}
+        fill_gaps(s, {}, cfg, "HGH", "CKG", ["2026-11-12"],
+                  120, dd, "rt1", stats=st,
+                  extra_dates=["2026-10-01", "2026-09-20"],
+                  sleeper=lambda x: None)
+        self.assertEqual(st["probed"], 1)
+        self.assertEqual(len(s.calls), 1)
+        self.assertIn("2026-11-12", str(s.calls[0].get("date", "")) or
+                      str(s.calls[0]))
         import shutil
         shutil.rmtree(dd, ignore_errors=True)
 

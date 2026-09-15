@@ -310,7 +310,22 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
     rotation so every cached date upgrades to the full same-day
     timetable; a failed upgrade probe KEEPS the legacy quote (it only
     loses the timetable, never the reference price) and retries next
-    round - the cache cursor therefore never stalls again."""
+    round - the cache cursor therefore never stalls again.
+
+    v0.93: two anti-starvation fixes, both born from the live grey-
+    date deadlock the user re-reported ("dates the calendar leaves
+    grey still answer a direct point query"). A pre-v0.88 zombie
+    worker had written legacy 4-key entries (cny only, no dep/no
+    offers); the v0.88 replay gate then demanded dep+offers so those
+    rows NEVER replayed, and the v0.90 upgrade rotation never reached
+    them because targets sorted gap dates together with time-gaps -
+    the 6-per-cycle budget was always eaten by nearer extra dates.
+    Fix A: gap dates now outrank extra dates in the probe queue (and
+    within each group nearer dates first) - a visible grey date can
+    never be starved by schedule upgrades. Fix B: a fresh positive
+    entry replays its reference price even without itinerary fields
+    (v0.87 honesty: a real GDS quote beats a synthetic interp row);
+    the times simply ride the upgrade rotation afterwards."""
     from .alerts import tax_amount
     from .models import FlightDeal
 
@@ -324,7 +339,13 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
     sleeper = sleeper or time.sleep
 
     gap_set = {str(d) for d in (gap_dates or [])}
-    targets = sorted(gap_set | {str(d) for d in (extra_dates or [])})
+    # v0.93 fix A: gap dates (visible grey dots) outrank extra dates
+    # (schedule upgrades); near-first inside each group. The old flat
+    # sorted() let a flood of near time-gaps eat the whole 6-per-cycle
+    # budget and starve far grey dates forever.
+    targets = (sorted(gap_set) +
+               sorted(str(d) for d in (extra_dates or [])
+                      if str(d) not in gap_set))
     cache = _load(data_dir)
     bucket = cache.setdefault(route_id, {}) if isinstance(cache, dict) else {}
     now = time.time()
@@ -335,10 +356,19 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
         except ValueError:
             continue
         e = bucket.get(d)
+        full = bool(e and e.get("dep") is not None
+                    and (e.get("offers") or []))
+        # v0.87 zombie-worker entries carry cny but NO itinerary keys
+        # at all (missing dep key); entries WITH dep but no offers are
+        # v0.89 legacy quotes that keep riding the v0.90 upgrade
+        # rotation instead - only the truly bare ones replay cold.
+        zombie = bool(e and "dep" not in e)
         if (e and _fresh(e, now, POS_TTL)
                 and float(e.get("cny") or 0) > 0
-                and e.get("dep") is not None
-                and (e.get("offers") or [])):
+                and (full or (zombie and d in gap_set))):
+            # v0.93 fix B: zombie entries (price, zero itinerary)
+            # replay on gap dates - the reference price fills the
+            # grey dot now; times ride the next expired re-probe.
             if d in gap_set:
                 out.append(_deal_from(e, d, tax))
             continue
@@ -380,6 +410,13 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
             if e and float(e.get("cny") or 0) > 0:
                 # legacy positive quote: a failed timetable upgrade
                 # must not destroy the cached reference price
+                # v0.93: refresh ts so the surviving quote gets a
+                # 48h cooldown (no per-round retry storm), and a gap
+                # date still replays the old price this round - a
+                # stale GDS reference beats a synthetic interp row.
+                e["ts"] = now
+                if d in gap_set:
+                    out.append(_deal_from(e, d, tax))
                 deferred += 1
                 continue
             bucket[d] = {"ts": now, "cny": 0,

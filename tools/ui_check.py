@@ -707,7 +707,7 @@ _t90_src = open(os.path.join("tests", "test_booking_fill.py"),
                 encoding="utf-8").read()
 checks["v0.90 遗留缓存实测班次升级轮转"] = (
     ("legacy positive quote" in _bkf89_src)
-   and ('and (e.get("offers") or [])):' in _bkf89_src)
+   and ('and (e.get("offers") or []))' in _bkf89_src)
     and ("has_booking" in _bkf89_src)
     and ("offers and not has_booking" in _bkf89_src)
    and ("test_legacy_positive_reprobed_for_offers" in _t90_src))
@@ -734,6 +734,18 @@ checks["v0.92 实测班次直达购票+低价班标记"] = (
     and (".ft-alt.best" in _css92_src)
     and (".ft-best" in _css92_src)
     and ("a.ft-alt { text-decoration: none; }" in _css92_src))
+
+_bk93_src = open(os.path.join("core", "booking_fill.py"),
+                 encoding="utf-8").read()
+_t93_src = open(os.path.join("tests", "test_booking_fill.py"),
+                encoding="utf-8").read()
+checks["v0.93 灰点反饥饿: 僵尸条目回放+预算优先"] = (
+    ('"dep" not in e' in _bk93_src)
+    and ("zombie and d in gap_set" in _bk93_src)
+    and ("targets = (sorted(gap_set) +" in _bk93_src)
+    and ('e["ts"] = now' in _bk93_src)
+    and ("test_zombie_4key_replays_cold_on_gap" in _t93_src)
+    and ("test_gap_dates_outrank_extra_dates" in _t93_src))
 
 bad = 0
 for k, v in checks.items():
