@@ -212,6 +212,15 @@ def _booking_cross_fill(session, net, cfg, deals, fi, ti, date_from,
                      error="缺{}天·无IATA映射".format(len(still)))
         return deals
     t0b = time.time()
+    fx_v = float((cfg.get("booking_fill") or {}).get("fx_eur_cny", _BK_FX)
+                 or _BK_FX)
+    try:  # v0.99: daily ECB EUR->CNY reference rate (cached on disk)
+        from core import fx as fx_mod
+        rate = fx_mod.get_rate(session, cfg, DATA_DIR)
+        if rate and float(rate.get("rate") or 0) > 0:
+            fx_v = float(rate["rate"])
+    except Exception:
+        pass
     try:
         bstats = {}
         bk = booking_fill_gaps(session, net, cfg, fi2, ti2, still,
@@ -224,7 +233,7 @@ def _booking_cross_fill(session, net, cfg, deals, fi, ti, date_from,
         bk_cfg = cfg.get("booking_fill") or {}
         deals = booking_attach_times(
             deals, DATA_DIR, route_id, stats=bstats,
-            fx=float(bk_cfg.get("fx_eur_cny", _BK_FX) or _BK_FX))
+            fx=fx_v)
         if rec:
             rec.step("booking-fill", route_id, "cross fill", "ok",
                      (time.time() - t0b) * 1000, count=bstats.get("filled", 0),

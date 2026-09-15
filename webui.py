@@ -1275,6 +1275,12 @@ def api_health():
         timetable = coverage_stats(DATA_DIR)
     except Exception:
         timetable = None
+    fx = None
+    try:  # v0.99: ECB EUR->CNY reference rate observability
+        from core.fx import fx_snapshot
+        fx = fx_snapshot(DATA_DIR)
+    except Exception:
+        fx = None
     return jsonify({
         "ok": True,
         "snapshot": {"updated_at": updated, "age_min": age_min},
@@ -1284,6 +1290,7 @@ def api_health():
         "worker": worker,
         "revive": revive,
        "timetable": timetable,
+       "fx": fx,
        "push_pending": _push_pending(),
        "backup": backup,
    })

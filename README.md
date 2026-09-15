@@ -283,6 +283,7 @@ python tools/acceptance.py
 - [x] **v0.97 周报亮点带起降时刻**: 归档层(core/history._route_metrics)此前只存价格统计, 最优班的 dep/arr/no/dur 在归档边界被丢掉——周报亮点与推送从归档生成, 自然显示不了「几点飞」。现在归档透传时刻, week_highlights 的 sharp_drops/below_threshold 行携带 dep_time/arr_time/flight_no, 前端骤降/破线行渲染时刻 chip, 推送亮点文本「06:50起飞」; 明日首个新归档日后生效(今日已归档的 4 条 meta 无时刻, 属预期)。
 
 - [x] **v0.98 运行时看门狗(第 4 层自愈)**: 前三层(07:00 supervisor/Startup/.cmd/07:30 计划任务)都只负责「启动」, 运行中死亡要等 6h 追赶或次日窗口。① core/revive 心跳 >=90min(2 个采集周期)立即探活+复活, 每小时限 1 次防风暴, 进程在而心跳老只记 note 不 kill; ② tools/watchdog.py 外部守护 webui 本体(每 15min 计划任务 FareAlertWatchdog, 连续 2 次探活失败才重启, 30min 冷却), 状态落 data/watchdog_state.json 并入 /api/health; ③ 修复 register_revive_task.ps1 路径反斜杠丢失(toolsautostart_worker.ps1 -> tools/autostart_worker.ps1, 原任务明早首跑必失败), 两任务已重注册验证 Ready。
+- [x] **v0.99 ECB 每日汇率**: 灰点日期的精点补价(booking.com 单日报价)此前用写死 7.8 换算 EUR, 是参考价最大误差源。① core/fx.py 每日 ECB 参考汇率链: frankfurter.app(ECB 免 key 镜像) -> ECB 官方 SDW CSV -> 隔夜缓存(stale 标记) -> 固定汇率兜底, 12h 刷新, 全链路不抛异常; ② booking 缓存条目新增 eur 原值, 回放时按当前汇率重算 cny(旧条目兼容直通), fill_gaps/backfill_prices 统一走 _resolve_fx; ③ config 新增 booking_fill.fx_mode(ecb/fixed, 默认 fixed 零网络), /api/health 新增 fx 观测块。test_fx 6 例。
 
 ## 免责声明
 

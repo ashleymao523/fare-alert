@@ -802,6 +802,26 @@ checks["v0.98 运行时看门狗: 90min复活+外部webui守护"] = (
     and ("test_healthy_resets_fail_counter" in _tw98_src)
     and ("test_runtime_revive_midday_dead_worker" in _tr98_src))
 
+_fx99_src = open(os.path.join("core", "fx.py"),
+                 encoding="utf-8").read()
+_bf99_src = open(os.path.join("core", "booking_fill.py"),
+                 encoding="utf-8").read()
+_web99_src = open("webui.py", encoding="utf-8").read()
+_tfx99_src = open(os.path.join("tests", "test_fx.py"),
+                  encoding="utf-8").read()
+checks["v0.99 ECB daily fx: precise backfill accuracy"] = (
+    ("api.frankfurter.app" in _fx99_src)
+    and ("data-api.ecb.europa.eu" in _fx99_src)
+    and ("fx_cache.json" in _fx99_src)
+    and ('"fallback"' in _fx99_src)
+    and ("_resolve_fx" in _bf99_src)
+    and ("_reprice_eur" in _bf99_src)
+    and ('"eur": round(float(got["total_eur"]), 2)' in _bf99_src)
+    and ("fx_snapshot" in _web99_src)
+    and ("test_frankfurter_primary" in _tfx99_src)
+    and ("test_ecb_official_fallback" in _tfx99_src)
+    and ("test_reprice_eur" in _tfx99_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

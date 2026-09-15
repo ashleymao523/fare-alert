@@ -311,6 +311,23 @@ def _fresh(entry, now, ttl):
         return False
 
 
+def _resolve_fx(session, cfg, data_dir, bk_cfg=None):
+    """v0.99: EUR->CNY via core.fx (live ECB -> stale cache -> cfg
+    fixed). get_rate itself never raises and falls back to the
+    configured fixed rate, so this only hits the last branch when
+    the fx module itself fails to import."""
+    try:
+        from . import fx as fx_mod
+        rate = fx_mod.get_rate(session, cfg, data_dir)
+        if rate and float(rate.get("rate") or 0) > 0:
+            return float(rate["rate"])
+    except Exception:
+        pass
+    bk_cfg = bk_cfg or ((cfg.get("booking_fill") or {})
+                        if isinstance(cfg, dict) else {})
+    return float(bk_cfg.get("fx_eur_cny", DEFAULT_FX) or DEFAULT_FX)
+
+
 def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
               route_id, stats=None, sleeper=None, extra_dates=None):
     """Return list[FlightDeal] (source=booking-ref) for gap dates.
@@ -354,7 +371,7 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
 
     stats = stats if stats is not None else {}
     bk_cfg = (cfg.get("booking_fill") or {}) if isinstance(cfg, dict) else {}
-    fx = float(bk_cfg.get("fx_eur_cny", DEFAULT_FX) or DEFAULT_FX)
+    fx = _resolve_fx(session, cfg, data_dir, bk_cfg)
     max_n = int(bk_cfg.get("max_per_cycle", DEFAULT_MAX_PER_CYCLE)
                 or DEFAULT_MAX_PER_CYCLE)
     interval = float(bk_cfg.get("call_interval", CALL_INTERVAL) or CALL_INTERVAL)
@@ -389,6 +406,10 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
         if (e and _fresh(e, now, POS_TTL)
                 and float(e.get("cny") or 0) > 0
                 and (full or (zombie and d in gap_set))):
+            # v0.99: entries probed since the ECB fx era carry the
+            # raw EUR total - reprice with the CURRENT daily rate so
+            # a cached quote never goes stale with the calendar.
+            _reprice_eur(e, fx)
             # v0.93 fix B: zombie entries (price, zero itinerary)
             # replay on gap dates - the reference price fills the
             # grey dot now; times ride the next expired re-probe.
@@ -415,6 +436,7 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
         if got and got.get("total_eur", 0) > 0:
             cny = round(got["total_eur"] * fx, 0)
             bucket[d] = {"ts": now, "cny": cny,
+                         "eur": round(float(got["total_eur"]), 2),
                          "airline": got.get("airline") or "",
                          "n": got.get("n_offers") or 0,
                          "fno": got.get("fno") or "",
@@ -438,6 +460,7 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
                 # date still replays the old price this round - a
                 # stale GDS reference beats a synthetic interp row.
                 e["ts"] = now
+                _reprice_eur(e, fx)
                 if d in gap_set:
                     out.append(_deal_from(e, d, tax, fx))
                 deferred += 1
@@ -449,6 +472,18 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
         _save(data_dir, cache)
     stats.update({"probed": probed, "deferred": deferred, "filled": len(out)})
     return out
+
+
+def _reprice_eur(entry, fx):
+    """v0.99: recompute cny from the stored EUR total using the
+    current daily ECB rate. Legacy pre-v0.99 entries (cny only, no
+    eur key) pass through untouched."""
+    try:
+        eur = float(entry.get("eur") or 0)
+        if eur > 0:
+            entry["cny"] = round(eur * float(fx), 0)
+    except (TypeError, ValueError):
+        pass
 
 
 def _deal_from(entry, d, tax, fx=DEFAULT_FX):
@@ -596,7 +631,7 @@ def backfill_prices(session, net_cfg, cfg, data_dir, route_iatas,
     fetch = fetch or fetch_lowest
     bk_cfg = (cfg.get("booking_fill") or {}) \
         if isinstance(cfg, dict) else {}
-    fx = float(bk_cfg.get("fx_eur_cny", DEFAULT_FX) or DEFAULT_FX)
+    fx = _resolve_fx(session, cfg, data_dir, bk_cfg)
     interval = float(bk_cfg.get("call_interval", CALL_INTERVAL)
                      or CALL_INTERVAL)
     cache = _load(data_dir)
