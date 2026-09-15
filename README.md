@@ -278,6 +278,8 @@ python tools/acceptance.py
 - [x] **v0.94 逐班参考价**: 详情卡「当日实测班次」此前只显示每班的时刻/机型, 价格只有一个日期地板价——用户无法直接对比 3U2581 与 GJ8827 哪班便宜。live 探测实证 LOWEST_PRICE 的 flightOffers 里每个 offer 都带 priceBreakdown.total(units+nanos, EUR 含税总价, 与 aggregation.minPrice 同构), 且 offers 本身按价格升序。链路: offer_list 解析 price_eur(非 EUR/缺字段兼容为 0) → 缓存 offers 自动带上 → _deal_from/attach_times 的 alt_times 按 fx(booking_fill.fx_eur_cny, 默认 7.8)折算出 price(CNY) → /api/snapshot alt_times 透出 → DayDetail.jsx 实测班次 chip 显示「¥参考价」+ title 提示。旧缓存 offers 无 price_eur 不显示价格(不报错), 升级轮转 48h 内自然带上; 参考价为 GDS 国际渠道 EUR 折算, 通常高于国内 OTA 实付, 仅展示不进提醒/KPI。单测 19 用例全绿(price 解析/无价兼容/fx 折算/attach 透传 4 处断言新增), 版本 0.94 五处盖章。
 - [x] **v0.95 逐班价全量回填 + 部署自愈加固**: 两处收尾。① 回填工具化——v0.94 的逐班价只有新探测的日期才有, 存量 240 条缓存要等 48h TTL 过期后按 6/轮慢慢轮转(约 2 天才能全部带价); 新增 core.backfill_prices + `tools/backfill_offer_prices.py` CLI: 跳过已带价/负缓存条目(负缓存 TTL 语义不动), 失败探测绝不覆盖正条目, 每 10 条做一次 entry 级磁盘合并保存(reload 磁盘再覆盖 touched 条目, 与并发 worker 轮次互不丢写), >=4s 限速, 支持 --max/--interval/--routes。② 部署三层自愈——运行 tools/install_autostart.py 安装登录自启(Startup 文件夹 .cmd 防 MSIX 注册表面纱 + HKCU Run 双保险), 尽力注册每日 07:30 的 FareAlertWorkerRevive 计划任务(硬内核主机可能拒绝, 拒绝时靠 webui 内置 07:00 supervisor 线程兜底), /api/health 的 revive.task 可观测安装状态。单测 20 用例全绿(新增回填合并/跳过/预算 3 例), 版本 0.95 五处盖章。
 
+- [x] **v0.96 当日最低参考班徽章**: 详情卡「当日实测班次」按起飞时刻排序展示, 用户要比价得逐班扫一遍价格——现在后端 `_alt_times_with_best_ref` 在 booking 来源且 price>0 的班次里选出参考价最低者标 `best_ref`, 前端该班 chip 加琥珀色「最低参考」角标; 时刻排序保持不动(比价看徽章, 赶时间看顺序两不误), 无价/非 booking 班次永不中标, 并列取首个。实测: 杭州-重庆 09-16 的 3U2579(¥1296) 压过 HU7421(¥2101) 中标。回填验收: 4 路由 x 60 天 = 240/240 全部带价, 印证「灰点日期精点必有价」。
+
 ## 免责声明
 
 本项目仅聚合公开接口数据做个人出行比价提醒,不保证价格实时准确,不构成购票建议;购票请以航司/12306/平台下单页为准。请遵守各数据源服务条款,合理控制查询频率。

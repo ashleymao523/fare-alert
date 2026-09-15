@@ -278,9 +278,12 @@ export default function DayDetail({ route, date }) {
                 // also appears in the measured timetable, gets a badge -
                 // price + exact time + deep link in one chip.
                 const best = (d.flight_no || "").trim() && a.no === d.flight_no.trim();
+                // v0.96: cheapest per-flight Booking reference quote
+                const refBest = !!a.best_ref && (a.price || 0) > 0;
                 return (
                   <a
-                    class={"ft-alt" + (best ? " best" : "")}
+                    class={"ft-alt" + (best ? " best" : "")
+                      + (refBest ? " ref-best" : "")}
                     href={dayListUrl(route, date)}
                     target="_blank"
                     rel="noopener"
@@ -292,10 +295,12 @@ export default function DayDetail({ route, date }) {
                         : "")
                       + (a.via ? " · 经停" + a.via : "")
                       + (a.price ? " · 参考价约¥" + Math.round(a.price) : "")
+                      + (refBest ? " · 当日参考价最低" : "")
                       + (best ? " · 本日最低价航班" : "")
                       + " · 点击直达去哪儿当日列表购票"}
                   >
                     {best ? <span class="ft-best">低价</span> : null}
+                    {refBest ? <span class="ft-best ref">最低参考</span> : null}
                     {a.no} {a.dep}{a.arr ? "→" + a.arr : ""}
                     {a.price ? <span class="ft-alt-craft">¥{Math.round(a.price)}</span> : null}
                     {a.craft ? <span class="ft-alt-craft">{a.craft.split("(")[0]}</span> : null}

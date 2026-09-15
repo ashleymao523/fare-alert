@@ -297,11 +297,13 @@ a.ft-alt { text-decoration: none; }
 a.ft-alt:hover { border-color: var(--accent); }
 /* v0.92: OTA-cheapest flight inside the measured timetable chip */
 .ft-alt.best { background: var(--green-bg); border-color: var(--green); color: var(--green-d); font-weight: 600; }
+.ft-alt.ref-best { background: var(--amber-bg); border-color: var(--amber); color: var(--amber-d); font-weight: 600; }
 .ft-best {
   display: inline-block; margin-right: 4px; padding: 0 5px;
   border-radius: var(--r-pill); font-size: var(--fs-xs); line-height: 1.5;
   background: var(--green); color: var(--on-accent);
 }
+.ft-best.ref { background: var(--amber); }
 .tl-box { display: block; }
 .tl-rail { position: relative; height: 46px; margin: var(--sp-xs) 0 var(--sp-sm); }
 .tl-rail::before { content: ""; position: absolute; left: 0; right: 0; top: 22px; height: 2px; border-radius: var(--r-pill); background: var(--line); }

@@ -73,6 +73,28 @@ def test_flight_dict_serializes_arr_est():
     assert out["arr_est"] == "10:25" and out["arr_time"] == ""
 
 
+def test_alt_times_best_ref():
+    # v0.96: the cheapest priced booking flight gets best_ref; a
+    # cheaper NON-booking alt or an unpriced one must never win.
+    d = FlightDeal(date="2026-09-16", bare_price=300, flight_no="3U2581")
+    d.alt_times = [
+        {"no": "3U2579", "dep": "06:50", "src": "booking",
+         "price": 1296.0, "exact": True},
+        {"no": "HU7421", "dep": "16:55", "src": "booking",
+         "price": 2101.0, "exact": True},
+        {"no": "MF9999", "dep": "12:00", "src": "board", "price": 0},
+        {"no": "GJ0001", "dep": "07:05", "src": "booking",
+         "price": 0, "exact": True},
+    ]
+    route = {"from_city": "杭州", "to_city": "重庆", "threshold_total": 500}
+    out = _flight_dict(route, d, {"tax": TAX}, set())
+    alts = {a["no"]: a for a in out["alt_times"]}
+    assert alts["3U2579"]["best_ref"] is True   # cheapest priced booking
+    assert alts["HU7421"]["best_ref"] is False
+    assert alts["MF9999"]["best_ref"] is False  # not booking / unpriced
+    assert alts["GJ0001"]["best_ref"] is False  # booking but unpriced
+
+
 def test_interp_two_side():
     deals = [FlightDeal("2026-09-01", 100, "MU5100", dep_time="08:00",
                         arr_time="10:30", duration_text="2:30"),

@@ -747,6 +747,17 @@ checks["v0.93 灰点反饥饿: 僵尸条目回放+预算优先"] = (
     and ("test_zombie_4key_replays_cold_on_gap" in _t93_src)
     and ("test_gap_dates_outrank_extra_dates" in _t93_src))
 
+_main96_src = open("main.py", encoding="utf-8").read()
+_t96_src = open(os.path.join("tests", "test_core.py"),
+                encoding="utf-8").read()
+checks["v0.96 当日最低参考班徽章"] = (
+    ("_alt_times_with_best_ref" in _main96_src)
+    and ("best_ref" in _main96_src)
+    and ('"ft-best ref"' in _day92_src)
+    and ("ref-best" in _day92_src)
+    and (".ft-alt.ref-best" in _css92_src)
+    and ("test_alt_times_best_ref" in _t96_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

@@ -88,6 +88,33 @@ def make_session(cfg):
     return s
 
 
+def _alt_times_with_best_ref(alts, limit=6):
+    """v0.96: serialize alt_times and flag the cheapest per-flight
+    Booking reference quote (best_ref) so the UI can badge it - the
+    user compares 3U vs MF at a glance without re-sorting the
+    timetable (departure order stays readable)."""
+    rows = [a for a in (alts or []) if isinstance(a, dict)][:limit]
+    priced = [a for a in rows
+              if a.get("src") == "booking"
+              and float(a.get("price") or 0) > 0]
+    best_no = ""
+    if priced:
+        best_no = min(priced,
+                      key=lambda a: float(a.get("price") or 0)
+                      ).get("no") or ""
+    return [{"no": a.get("no"), "dep": a.get("dep"),
+             "arr": a.get("arr"),
+             "airline": a.get("airline"),
+             "craft": a.get("craft"),
+             "via": a.get("via"),
+             "dur": a.get("dur") or "",
+             "price": a.get("price") or 0,
+             "exact": bool(a.get("exact")),
+             "src": a.get("src") or "",
+             "best_ref": bool(a.get("no") and a.get("no") == best_no)}
+            for a in rows]
+
+
 def _flight_dict(route, deal, cfg, alert_dates):
     tax_cfg = cfg.get("tax", {})
     bag = cfg.get("baggage_policy", {})
@@ -134,16 +161,7 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "arr_src": deal.arr_src,
         "source": deal.source,
         "ref_offset": deal.ref_offset if deal.source == "nearby-ref" else 0,
-        "alt_times": [{"no": a.get("no"), "dep": a.get("dep"),
-                       "arr": a.get("arr"),
-                       "airline": a.get("airline"),
-                       "craft": a.get("craft"),
-                       "via": a.get("via"),
-                       "dur": a.get("dur") or "",
-                       "price": a.get("price") or 0,
-                       "exact": bool(a.get("exact")),
-                       "src": a.get("src") or ""}
-                      for a in (deal.alt_times or [])][:6],
+        "alt_times": _alt_times_with_best_ref(deal.alt_times),
         "stop_kind": deal.stop_kind,
         "stop_city": deal.stop_city,
         "stop_arr": deal.stop_arr,
