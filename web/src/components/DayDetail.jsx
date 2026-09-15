@@ -273,21 +273,33 @@ export default function DayDetail({ route, date }) {
                 title="Booking.com 该日期实测报价航班的精确起降时刻(非星期推断)">
                 当日实测班次 · {alts.filter((a) => a.src === "booking").length}班
               </span>
-              {alts.filter((a) => a.src === "booking").map((a) => (
-                <span
-                  class="ft-alt"
-                  title={"Booking当日实测 " + a.no + " " + a.dep
-                    + (a.arr ? "→" + a.arr : "")
-                    + (a.dur ? " · 历时" + a.dur : "")
-                    + ((a.airline || a.craft)
-                      ? " · " + [a.airline, a.craft].filter(Boolean).join(" ")
-                      : "")
-                    + (a.via ? " · 经停" + a.via : "")}
-                >
-                  {a.no} {a.dep}{a.arr ? "→" + a.arr : ""}
-                  {a.craft ? <span class="ft-alt-craft">{a.craft.split("(")[0]}</span> : null}
-                </span>
-              ))}
+              {alts.filter((a) => a.src === "booking").map((a) => {
+                // v0.92: the OTA cheapest flight of this date, when it
+                // also appears in the measured timetable, gets a badge -
+                // price + exact time + deep link in one chip.
+                const best = (d.flight_no || "").trim() && a.no === d.flight_no.trim();
+                return (
+                  <a
+                    class={"ft-alt" + (best ? " best" : "")}
+                    href={dayListUrl(route, date)}
+                    target="_blank"
+                    rel="noopener"
+                    title={"Booking当日实测 " + a.no + " " + a.dep
+                      + (a.arr ? "→" + a.arr : "")
+                      + (a.dur ? " · 历时" + a.dur : "")
+                      + ((a.airline || a.craft)
+                        ? " · " + [a.airline, a.craft].filter(Boolean).join(" ")
+                        : "")
+                      + (a.via ? " · 经停" + a.via : "")
+                      + (best ? " · 本日最低价航班" : "")
+                      + " · 点击直达去哪儿当日列表购票"}
+                  >
+                    {best ? <span class="ft-best">低价</span> : null}
+                    {a.no} {a.dep}{a.arr ? "→" + a.arr : ""}
+                    {a.craft ? <span class="ft-alt-craft">{a.craft.split("(")[0]}</span> : null}
+                  </a>
+                );
+              })}
             </div>
           )}
           {!hasDep && !hasArr && !alts.some((a) => a.src === "booking") && alts.length > 0 && (

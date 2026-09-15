@@ -721,7 +721,19 @@ checks["v0.91 实测班次覆盖监控可见化"] = (
     and ("coverage_stats(DATA_DIR)" in _webui91_src)
     and ("班次实测覆盖" in _src91_src)
     and ("hb.timetable.pending" in _src91_src)
-    and ("test_mixed_cache_counts" in _t90_src))
+   and ("test_mixed_cache_counts" in _t90_src))
+
+_day92_src = open(os.path.join("web", "src", "components",
+                           "DayDetail.jsx"), encoding="utf-8").read()
+_css92_src = open(os.path.join("web", "src", "styles", "app.css"),
+                  encoding="utf-8").read()
+checks["v0.92 实测班次直达购票+低价班标记"] = (
+    ('"ft-alt" + (best ? " best" : "")' in _day92_src)
+    and ("ft-best" in _day92_src)
+    and ("本日最低价航班" in _day92_src)
+    and (".ft-alt.best" in _css92_src)
+    and (".ft-best" in _css92_src)
+    and ("a.ft-alt { text-decoration: none; }" in _css92_src))
 
 bad = 0
 for k, v in checks.items():
