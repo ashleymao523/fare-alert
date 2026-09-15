@@ -137,6 +137,8 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "stop_city": deal.stop_city,
         "stop_arr": deal.stop_arr,
         "borrow_dow": deal.borrow_dow,
+        "borrow_votes": deal.borrow_votes,
+        "borrow_unstable": deal.borrow_unstable,
     }
 
 
@@ -536,6 +538,18 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
         if not d.arr_src or d.arr_src == "airport-board-x":
             d.arr_src = "airport-board" if exact else "airport-board-x"
 
+    def _mark_borrow(d, ent, exact):
+        """v0.84: carry the borrow provenance (source dow + consensus
+        votes + instability flag) from a board_lookup_x hit onto the deal."""
+        if exact:
+            d.borrow_dow = ""
+            d.borrow_votes = 0
+            d.borrow_unstable = False
+            return
+        d.borrow_dow = (ent.get("borrow_dow") or "")
+        d.borrow_votes = int(ent.get("borrow_consensus") or 0)
+        d.borrow_unstable = bool(ent.get("borrow_unstable"))
+
     fc, tc = route.get("from_city", ""), route.get("to_city", "")
     fi = (route.get("from_iata") or "").strip().upper() or city_iata(fc)
     ti = (route.get("to_iata") or "").strip().upper() or city_iata(tc)
@@ -606,7 +620,7 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                     ent, exact = hit
                     if not d.dep_time:
                         d.dep_time = ent["dep"]
-                        d.borrow_dow = "" if exact else (ent.get("borrow_dow") or "")
+                        _mark_borrow(d, ent, exact)
                         _mark_time_src(d, exact)  # weakest mark wins across segs
                         _mark_dep_src(d, exact)
                         n_board += 1
@@ -625,8 +639,8 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                 if hit and hit[0].get("arr"):
                     ent, exact = hit
                     d.arr_time = ent["arr"]
-                    if not exact and not d.dep_time:
-                        d.borrow_dow = ent.get("borrow_dow") or ""
+                    if not d.dep_time:
+                        _mark_borrow(d, ent, exact)
                     _mark_time_src(d, exact)
                     _mark_arr_src(d, exact)
                     n_board += 1
@@ -675,7 +689,7 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                 if not d.dep_time and ent.get("dep"):
                     d.dep_time = ent["dep"]
                     got = True
-                    d.borrow_dow = "" if exact else (ent.get("borrow_dow") or "")
+                    _mark_borrow(d, ent, exact)
                     _mark_dep_src(d, exact)
                 if not d.arr_time and ent.get("arr"):
                     d.arr_time = ent["arr"]

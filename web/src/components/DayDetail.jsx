@@ -22,15 +22,22 @@ function borrowLabel(d) {
   return w && DOW_CN[+w] ? ("借周" + DOW_CN[+w]) : "跨日";
 }
 
-function timeSrcBadge(label, src, borrowDow) {
+function timeSrcBadge(label, src, deal) {
   if (src === "airport-board") return <span class="badge gray ts-badge">{label}·班期精查</span>;
   if (src === "airport-board-x") {
-    const tag = (borrowDow !== undefined && borrowDow !== null
-      && String(borrowDow) && DOW_CN[+borrowDow])
-      ? ("借周" + DOW_CN[+borrowDow]) : "跨日";
+    const d = deal || {};
+    const tag = (d.borrow_dow !== undefined && d.borrow_dow !== null
+      && String(d.borrow_dow) && DOW_CN[+d.borrow_dow])
+      ? ("借周" + DOW_CN[+d.borrow_dow]) : "跨日";
+    const votes = +d.borrow_votes || 0;
+    const tip = d.borrow_unstable
+      ? "该班次周内各天起飞时刻不一, 显示的是最接近的一条, 请以购票页当日列表为准"
+      : (votes >= 2
+        ? "同一航班号周内" + votes + "天时刻一致(稳定排班), 同航季通常可靠, 仅供参考; 班期库沉淀满7天后自动变为精查"
+        : "同一航班号" + tag + "班期的时刻, 同航季通常一致, 仅供参考; 班期库沉淀满7天后自动变为精查");
     return (
-      <span class="badge amber ts-badge" title={"同一航班号" + tag + "班期的时刻, 同航季通常一致, 仅供参考; 班期库沉淀满7天后自动变为精查"}>
-        {label}·{tag}参考
+      <span class="badge amber ts-badge" title={tip}>
+        {label}·{tag}{d.borrow_unstable ? "?" : ""}参考
       </span>
     );
   }
@@ -197,12 +204,12 @@ export default function DayDetail({ route, date }) {
       const lab = depSrc === "amadeus" ? "计划时刻"
         : (depSrc === "airport-board-x" ? (borrowLabel(d) + "班期")
           : (depSrc === "alt-ref" ? "参考班次" : "计划时刻"));
-      midBadges = timeSrcBadge(lab, depSrc, d.borrow_dow);
+      midBadges = timeSrcBadge(lab, depSrc, d);
     } else {
       midBadges = (
         <span>
-          {timeSrcBadge("起飞", depSrc, d.borrow_dow)}
-          {timeSrcBadge("落地", arrSrc, d.borrow_dow)}
+          {timeSrcBadge("起飞", depSrc, d)}
+          {timeSrcBadge("落地", arrSrc, d)}
         </span>
       );
     }

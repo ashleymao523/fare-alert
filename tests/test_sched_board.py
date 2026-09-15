@@ -315,6 +315,61 @@ class TestLookupX(unittest.TestCase):
                                             "杭州", "郑州"))
 
 
+class TestBorrowConsensus(unittest.TestCase):
+    """v0.84 consensus borrow: lend the majority dep time across dows;
+    flag honest disagreement when candidate dows all differ."""
+
+    def _db(self, dows):
+        return {"updated": 0, "flights": {"GJ8889": {"dows": dows}}}
+
+    def test_majority_dep_wins_and_counts_votes(self):
+        # 2026-09-20 is a Sunday (dow 6, empty in db); dows 1/3/4 agree
+        # on 06:00 -> consensus borrow carries the agreed time + votes
+        db = self._db({
+            "1": {"dep": "06:00", "arr": "", "from": "杭州", "to": "重庆"},
+            "3": {"dep": "06:00", "arr": "08:25", "from": "杭州", "to": "重庆"},
+            "4": {"dep": "06:00", "arr": "", "from": "杭州", "to": "重庆"},
+            "0": {"dep": "07:40", "arr": "", "from": "杭州", "to": "重庆"},
+        })
+        hit = sb.board_lookup_x(db, "GJ8889", "2026-09-20", "杭州", "重庆")
+        self.assertEqual(hit[1], False)
+        self.assertEqual(hit[0]["dep"], "06:00")
+        self.assertEqual(hit[0]["borrow_consensus"], 3)
+        self.assertFalse(hit[0].get("borrow_unstable"))
+        # within the consensus group the dual-time entry wins
+        self.assertEqual(hit[0]["arr"], "08:25")
+        # vote metadata never leaks into the stored db
+        for e in db["flights"]["GJ8889"]["dows"].values():
+            self.assertNotIn("borrow_consensus", e)
+
+    def test_disagreeing_dows_flag_unstable(self):
+        db = self._db({
+            "1": {"dep": "06:00", "arr": "08:25", "from": "杭州", "to": "重庆"},
+            "3": {"dep": "07:30", "arr": "09:55", "from": "杭州", "to": "重庆"},
+        })
+        hit = sb.board_lookup_x(db, "GJ8889", "2026-09-20", "杭州", "重庆")
+        self.assertEqual(hit[1], False)
+        self.assertTrue(hit[0]["borrow_unstable"])
+        self.assertNotIn("borrow_consensus", hit[0])
+
+    def test_lone_candidate_is_thin_not_unstable(self):
+        # one dow only = thin evidence, not contradiction: plain borrow
+        db = self._db({"2": {"dep": "07:55", "arr": "",
+                             "from": "杭州", "to": "重庆"}})
+        hit = sb.board_lookup_x(db, "GJ8889", "2026-09-20", "杭州", "重庆")
+        self.assertEqual(hit[1], False)
+        self.assertEqual(hit[0]["dep"], "07:55")
+        self.assertFalse(hit[0].get("borrow_unstable"))
+
+    def test_exact_hit_carries_no_vote_fields(self):
+        db = self._db({"3": {"dep": "06:00", "arr": "08:25",
+                             "from": "杭州", "to": "重庆"}})
+        hit = sb.board_lookup_x(db, "GJ8889", "2026-09-17", "杭州", "重庆")
+        self.assertEqual(hit[1], True)
+        self.assertNotIn("borrow_consensus", hit[0])
+        self.assertNotIn("borrow_unstable", hit[0])
+
+
 class _FakeResp:
     def __init__(self, payload):
         self._p = payload

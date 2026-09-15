@@ -582,9 +582,38 @@ def board_lookup_x(db, flight_no, date_iso, from_city, to_city):
     # dual-time rows carry the most info; otherwise prefer an entry that
     # at least has a dep time so the caller can still render the departure
     pool = dual or [(dk, e) for dk, e in cands if e.get("dep")] or cands
-    src_dow, pick = pool[0]
-    ent = dict(pick)              # copy: caller mutates, db stays pristine
-    ent["borrow_dow"] = src_dow   # v0.77: which weekday lent this time
+
+    # v0.84 consensus borrow: a flight whose dep time agrees across 2+
+    # weekdays has a stable weekly schedule - lend that agreed time and
+    # say how many weekdays voted for it. When the candidate dows all
+    # disagree (no majority), still lend the best-tier entry but flag
+    # borrow_unstable so the UI can warn honestly instead of silently
+    # showing a time that may be wrong for this weekday.
+    votes = {}
+    for dk, e in cands:
+        dep = (e.get("dep") or "").strip()
+        if dep:
+            votes.setdefault(dep, []).append((dk, e))
+    cons = [(dep, lst) for dep, lst in votes.items() if len(lst) >= 2]
+
+    def _rank(kv):
+        dk, e = kv
+        return (_tier(e), 0 if (e.get("dep") and e.get("arr")) else 1)
+
+    if cons:
+        cons.sort(key=lambda dl: min(_rank(kv) for kv in dl[1]))
+        lst = sorted(cons[0][1], key=_rank)
+        ent = dict(lst[0][1])
+        ent["borrow_dow"] = lst[0][0]
+        ent["borrow_consensus"] = len(lst)   # weekdays agreeing on this dep
+    else:
+        src_dow, pick = pool[0]
+        ent = dict(pick)              # copy: caller mutates, db stays pristine
+        ent["borrow_dow"] = src_dow   # v0.77: which weekday lent this time
+        # several candidate dows with DIFFERENT dep times = real
+        # disagreement; a single lone candidate is merely thin evidence
+        # (no contradiction), so it keeps the plain borrow label
+        ent["borrow_unstable"] = len(votes) > 1
     return _as_dest(ent), False
 
 

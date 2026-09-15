@@ -259,6 +259,8 @@ python tools/acceptance.py
 
 - [x] **v0.83 精查回填养板库 + 公务舱监控去 Amadeus 依赖**: ① point-fill 回填行新增舱位标签与城市对, 带航班号+时刻的行同时落入 sched_deposit 队列, worker 每轮 update_sched_db 吸收进持久班期库(按行自身星期分桶, 板库已有行不被覆盖)——班期接口只返回"当日+次日", 周日这类空洞板库自身永远抓不到, 现在用户在精查页点开任意周日航班回填即可即点即补, 起飞时刻显示的最大空洞类从根上可治; ② 公务舱监控原先绑死 Amadeus flight-offers(无密钥=每 30 分钟空转 skip), 现在 /api/bookmarklet 支持 ?cabin=business 生成舱位书签, 舱位筛选页抓到的行带 cabin 标签进 point 缓存, cabin_patrol_once 无密钥时走 absorb_point_cabin 通道——同一套环形历史+历史新低告警无 key 存活, skip 文案改为可执行的 standby 指引; ③ doctor 板库检查对缺失星期具名(如"缺周日")并给出双自愈路径(该星期几运行日自动补 / 精查书签回填立即补)。新增 6 项单测(put_rows 舱位字段、deposit 队列过滤追加、absorb_deposit 补 dow/不覆盖板库行/幂等、absorb_point_cabin 分组过滤 TTL)。
 
+- [x] **v0.84 借班一致性投票 + reenrich 标签修复 + api_push 常备通道**: ① 跨 dow 借班此前"任取一个 dow 的时刻"无一致性校验, 不同星期执行同一航班时刻有偏差时会静默借错——board_lookup_x 借用分支升级众数投票: ≥2 个 dow 同 dep 时刻 → 借该一致时刻并带 borrow_votes 票数(证据越足越可信); 多 dow 分歧无众数 → borrow_unstable=True, DayDetail 徽标三态化(分歧警示?/票数一致 N 票原文案/单候选不标分歧); 单候选视为证据薄而非分歧, 诚实区分"不确定"与"证据少"两种状态; ② v0.77 遗留 bug 修复——reenrich 重查时刻时不回写 borrow_dow/borrow_votes/borrow_unstable 三键, 精确命中后旧借用标签残留造成"来源失真", 现在 TIME_FIELDS 三键齐清, 重查后标签与真实来源一致; ③ 新增 tools/api_push.py 正式推送工具(参数化 TAG, OLD=origin/master 自动推导, worktree clean 门禁, credential fill 取 token, 本地 annotated tag 解析重建)——github.com:443 不通而 api.github.com 可达的环境从此一条命令完成 commit+tag 推送, v0.83 推送三坑(循环步进/短 sha/TAG 未展开)全部内置修复。验证: TestBorrowConsensus 4 用例(众数+votes+库纯净/分歧 unstable/单候选不 unstable/exact 无投票键), 全套 271 单测绿。
+
 ## 免责声明
 
 本项目仅聚合公开接口数据做个人出行比价提醒,不保证价格实时准确,不构成购票建议;购票请以航司/12306/平台下单页为准。请遵守各数据源服务条款,合理控制查询频率。

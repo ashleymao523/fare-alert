@@ -17,7 +17,8 @@ import time
 
 TIME_FIELDS = ("dep_time", "arr_time", "arr_est", "duration_text",
                "time_src", "dep_src", "arr_src", "alt_times",
-               "stop_kind", "stop_city", "stop_arr")
+               "stop_kind", "stop_city", "stop_arr",
+               "borrow_dow", "borrow_votes", "borrow_unstable")
 
 
 def _reset_time_fields(d):
@@ -36,6 +37,9 @@ def _reset_time_fields(d):
     d.stop_kind = ""
     d.stop_city = ""
     d.stop_arr = ""
+    d.borrow_dow = ""      # v0.84: borrow provenance rides the same
+    d.borrow_votes = 0      # reset/write-back cycle as the times it
+    d.borrow_unstable = False  # describes, else labels go stale
 
 
 def reenrich_snapshot(base_dir, dry=False, log=None):

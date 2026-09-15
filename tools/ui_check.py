@@ -604,7 +604,21 @@ checks["v0.83 回填养板库+舱位书签"] = (
                                       encoding="utf-8").read())
     and ("build_bookmarklet(origin, cabin)" in open(
         os.path.join("webui.py"), encoding="utf-8").read())
-    and ("0.83" in _header_src))
+    and ("v2 ·" in _header_src))
+
+_sched_src = open(os.path.join("core", "sched_board.py"), encoding="utf-8").read()
+_daydetail_src = open(os.path.join("web", "src", "components", "DayDetail.jsx"),
+                      encoding="utf-8").read()
+_reenrich_src = open(os.path.join("core", "reenrich.py"), encoding="utf-8").read()
+checks["v0.84 借班投票+标签回写+api_push"] = (
+    ("borrow_consensus" in _sched_src)
+    and ("borrow_unstable" in _sched_src)
+    and ("borrow_unstable" in _daydetail_src)
+    and ("timeSrcBadge(" in _daydetail_src)
+    and ("borrow_votes" in _reenrich_src)
+    and os.path.exists(os.path.join("tools", "api_push.py"))
+    and ("borrow_unstable" in _dist_js)
+    and ("v2 ·" in _header_src))
 
 bad = 0
 for k, v in checks.items():

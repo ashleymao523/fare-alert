@@ -24,6 +24,8 @@ class FlightDeal:
     stop_arr: str = ""        # 到达中转/经停城市的时刻(首段 arr 或 via_arr)
     cabin: str = ""           # v0.42 舱等: ""=经济(默认) | business=公务舱监控行
     borrow_dow: str = ""      # v0.77 跨dow借用源: "0".."6"(周一..周日), ""=非借用
+    borrow_votes: int = 0     # v0.84 借用时刻的周内一致票数(>=2=稳定排班)
+    borrow_unstable: bool = False  # v0.84 各dow时刻分歧(无众数), 以购票页为准
 
     @property
     def airline_code(self):
