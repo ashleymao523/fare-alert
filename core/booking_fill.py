@@ -566,6 +566,108 @@ def attach_times(deals, data_dir, route_id, stats=None, fx=DEFAULT_FX):
     return deals
 
 
+def _merged_save(data_dir, touched):
+    """v0.95: entry-level merge save. Reload the disk cache and apply
+    only the entries this pass touched, so a concurrent worker round
+    (or another backfill run) never loses its writes."""
+    disk = _load(data_dir)
+    for rid, dates in touched.items():
+        bucket = disk.get(rid)
+        if not isinstance(bucket, dict):
+            bucket = {}
+            disk[rid] = bucket
+        for d, e in dates.items():
+            bucket[d] = e
+    _save(data_dir, disk)
+
+
+def backfill_prices(session, net_cfg, cfg, data_dir, route_iatas,
+                    max_n=0, sleeper=None, log=None, fetch=None):
+    """v0.95 one-shot maintenance: re-probe cached positive booking
+    entries whose offers predate the v0.94 per-offer price parse, so
+    every measured-flight chip gains its own reference price without
+    waiting for the 48h TTL rotation (240 entries would lag ~2 days).
+
+    Skips negatives (their TTL semantics stay intact) and already
+    priced rows; a failed probe never clobbers the positive entry;
+    saves via disk-merge every 10 updates. Returns stats dict."""
+    log = log or (lambda msg: None)
+    sleeper = sleeper or time.sleep
+    fetch = fetch or fetch_lowest
+    bk_cfg = (cfg.get("booking_fill") or {}) \
+        if isinstance(cfg, dict) else {}
+    fx = float(bk_cfg.get("fx_eur_cny", DEFAULT_FX) or DEFAULT_FX)
+    interval = float(bk_cfg.get("call_interval", CALL_INTERVAL)
+                     or CALL_INTERVAL)
+    cache = _load(data_dir)
+    stats = {"probed": 0, "priced": 0, "skipped": 0,
+             "failed": 0, "deferred": 0}
+    touched = {}
+    n_touch = 0
+    last_call = 0.0
+    for rid, pair in route_iatas.items():
+        fi, ti = pair
+        bucket = cache.get(rid)
+        if not isinstance(bucket, dict):
+            continue
+        for d in sorted(k for k in bucket
+                        if isinstance(bucket.get(k), dict)):
+            e = bucket[d]
+            if float(e.get("cny") or 0) <= 0:
+                stats["skipped"] += 1        # negative TTL stays intact
+                continue
+            offers = e.get("offers") or []
+            if offers and any(float(o.get("price_eur") or 0) > 0
+                              for o in offers):
+                stats["skipped"] += 1        # already carries prices
+                continue
+            if max_n and stats["probed"] >= max_n:
+                stats["deferred"] += 1
+                continue
+            if last_call:
+                sleeper(interval)
+            last_call = time.time()
+            stats["probed"] += 1
+            try:
+                got = fetch(session, net_cfg, fi, ti, d)
+            except Exception:
+                got = None
+            if got and got.get("total_eur", 0) > 0:
+                ne = dict(e)
+                ne.update({"ts": time.time(),
+                           "cny": round(got["total_eur"] * fx, 0),
+                           "airline": got.get("airline") or "",
+                           "n": got.get("n_offers") or 0,
+                           "fno": got.get("fno") or "",
+                           "dep": got.get("dep") or "",
+                           "arr": got.get("arr") or "",
+                           "dur": got.get("dur") or "",
+                           "stop_kind": got.get("stop_kind") or "",
+                           "stop_city": got.get("stop_city") or "",
+                           "stop_arr": got.get("stop_arr") or "",
+                           "craft": got.get("craft") or "",
+                           "bag": got.get("bag") or "",
+                           "offers": got.get("offers") or []})
+                bucket[d] = ne
+                touched.setdefault(rid, {})[d] = ne
+                n_touch += 1
+                npr = sum(1 for o in ne["offers"]
+                          if float(o.get("price_eur") or 0) > 0)
+                if npr:
+                    stats["priced"] += 1
+                log("%s %s offers=%d priced=%d floor=%.0f"
+                    % (rid, d, len(ne["offers"]), npr, ne["cny"]))
+                if n_touch % 10 == 0:
+                    _merged_save(data_dir, touched)
+                    touched = {}
+            else:
+                stats["failed"] += 1
+                log("%s %s probe failed/no-data (entry kept)" % (rid, d))
+    if any(touched.values()):
+        _merged_save(data_dir, touched)
+    return stats
+
+
 def merge_booking_deals(deals, bk_deals, booking_url_fn):
     """Only dates still missing get a booking-ref row; the purchase
     url keeps pointing at the OTA deep link (the quote itself is a

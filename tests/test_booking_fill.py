@@ -474,3 +474,95 @@ class TestCoverageStats(unittest.TestCase):
         self.assertEqual(st["pct"], 50)
         import shutil
         shutil.rmtree(dd, ignore_errors=True)
+
+
+class TestBackfillPrices(unittest.TestCase):
+    def _seed(self, dd):
+        from core.booking_fill import _save
+        _save(dd, {
+            "rt1": {
+                "2026-10-13": {"ts": time.time() - 100000,
+                                "cny": 1200.0, "dep": "18:40",
+                                "offers": [{"no": "3U2583", "dep": "18:40",
+                                            "arr": "21:15",
+                                            "dur": "2h35m"}]}},
+            "rt2": {  # already priced -> skip
+                "2026-10-14": {"ts": time.time(), "cny": 900.0,
+                                "offers": [{"no": "GJ8827", "dep": "07:05",
+                                            "arr": "09:45",
+                                            "price_eur": 100.0}]}},
+            "rt3": {  # negative -> skip, TTL intact
+                "2026-10-15": {"ts": time.time(), "cny": 0,
+                                "kind": "nodata"}},
+        })
+
+    def test_backfill_merge_and_skip(self):
+        from core import booking_fill as bf
+        dd = self.id() + str(int(time.time()))
+        os.makedirs(dd, exist_ok=True)
+        self._seed(dd)
+        calls = []
+
+        def fake_fetch(session, net_cfg, fi, ti, d):
+            calls.append((fi, ti, d))
+            # simulate a concurrent worker round writing mid-run
+            cur = bf._load(dd)
+            cur.setdefault("rt_concurrent", {})["2026-10-20"] = {
+                "ts": time.time(), "cny": 777.0, "dep": "09:00",
+                "offers": [{"no": "XX1", "dep": "09:00",
+                            "price_eur": 99.0}]}
+            bf._save(dd, cur)
+            return {"total_eur": 158.61, "airline": "3U", "n_offers": 2,
+                    "fno": "3U2583", "dep": "18:40", "arr": "21:15",
+                    "dur": "2h35m", "stop_kind": "", "stop_city": "",
+                    "stop_arr": "", "craft": "738", "bag": "20kg",
+                    "offers": [{"no": "3U2583", "dep": "18:40",
+                                "arr": "21:15", "dur": "2h35m",
+                                "price_eur": 158.61}]}
+
+        st = bf.backfill_prices(
+            object(), {},
+            {"booking_fill": {"fx_eur_cny": 7.8, "call_interval": 0}},
+            dd, {"rt1": ("HGH", "CKG"), "rt2": ("HGH", "CGO"),
+                 "rt3": ("HGH", "CTU")},
+            sleeper=lambda x: None, fetch=fake_fetch)
+        self.assertEqual(st["probed"], 1)
+        self.assertEqual(st["priced"], 1)
+        self.assertEqual(st["skipped"], 2)   # priced rt2 + negative rt3
+        self.assertEqual(st["failed"], 0)
+        self.assertEqual(calls, [("HGH", "CKG", "2026-10-13")])
+        c = bf._load(dd)
+        e1 = c["rt1"]["2026-10-13"]
+        self.assertEqual(e1["cny"], 1237.0)  # 158.61 * 7.8
+        self.assertEqual(e1["offers"][0]["price_eur"], 158.61)
+        # concurrent write survived the merged save
+        self.assertEqual(
+            c["rt_concurrent"]["2026-10-20"]["cny"], 777.0)
+        self.assertEqual(
+            c["rt2"]["2026-10-14"]["offers"][0]["price_eur"], 100.0)
+        import shutil
+        shutil.rmtree(dd, ignore_errors=True)
+
+    def test_backfill_budget_and_failure_keeps_entry(self):
+        from core import booking_fill as bf
+        dd = self.id() + str(int(time.time()))
+        os.makedirs(dd, exist_ok=True)
+        from core.booking_fill import _save
+        old_ts = time.time() - 500
+        _save(dd, {"rt1": {
+            d: {"ts": old_ts, "cny": 1000.0 + i, "dep": "08:00",
+                "offers": [{"no": "MF%04d" % i, "dep": "08:00"}]}
+            for i, d in enumerate(("2026-10-13", "2026-10-14",
+                                   "2026-10-15"))}})
+        st = bf.backfill_prices(
+            object(), {}, {"booking_fill": {"call_interval": 0}},
+            dd, {"rt1": ("HGH", "CKG")}, max_n=2,
+            sleeper=lambda x: None, fetch=lambda *a: None)
+        self.assertEqual(st["probed"], 2)
+        self.assertEqual(st["failed"], 2)
+        self.assertEqual(st["deferred"], 1)
+        c = bf._load(dd)["rt1"]
+        for d in c:
+            self.assertEqual(c[d]["ts"], old_ts)  # kept untouched
+        import shutil
+        shutil.rmtree(dd, ignore_errors=True)
