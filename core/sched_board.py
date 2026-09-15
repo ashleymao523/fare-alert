@@ -369,6 +369,14 @@ def update_sched_db(session, net_cfg, data_dir, log=None):
     today = _dt.date.today()
     dow = str(today.weekday())
     changed = backfill_from_cache(data_dir, log, db=db)["changed"]
+    # v0.83: point-fill captured schedule rows teach the board dows
+    # no board fetch has seen yet (e.g. Sunday before the first
+    # weekend run); draining the queue before merging keeps one write.
+    db, n_dep = absorb_deposit(data_dir, db, log)
+    if n_dep:
+        changed = True
+        if log:
+            log.info("point-deposit absorbed %d schedule rows" % n_dep)
     for kind, conv in (("leave", _entry_from_leave), ("arrive", _entry_from_arrive)):
         try:
             rows, cached = fetch_board(session, net_cfg, kind, data_dir)
@@ -395,6 +403,72 @@ def load_sched_db(data_dir):
             return json.load(f)
     except Exception:
         return {"updated": 0, "flights": {}}
+
+
+def absorb_deposit(data_dir, db, log=None):
+    """v0.83: merge point-fill captured schedule rows into the board.
+
+    Reads the sched_deposit queue (/api/point-fill writes it), files
+    each row under its own weekday and clears the queue. Existing
+    entries win (an airport-board row stays more authoritative than a
+    one-page browser scrape); missing fields are filled in. Returns
+    (db, n_absorbed). Idempotent: re-absorbing an emptied queue is a
+    no-op."""
+    from .point_fill import deposit_path
+    try:
+        with open(deposit_path(data_dir), encoding="utf-8") as f:
+            q = json.load(f)
+    except Exception:
+        return db, 0
+    q = q if isinstance(q, list) else []
+    if not q:
+        return db, 0
+    n = 0
+    for row in q:
+        if not isinstance(row, dict):
+            continue
+        try:
+            no = _norm_no(row.get("no"))
+            if not no:
+                continue
+            dow = str(_dt.date.fromisoformat(
+                str(row.get("date") or "")).weekday())
+        except Exception:
+            continue
+        dep = str(row.get("dep") or "").strip()[:5]
+        arr = str(row.get("arr") or "").strip()[:5]
+        if not (dep or arr):
+            continue
+        fdb = db.setdefault("flights", {}).setdefault(no, {"dows": {}})
+        dows = fdb.setdefault("dows", {})
+        ent = dows.get(dow)
+        fresh = not isinstance(ent, dict)
+        if fresh:
+            ent = {}
+            dows[dow] = ent
+        ch = False
+        if dep and not ent.get("dep"):
+            ent["dep"] = dep
+            ch = True
+        if arr and not ent.get("arr"):
+            ent["arr"] = arr
+            ch = True
+        if row.get("from") and not ent.get("from"):
+            ent["from"] = row["from"]
+            ch = True
+        if row.get("to") and not ent.get("to"):
+            ent["to"] = row["to"]
+            ch = True
+        if ch:
+            if fresh:
+                ent["src"] = "point-deposit"
+            n += 1
+    try:
+        _atomic_write(deposit_path(data_dir), [])
+    except Exception as e:
+        if log:
+            log.warning("sched deposit queue clear failed: %s" % e)
+    return db, n
 
 
 def sched_stats(db):

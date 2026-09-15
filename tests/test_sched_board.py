@@ -37,6 +37,46 @@ class TestParse(unittest.TestCase):
         self.assertEqual(ent["to"], "重庆")
         self.assertEqual(ent["src"], "airport-board")
 
+    def test_absorb_deposit_fills_missing_dow(self):
+        # 2026-09-20 is a Sunday (dow 6) - exactly the hole class the
+        # board API cannot fetch on demand; a point-fill capture of
+        # any Sunday flight teaches the board that dow instantly.
+        with tempfile.TemporaryDirectory() as td:
+            qpath = os.path.join(td, "sched_deposit.json")
+            with open(qpath, "w", encoding="utf-8") as f:
+                json.dump([{"no": "ca1852", "date": "2026-09-20",
+                            "dep": "08:30", "arr": "11:05",
+                            "from": "北京", "to": "杭州"}], f)
+            db = {"flights": {}}
+            db, n = sb.absorb_deposit(td, db)
+            self.assertEqual(n, 1)
+            ent = db["flights"]["CA1852"]["dows"]["6"]
+            self.assertEqual(ent["dep"], "08:30")
+            self.assertEqual(ent["arr"], "11:05")
+            self.assertEqual(ent["src"], "point-deposit")
+            # queue drained; re-absorbing is a no-op
+            self.assertEqual(json.load(open(qpath, encoding="utf-8")), [])
+            _, n2 = sb.absorb_deposit(td, db)
+            self.assertEqual(n2, 0)
+
+    def test_absorb_deposit_keeps_existing_board_rows(self):
+        # airport-board rows stay authoritative: a browser capture may
+        # only fill fields the board never had, never overwrite.
+        with tempfile.TemporaryDirectory() as td:
+            qpath = os.path.join(td, "sched_deposit.json")
+            with open(qpath, "w", encoding="utf-8") as f:
+                json.dump([{"no": "ca1852", "date": "2026-09-20",
+                            "dep": "09:99", "arr": "",
+                            "from": "", "to": "杭州"}], f)
+            db = {"flights": {"CA1852": {"dows": {
+                "6": {"dep": "08:30", "arr": "11:05",
+                      "from": "北京", "src": "airport-board"}}}}}
+            db, n = sb.absorb_deposit(td, db)
+            self.assertEqual(n, 1)      # filled "to", kept dep/arr/from
+            ent = db["flights"]["CA1852"]["dows"]["6"]
+            self.assertEqual(ent["dep"], "08:30")
+            self.assertEqual(ent["src"], "airport-board")
+
     def test_arrive_entry_both_times(self):
         ent = sb._entry_from_arrive({
             "hbh": "GJ8889", "preschtime": "2026-09-10 06:20:00",

@@ -12,7 +12,7 @@ from core.cabin_monitor import (
     HISTORY_CAP, cooldown_ok, default_config, evaluate_alert,
     load_config, record_low, route_qualifies, cabin_leg,
     record_alert_candidate, history_board,
-    patrol_legs,
+    patrol_legs, absorb_point_cabin,
 )
 
 
@@ -23,6 +23,39 @@ class CabinMonitorTests(unittest.TestCase):
         self.assertTrue(cw["enabled"])
         self.assertEqual(cw["threshold_total"], 990)
         self.assertEqual(cw["default_to_city"], "杭州")  # default kept
+
+    def test_absorb_point_cabin_groups_and_filters(self):
+        cw = load_config({"cabin_watch": {"enabled": True}})
+        now = 1789500000.0
+        cache = {
+            "beijing-hangzhou": {
+                "2026-09-20": {"total": 1800.0, "cabin": "business",
+                               "from_city": "北京", "to_city": "杭州",
+                               "flight_no": "CA1852",
+                               "dep_time": "08:30", "arr_time": "11:05",
+                               "ts": now - 60},
+                "2026-09-21": {"total": 900.0, "cabin": "",
+                               "from_city": "北京", "to_city": "杭州",
+                               "ts": now - 60},
+                "2026-09-22": {"total": 1700.0, "cabin": "business",
+                               "from_city": "北京", "to_city": "杭州",
+                               "ts": now - 49 * 3600},   # stale
+            },
+            "chongqing-hangzhou": {
+                "2026-09-27": {"total": 2100.0, "cabin": "business",
+                               "from_city": "重庆", "to_city": "杭州",
+                               "ts": now - 60},
+            },
+        }
+        groups = absorb_point_cabin(cache, cw, now=now)
+        self.assertEqual(set(groups), {"point-北京-杭州",
+                                       "point-重庆-杭州"})
+        rows = groups["point-北京-杭州"]["rows"]
+        self.assertEqual(len(rows), 1)                 # economy+stale out
+        self.assertEqual(rows[0]["total"], 1800.0)
+        self.assertEqual(rows[0]["cabin"], "business")
+        self.assertEqual(groups["point-重庆-杭州"]["leg"]["from_city"],
+                         "重庆")
 
     def test_record_low_same_day_replaces(self):
         h = {"routes": {}}

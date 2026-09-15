@@ -150,6 +150,38 @@ def test_put_rows_overwrites_and_trims(tmpdir=None):
     assert e["total"] == 640.0 and e["bare"] == 520.0
 
 
+def test_put_rows_stores_cabin_and_cities(tmpdir):
+    rows = [{"date": "2026-09-20", "total": 1800, "flight_no": "CA1852",
+             "dep_time": "08:30", "arr_time": "11:05",
+             "cabin": "business", "from_city": "北京", "to_city": "杭州"}]
+    cache, n = pf.put_rows(str(tmpdir), "beijing-hangzhou", rows, tax=120)
+    assert n == 1
+    e = cache["beijing-hangzhou"]["2026-09-20"]
+    assert e["cabin"] == "business"
+    assert e["from_city"] == "北京"
+    assert e["to_city"] == "杭州"
+    assert e["bare"] == 1680
+
+
+def test_queue_sched_deposit_filters_and_appends(tmpdir):
+    q0 = pf.queue_sched_deposit(str(tmpdir), [
+        {"date": "2026-09-20", "flight_no": "CA1852", "dep_time": "08:30",
+         "arr_time": "", "from_city": "北京", "to_city": "杭州"},
+        {"date": "bad", "flight_no": "CA1852", "dep_time": "08:30"},
+        {"date": "2026-09-21", "flight_no": "", "dep_time": "09:00"},
+        {"date": "2026-09-22", "flight_no": "MU5100"},
+    ])
+    assert q0 == 1
+    q = json.load(open(pf.deposit_path(str(tmpdir)), encoding="utf-8"))
+    assert len(q) == 1 and q[0]["no"] == "CA1852"
+    q1 = pf.queue_sched_deposit(str(tmpdir), [
+        {"date": "2026-09-27", "flight_no": "HU7277", "dep_time": "07:15",
+         "arr_time": "09:50", "from_city": "重庆", "to_city": "杭州"}])
+    assert q1 == 1
+    q = json.load(open(pf.deposit_path(str(tmpdir)), encoding="utf-8"))
+    assert len(q) == 2            # append, never drain on write
+
+
 if __name__ == "__main__":
     passed = 0
     for name, fn in sorted(globals().items()):

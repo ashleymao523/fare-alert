@@ -257,6 +257,8 @@ python tools/acceptance.py
 - 人机协作守则见 [AGENTS.md](AGENTS.md),逐条门禁定义见 [docs/验收规范.md](docs/验收规范.md),里程碑与 DoD 见 [docs/迭代路线图.md](docs/迭代路线图.md),API 契约见 [docs/API.md](docs/API.md)。
 本仓库已接入 GitHub Actions CI(push/PR 自动跑双平台单测 + 前端构建 + Docker 镜像构建);完整 acceptance 门禁(含运行中面板的 API/DOM 契约)仍在本地执行,本地全绿 + CI 全绿才可合入。
 
+- [x] **v0.83 精查回填养板库 + 公务舱监控去 Amadeus 依赖**: ① point-fill 回填行新增舱位标签与城市对, 带航班号+时刻的行同时落入 sched_deposit 队列, worker 每轮 update_sched_db 吸收进持久班期库(按行自身星期分桶, 板库已有行不被覆盖)——班期接口只返回"当日+次日", 周日这类空洞板库自身永远抓不到, 现在用户在精查页点开任意周日航班回填即可即点即补, 起飞时刻显示的最大空洞类从根上可治; ② 公务舱监控原先绑死 Amadeus flight-offers(无密钥=每 30 分钟空转 skip), 现在 /api/bookmarklet 支持 ?cabin=business 生成舱位书签, 舱位筛选页抓到的行带 cabin 标签进 point 缓存, cabin_patrol_once 无密钥时走 absorb_point_cabin 通道——同一套环形历史+历史新低告警无 key 存活, skip 文案改为可执行的 standby 指引; ③ doctor 板库检查对缺失星期具名(如"缺周日")并给出双自愈路径(该星期几运行日自动补 / 精查书签回填立即补)。新增 6 项单测(put_rows 舱位字段、deposit 队列过滤追加、absorb_deposit 补 dow/不覆盖板库行/幂等、absorb_point_cabin 分组过滤 TTL)。
+
 ## 免责声明
 
 本项目仅聚合公开接口数据做个人出行比价提醒,不保证价格实时准确,不构成购票建议;购票请以航司/12306/平台下单页为准。请遵守各数据源服务条款,合理控制查询频率。

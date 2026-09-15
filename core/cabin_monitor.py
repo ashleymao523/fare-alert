@@ -72,6 +72,60 @@ def load_history(data_dir):
     return {"routes": {}}
 
 
+def absorb_point_cabin(cache, cw, now=None):
+    """v0.83: pull cabin-tagged rows out of the point-fill cache.
+
+    The business watch stays alive WITHOUT any Amadeus key: rows a
+    real browser captured on a cabin-filtered qunar page (bookmarklet
+    generated with ?cabin=) carry a cabin tag here and feed the same
+    ring history + record-low alerts the Amadeus patrol writes. TTL
+    mirrors the point cache (stale captures must not refresh history).
+    Returns leg-grouped {hid: {"leg": {from_city, to_city},
+    "rows": [{date, total, flight_no, dep_time, arr_time, cabin}]}}
+    - pure, no IO."""
+    import time as _time
+    now = now if now is not None else _time.time()
+    ttl = 48 * 3600
+    cabins = {str(c).strip().lower()
+              for c in (cw.get("cabins") or ["business"])}
+    out = {}
+    for _route_id, bucket in (cache or {}).items():
+        if not isinstance(bucket, dict):
+            continue
+        for date, e in bucket.items():
+            if not isinstance(e, dict):
+                continue
+            try:
+                if now - float(e.get("ts") or 0) > ttl:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            cab = str(e.get("cabin") or "").strip().lower()
+            if cab not in cabins:
+                continue
+            try:
+                total = float(e.get("total"))
+                if total <= 0:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            fc = str(e.get("from_city") or "").strip()
+            tc = str(e.get("to_city") or "").strip()
+            if not (fc and tc):
+                continue
+            hid = "point-%s-%s" % (fc, tc)
+            g = out.setdefault(hid, {
+                "leg": {"from_city": fc, "to_city": tc}, "rows": []})
+            g["rows"].append({
+                "date": str(date), "total": round(total, 1),
+                "flight_no": str(e.get("flight_no") or ""),
+                "dep_time": str(e.get("dep_time") or ""),
+                "arr_time": str(e.get("arr_time") or ""),
+                "cabin": cab,
+            })
+    return out
+
+
 def record_low(history, route_id, from_city, to_city, cabin, date, price_total):
     """Insert one business-cabin observation; ring-cap per route.
     Same-date same-cabin observations replace (latest wins).

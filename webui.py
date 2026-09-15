@@ -518,15 +518,16 @@ def api_point_fill():
     same cache afterwards, so nothing is lost on the next poll."""
     from core.alerts import tax_amount
     from core.point_fill import (_atomic_write, load_cache,
-                                 patch_snapshot_deals, put_rows)
+                                 patch_snapshot_deals, put_rows,
+                                 queue_sched_deposit)
     body = request.get_json(silent=True, force=True) or {}
     route_id = str(body.get("route_id") or "").strip()
     rows = body.get("rows") or []
+    fc = str(body.get("from_city") or "").strip()
+    tc = str(body.get("to_city") or "").strip()
     if not route_id:
         # v0.79: the bookmarklet only knows the city pair from the qunar
         # URL - resolve the unique matching snapshot route for it.
-        fc = str(body.get("from_city") or "").strip()
-        tc = str(body.get("to_city") or "").strip()
         cands = [r for r in
                  ((_read_json(SNAPSHOT_PATH, None) or {}).get("routes") or [])
                  if r.get("from_city") == fc and r.get("to_city") == tc]
@@ -535,10 +536,35 @@ def api_point_fill():
     if not route_id or not isinstance(rows, list) or not rows:
         return jsonify({"ok": False,
                         "error": "route_id and non-empty rows required"}), 400
+    # v0.83: cabin tag + city pair ride on every row so the board
+    # deposit queue and the keyless business watch can consume them.
+    cabin = str(body.get("cabin") or "").strip().lower()
+    if cabin not in ("business", "first"):
+        cabin = ""
+    if route_id and not (fc and tc):
+        for r in ((_read_json(SNAPSHOT_PATH, None) or {})
+                  .get("routes") or []):
+            if r.get("id") == route_id:
+                fc = fc or str(r.get("from_city") or "")
+                tc = tc or str(r.get("to_city") or "")
+                break
+    enriched = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        e = dict(r)
+        if cabin:
+            e["cabin"] = cabin
+        if fc:
+            e.setdefault("from_city", fc)
+        if tc:
+            e.setdefault("to_city", tc)
+        enriched.append(e)
     with _lock:
         cfg = load_config(CONFIG_PATH)
-        cache, stored = put_rows(DATA_DIR, route_id, rows,
+        cache, stored = put_rows(DATA_DIR, route_id, enriched,
                                  tax=tax_amount(cfg.get("tax", {})))
+        queued = queue_sched_deposit(DATA_DIR, enriched)
         snap = _read_json(SNAPSHOT_PATH, None)
         patched = 0
         if snap and isinstance(snap.get("routes"), list):
@@ -553,7 +579,8 @@ def api_point_fill():
                 snap["updated_at"] = datetime.datetime.now().isoformat(
                     timespec="seconds")
                 _atomic_write(SNAPSHOT_PATH, snap)
-    return jsonify({"ok": True, "stored": stored, "patched": patched})
+    return jsonify({"ok": True, "stored": stored, "patched": patched,
+                    "queued": queued})
 
 
 @app.get("/api/bookmarklet")
@@ -563,8 +590,9 @@ def api_bookmarklet():
     desktop box; no secrets inside, just the origin swap."""
     from core.point_fill import build_bookmarklet
     origin = request.host_url.rstrip("/")
-    return jsonify({"ok": True, "origin": origin,
-                    "code": build_bookmarklet(origin)})
+    cabin = request.args.get("cabin", "")
+    return jsonify({"ok": True, "origin": origin, "cabin": cabin,
+                    "code": build_bookmarklet(origin, cabin)})
 
 
 @app.post("/api/test-push")

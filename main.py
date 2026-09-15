@@ -26,6 +26,7 @@ from core.cabin_monitor import (
     load_config as cabin_cfg_load, load_history as cabin_history_load,
     record_low as cabin_record_low, route_qualifies as cabin_route_qualifies,
     cabin_leg as cabin_watch_leg,
+    absorb_point_cabin as cabin_absorb_point,
     evaluate_alert as cabin_evaluate_alert, cooldown_ok as cabin_cooldown_ok,
     record_alert_candidate as cabin_record_candidate,
     _atomic_write as cabin_atomic_write,
@@ -824,7 +825,34 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
         info["last_status"] = (
             "skip: 无独立巡检腿 (出发城市未配置或均已由监控路线覆盖)")
     elif not ready:
-        info["last_status"] = "skip: Amadeus 密钥未配置"
+        # v0.83: no Amadeus key no longer means a dead patrol - rows
+        # captured by the cabin bookmarklet (?cabin=business) feed the
+        # same ring history + record-low alerts through the point-fill
+        # cache, so the business watch stays alive keyless.
+        try:
+            groups = cabin_absorb_point(load_point_cache(DATA_DIR), cw)
+        except Exception:
+            groups = {}
+        tax_amt = tax_amount(cfg.get("tax", {}))
+        n_rows = 0
+        for hid, g in groups.items():
+            biz = [FlightDeal(
+                       date=r["date"],
+                       bare_price=round(float(r["total"]) - tax_amt, 1),
+                       flight_no=r.get("flight_no") or "",
+                       dep_time=r.get("dep_time") or "",
+                       arr_time=r.get("arr_time") or "",
+                       source="point-cabin", cabin=r["cabin"])
+                   for r in g["rows"]]
+            n_rows += _cabin_absorb(cw, g["leg"], hid, biz, cfg,
+                                    state, log, push_enabled)
+        info["offers"] = n_rows
+        info["mode"] = "point-fill"
+        info["last_status"] = (
+            "ok(point-fill): 回填舱位价 {n} 条已入历史 - Amadeus 未配置,"
+            " 舱位书签回填持续喂数".format(n=n_rows) if n_rows else
+            "standby: Amadeus 未配置 - 在舱位筛选页用舱位书签回填,"
+            " 历史最低与告警即可无密钥累积")
     else:
         session = session or make_session(cfg)
         today = dt.date.today()

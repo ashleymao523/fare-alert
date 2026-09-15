@@ -99,6 +99,17 @@ def check_board(h):
         return WARN, "班期库为空 - worker 每日运行自然沉淀"
     if covered < 5:
         return WARN, "班期库 %d 班, 星期覆盖 %d/7(沉淀中)" % (flights, covered)
+    # v0.83: name the missing dows + the two heal paths so the gap
+    # reads actionable instead of mystical: the board API only returns
+    # today+tomorrow rows, so a dow fills either on its own weekday
+    # (worker runs) or instantly via a point-fill bookmark capture.
+    if covered < 7:
+        names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        missing = [names[int(k)] for k, v in sorted(
+            (dows or {}).items(), key=lambda kv: int(kv[0])) if not v]
+        return PASS, ("班期库 %d 班, 星期覆盖 %d/7 (缺%s: 该星期几运行日自动补;"
+                      " 精查书签回填任意该日航班立即补)" % (
+                          flights, covered, "、".join(missing)))
     return PASS, "班期库 %d 班, 星期覆盖 %d/7" % (flights, covered)
 
 

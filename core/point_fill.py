@@ -23,6 +23,7 @@ import os
 import time
 
 CACHE_NAME = "point_fill_cache.json"
+DEPOSIT_NAME = "sched_deposit.json"   # v0.83: board-teaching queue
 POINT_TTL = 48 * 3600          # captured price stays fresh for 2 days
 POINT_SOURCE = "point-fill"
 MAX_ROWS_PER_ROUTE = 400       # 60d window x out+ret: huge headroom
@@ -30,6 +31,10 @@ MAX_ROWS_PER_ROUTE = 400       # 60d window x out+ret: huge headroom
 
 def cache_path(data_dir):
     return os.path.join(data_dir, CACHE_NAME)
+
+
+def deposit_path(data_dir):
+    return os.path.join(data_dir, DEPOSIT_NAME)
 
 
 def load_cache(data_dir):
@@ -97,6 +102,13 @@ def put_rows(data_dir, route_id, rows, tax=0.0, now=None):
             "flight_no": str(r.get("flight_no") or "").strip(),
             "dep_time": str(r.get("dep_time") or "").strip()[:5],
             "arr_time": str(r.get("arr_time") or "").strip()[:5],
+            # v0.83: cabin tag + city pair so the business watch and the
+            # board deposit can consume the same captured row.
+            "cabin": (str(r.get("cabin") or "").strip().lower()
+                      if str(r.get("cabin") or "").strip().lower()
+                      in ("business", "first") else ""),
+            "from_city": str(r.get("from_city") or "").strip()[:24],
+            "to_city": str(r.get("to_city") or "").strip()[:24],
             "ts": now,
         }
         n += 1
@@ -107,6 +119,48 @@ def put_rows(data_dir, route_id, rows, tax=0.0, now=None):
     return cache, n
 
 
+def queue_sched_deposit(data_dir, rows):
+    """v0.83: queue real-browser captured schedule rows for the board.
+
+    Rows with a flight number AND at least one time land in a queue
+    file; the worker's next update_sched_db absorbs them into the
+    persistent flight-schedule db under the row's own weekday. One
+    point-queried Sunday flight therefore teaches the board Sunday
+    departures - closing dow holes the board API can never fetch on
+    demand (it only ever returns today+tomorrow rows). Returns the
+    number of queued rows; invalid rows are skipped, never fatal."""
+    want = []
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        no = str(r.get("flight_no") or "").strip().upper()
+        dep = str(r.get("dep_time") or "").strip()[:5]
+        arr = str(r.get("arr_time") or "").strip()[:5]
+        try:
+            d = _dt.date.fromisoformat(str(r.get("date") or "").strip())
+        except ValueError:
+            continue
+        if no and (dep or arr):
+            want.append({"no": no, "date": d.isoformat(),
+                         "dep": dep, "arr": arr,
+                         "from": str(r.get("from_city") or "").strip()[:24],
+                         "to": str(r.get("to_city") or "").strip()[:24],
+                         "ts": time.time()})
+    if not want:
+        return 0
+    try:
+        with open(deposit_path(data_dir), encoding="utf-8") as f:
+            q = json.load(f)
+        q = q if isinstance(q, list) else []
+    except Exception:
+        q = []
+    q.extend(want)
+    if len(q) > 4000:            # ring cap: the queue drains every cycle
+        q = q[-4000:]
+    _atomic_write(deposit_path(data_dir), q)
+    return len(want)
+
+
 # v0.79: bookmarklet that runs ON the qunar flight-list page, mines the
 # cheapest price straight out of the rendered DOM and fires a no-cors
 # POST back to the panel. __FA_ORIGIN__ is swapped at generation time
@@ -114,6 +168,7 @@ def put_rows(data_dir, route_id, rows, tax=0.0, now=None):
 # posts to the desktop box, not to 127.0.0.1.
 _BOOKMARKLET_TEMPLATE = r"""(function(){
 var ORIGIN="__FA_ORIGIN__";
+var CABIN="__FA_CABIN__";
 var q={};
 location.search.replace(/[?&]([^=&]+)=([^&]*)/g,function(_,k,v){q[k]=decodeURIComponent(v);});
 var from=q.depCity||"",to=q.arrCity||"",date=q.goDate||"";
@@ -143,17 +198,26 @@ var fno=fm?fm[1]+fm[2]:"";
 var tm=txt.match(/(?:^|[^\d])(\d{1,2}:\d{2})(?=[^\d]|$)/g)||[];
 var dep=tm.length?tm[0].match(/\d{1,2}:\d{2}/)[0]:"";
 var arr=tm.length>1?tm[1].match(/\d{1,2}:\d{2}/)[0]:"";
-var body=JSON.stringify({from_city:from,to_city:to,rows:[{date:date,total:best,flight_no:fno,dep_time:dep,arr_time:arr}]});
+var body=JSON.stringify({from_city:from,to_city:to,cabin:CABIN,rows:[{date:date,total:best,flight_no:fno,dep_time:dep,arr_time:arr}]});
 fetch(ORIGIN+"/api/point-fill",{method:"POST",headers:{"Content-Type":"text/plain"},body:body,mode:"no-cors"})
 .then(function(){toast("已回填 "+from+"-"+to+" "+date+" \u00A5"+best+" (含航班号/时刻则一并带上, 面板已热更新)",true);})
 .catch(function(){toast("回填失败: 面板不可达 "+ORIGIN,false);});
 })();"""
 
 
-def build_bookmarklet(origin):
-    """v0.79: full javascript: URL bound to one panel origin."""
+def build_bookmarklet(origin, cabin=""):
+    """v0.79: full javascript: URL bound to one panel origin.
+
+    v0.83: cabin="" keeps the economy bookmark; "business"/"first"
+    tags every captured row so the business watch can absorb real
+    cabin prices captured on a cabin-filtered qunar page - no API
+    key involved."""
+    cab = str(cabin or "").strip().lower()
+    if cab not in ("business", "first"):
+        cab = ""
     return "javascript:" + _BOOKMARKLET_TEMPLATE.replace(
-        "__FA_ORIGIN__", str(origin).rstrip("/"))
+        "__FA_ORIGIN__", str(origin).rstrip("/")).replace(
+        "__FA_CABIN__", cab)
 
 
 def merge_point_fill(deals, cache, route_id, now=None):

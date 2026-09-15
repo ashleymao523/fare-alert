@@ -550,6 +550,8 @@ checks["v0.77 全功能容器+借班透明"] = (
 
 _crawl_src = open(os.path.join("web", "src", "components", "CrawlView.jsx"),
                   encoding="utf-8").read()
+_header_src = open(os.path.join("web", "src", "components", "Header.jsx"),
+                   encoding="utf-8").read()
 checks["v0.78 精点补查UI+时刻沉淀"] = (
     ("精点补查" in _crawl_src)
     and ("nextRunForDow" in _crawl_src)
@@ -591,6 +593,18 @@ checks["v0.82 精点直达+启动文件夹自启"] = (
     and ("WindowsApps" in _doctor_src)
     and os.path.exists(os.path.join("tools", "install_autostart.py"))
     and ("a.gap-chip" in _dist_css))
+
+checks["v0.83 回填养板库+舱位书签"] = (
+    ("queue_sched_deposit" in open(os.path.join("webui.py"),
+                                   encoding="utf-8").read())
+    and ("absorb_deposit" in open(os.path.join("core", "sched_board.py"),
+                                  encoding="utf-8").read())
+    and ("absorb_point_cabin" in open(os.path.join("core",
+                                                   "cabin_monitor.py"),
+                                      encoding="utf-8").read())
+    and ("build_bookmarklet(origin, cabin)" in open(
+        os.path.join("webui.py"), encoding="utf-8").read())
+    and ("0.83" in _header_src))
 
 bad = 0
 for k, v in checks.items():
