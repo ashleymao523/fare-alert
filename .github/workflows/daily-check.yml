@@ -1,0 +1,39 @@
+name: Daily Check
+
+# v0.81: deployment-weight patrol. The repo does not just pass CI on
+# push - it proves itself every morning: the same test suite plus web
+# build runs on a schedule, so a dependency shift or API drift is
+# caught within a day even when nobody pushes.
+on:
+  schedule:
+    - cron: '30 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  patrol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: pip install -r requirements.txt
+      - name: compile check
+        run: python -m compileall -q core main.py webui.py tests
+      - name: unit tests
+        shell: bash
+        run: |
+          fail=0
+          for f in tests/test_*.py; do
+            echo == \$f
+            python -X utf8 \$f || fail=1
+          done
+          exit \$fail
+      - name: web build
+        working-directory: web
+        run: |
+          npm ci
+          npm run build

@@ -1,6 +1,7 @@
 # FareAlert · 低价出行提醒组件
 
 [![CI](https://github.com/ashleymao523/fare-alert/actions/workflows/ci.yml/badge.svg)](https://github.com/ashleymao523/fare-alert/actions/workflows/ci.yml)
+[![Daily Check](https://github.com/ashleymao523/fare-alert/actions/workflows/daily-check.yml/badge.svg)](https://github.com/ashleymao523/fare-alert/actions/workflows/daily-check.yml)
 
 监控未来 N 天 **机票最低价(含机建燃油,即最终支付口径)**,低于你的心理价位就推送到 iPhone;同时对比 12306 列车全席位票价(二等座/卧铺/普速,含学生票估算),帮你选出**出行最优方案**。自带 Web 仪表盘,单文件依赖极简,适合部署在私人设备上长期运行。
 
@@ -231,6 +232,7 @@ fare-alert/
 
 - [x] **v0.79 精点回填书签 + 开机自启体检**: ① 运维页「精点补查」卡新增书签脚本区块——GET /api/bookmarklet 生成绑定当前面板地址的 bookmarklet(手机从局域网 URL 生成即指向台式机), 添加到收藏栏后在去哪儿精查页点击, 从渲染 DOM 挖最低价(¥ 2-5 位 + 50-99999 过滤, 尽力抓航班号/起降时刻), no-cors text/plain POST 回填, 抓不到价弹窗手输, 页角 toast 反馈结果; ② /api/point-fill 支持 from_city/to_city 城市对自动解析 route_id(bookmarklet 只知城市名), 歧义/未知返回 400; ③ doctor 新增 check_autostart——Windows HKCU Run + 计划任务双路探测 webui/worker 自启是否齐装, 未装/不完整 WARN 并给安装命令, 重启存活从「口头相信」变成可验证。验证: 新增 test_bookmarklet(生成器形状/origin 注入/城市对解析 200+400/端点契约), test_doctor +autostart 断言, ui_check v0.79 断言, 版本 0.79 四处盖章。
 - [x] **v0.80 反向缓存榜 + 借班转正预告 + compose 健康检查**: ① 「预算找目的地」页新增 GET /api/reverse-latest——纯读 6 小时 reverse 缓存(零网络请求), 按 含税总价 升序回最近扫描命中线路(城市/日期/航班号/航司/裸价/直达链接/新鲜度), 前端首屏即渲染「最近扫描 · 命中 N 条线路」卡片榜, 该 tab 从空表单变成默认有内容; ② time_coverage 新增 promote_on/promote_dow——对每条借班行按 borrow_dow 推「该星期几的下一个日历日」, 取最早者, 时刻覆盖 KPI 直接显示「MM/DD 起借班转精查」, 把「为什么是参考时刻」变成带截止日的透明承诺; ③ docker-compose 补 healthcheck 声明(与镜像内置双保险), unhealthy 容器触发 unless-stopped 重启。验证: test_time_coverage +3(下个周日/最早 dow/无借班), 新增 test_reverse_latest(排序/税口径/字段/空缓存), ui_check v0.80 断言, 版本 0.80 四处盖章。
+- [x] **v0.81 时刻覆盖条 + 逐日矩阵 API + 每日巡检**: ① 仪表盘日历卡片新增 TimeStrip——60 格逐日时刻质量热力条(绿=板库真实/蓝=跨周借班/金=邻近参考/灰=无价格), 悬停显示该日航班号+起降时刻, 借班格附转精查日期, 图例区实时汇总四类计数并预告「周X MM/DD 板库轮询补齐」; ② 新增 GET /api/time-coverage——把快照逐 deal 展开成逐日 kind 矩阵, 同时从班期库 dow 直方图推导 heal 自愈预告(缺失星期几的下一个日历日), 前端一次拉取全线路复用; ③ 新增 .github/workflows/daily-check.yml——每天 09:30 定时跑全套测试+前端构建(部署分量: 仓库不只在 push 时过 CI, 而是每天自证一次, 依赖漂移/API 变化一天内暴露)。验证: 新增 test_time_coverage_api(形状/计数/heal/借班不虚诺), /v2 DOM 断言 tstrip 渲染, 版本 0.81 四处盖章。
 
 ## 常见问题
 

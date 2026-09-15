@@ -882,3 +882,34 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   color: var(--tx-2);
   font-size: var(--fs-sm);
 }
+
+/* ---- v0.81 时刻覆盖条: 60天逐日时刻质量热力 ---- */
+.tstrip { margin: var(--sp-2) 0 var(--sp-3); }
+.tstrip-legend {
+  display: flex; align-items: center; gap: var(--sp-3);
+  font-size: var(--fs-sm); color: var(--muted); margin-bottom: var(--sp-sm);
+  flex-wrap: wrap;
+}
+.tstrip-legend .tl { display: inline-flex; align-items: center; gap: 4px; }
+.tstrip-legend .tl.heal { color: var(--info); }
+.tstrip-legend .dot {
+  width: 8px; height: 8px; border-radius: 2px; display: inline-block;
+}
+.tstrip-legend .dot.exact { background: var(--green); }
+.tstrip-legend .dot.borrow { background: var(--accent); }
+.tstrip-legend .dot.alt { background: var(--gold); }
+.tstrip-legend .dot.noref { background: var(--line); }
+.tstrip-track {
+  display: flex; gap: 2px; height: 16px; border-radius: var(--r-sm);
+  overflow: hidden; background: var(--card2);
+  padding: 2px;
+}
+.tstrip-track .cell {
+  flex: 1 1 0; min-width: 0; border-radius: 2px;
+  cursor: default; transition: transform 0.1s ease;
+}
+.tstrip-track .cell:hover { transform: scaleY(1.35); }
+.tstrip-track .cell.exact { background: var(--green); }
+.tstrip-track .cell.borrow { background: var(--accent); }
+.tstrip-track .cell.alt { background: var(--gold); }
+.tstrip-track .cell.noref { background: var(--line); }

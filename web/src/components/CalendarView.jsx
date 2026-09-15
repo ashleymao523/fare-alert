@@ -1,4 +1,56 @@
+import { useEffect, useState } from "react";
 import { fmtMoney, fmtMD, weekday, parseDate, dayList, heatClass } from "../lib/data.js";
+import { fetchTimeCoverage } from "../lib/api.js";
+
+const KIND_LABEL = {
+  exact: "板库真实时刻",
+  borrow: "跨周借班时刻",
+  alt: "邻近参考时刻",
+  noref: "无价格(待精查)",
+};
+
+let covCache = null; // module cache: one /api/time-coverage per session
+
+function TimeStrip({ routeId }) {
+  const [cov, setCov] = useState(null);
+  useEffect(() => {
+    let live = true;
+    if (covCache) { setCov(covCache); return; }
+    fetchTimeCoverage()
+      .then((x) => { covCache = x; if (live) setCov(x); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+  if (!cov) return null;
+  const mine = (cov.routes || []).find((r) => r.id === routeId);
+  if (!mine || !(mine.days || []).length) return null;
+  const c = mine.counts || {};
+  const heals = (cov.heal || []).map((h) =>
+    "周" + "日一二三四五六"[h.dow] + " " + fmtMD(h.on) + " 板库轮询补齐");
+  return (
+    <div class="tstrip">
+      <div class="tstrip-legend">
+        <span class="tl"><i class="dot exact" />真实 {c.exact || 0}</span>
+        <span class="tl"><i class="dot borrow" />借班 {c.borrow || 0}</span>
+        <span class="tl"><i class="dot alt" />参考 {c.alt || 0}</span>
+        <span class="tl"><i class="dot noref" />无价 {c.noref || 0}</span>
+        {heals.length ? <span class="tl heal">⏳ {heals.join(" · ")}</span> : null}
+      </div>
+      <div class="tstrip-track">
+        {(mine.days || []).map((d) => (
+          <div
+            key={d.date}
+            class={"cell " + d.kind}
+            title={d.date + " " + weekday(d.date) + " · " + KIND_LABEL[d.kind]
+              + (d.dep ? " · " + (d.flight || "") + " " + d.dep
+                + (d.arr ? "→" + d.arr : "") : "")
+              + (d.promote_on ? " · " + fmtMD(d.promote_on) + " 转精查" : "")}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function bestByDate(route) {
   const isRT = !!(route.trip_type === "roundtrip" && route.combined_by_date);
@@ -130,6 +182,7 @@ export default function CalendarView({ route, selDate, onSelect, view, onView })
           </div>
         </div>
       </div>
+      <TimeStrip routeId={route.id} />
       {view === "bars"
         ? <Bars route={route} map={map} days={days} selDate={selDate} onSelect={onSelect} />
         : <CalGrid route={route} map={map} days={days} selDate={selDate} onSelect={onSelect} />}

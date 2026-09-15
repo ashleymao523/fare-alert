@@ -410,7 +410,7 @@ def api_dest_intel():
     a CNY->local rate line. Domestic routes skip FX entirely.
     """
     rid = (request.args.get("route") or "").strip()[:64]
-    snap = _read_json(SNAPSHOT_PATH, None) or {}
+    snap = _read_json(os.path.join(DATA_DIR, "snapshot.json"), None) or {}
     route = next((r for r in (snap.get("routes") or [])
                   if r.get("id") == rid), None)
     if not route:
@@ -896,6 +896,76 @@ def api_sched_stats():
     from core.sched_board import load_sched_db, sched_stats
     db = load_sched_db(DATA_DIR)
     return jsonify({"ok": True, **sched_stats(db)})
+
+
+@app.get("/api/time-coverage")
+def api_time_coverage():
+    """v0.81: per-day time-quality matrix across the whole window.
+
+    Unrolls every deal into {date, kind, dep, arr, flight, promote_on}
+    so the UI can draw one heat strip per route: green exact (board /
+    amadeus), blue borrow (cross-dow, with the date it turns exact),
+    amber alt-ref, grey noref (interp/nearby price without any time).
+    Also returns `heal`: for every weekday the board library still
+    lacks, the next calendar date a daily poll fills it - this is the
+    self-healing forecast users can hold the system to.
+    """
+    import datetime as _dt
+    from core.sched_board import load_sched_db, sched_stats
+    dows = sched_stats(load_sched_db(DATA_DIR)).get("dows") or {}
+    today = _dt.date.today()
+    heal = []
+    for i in range(7):
+        if int(dows.get(str(i), 0) or 0):
+            continue
+        for k in range(0, 8):
+            cand = today + _dt.timedelta(days=k)
+            if cand.weekday() == i:
+                heal.append({"dow": i, "on": cand.isoformat()})
+                break
+    snap = _read_json(os.path.join(DATA_DIR, "snapshot.json"), None) or {}
+    out = []
+    for r in snap.get("routes") or []:
+        days, counts = [], {"exact": 0, "borrow": 0, "alt": 0, "noref": 0}
+        for d in sorted(r.get("deals") or [],
+                        key=lambda x: str(x.get("date") or "")):
+            src = str(d.get("dep_src") or d.get("time_src") or "")
+            if src in ("amadeus", "airport-board"):
+                kind = "exact"
+            elif src == "airport-board-x":
+                kind = "borrow"
+            elif src == "alt-ref":
+                kind = "alt"
+            else:
+                kind = "noref"
+            row = {"date": str(d.get("date") or ""), "kind": kind,
+                   "dep": str(d.get("dep_time") or ""),
+                   "arr": str(d.get("arr_time") or ""),
+                   "flight": str(d.get("flight_no") or ""),
+                   "source": str(d.get("source") or "")}
+            if kind == "borrow":
+                # per-day promote: the deal's OWN weekday is still empty
+                # in the board library -> next occurrence = turn-exact date
+                try:
+                    own = _dt.date.fromisoformat(row["date"])
+                except ValueError:
+                    own = None
+                if own is not None and not int(dows.get(str(own.weekday()), 0) or 0):
+                    for k in range(1, 8):
+                        cand = today + _dt.timedelta(days=k)
+                        if cand.weekday() == own.weekday():
+                            row["promote_on"] = cand.isoformat()
+                            break
+            counts[kind] = counts.get(kind, 0) + 1
+            days.append(row)
+        out.append({"id": r.get("id"),
+                    "from_city": r.get("from_city"),
+                    "to_city": r.get("to_city"),
+                    "intl": bool(r.get("intl")),
+                    "window": r.get("window") or ["", ""],
+                    "days": days, "counts": counts})
+    return jsonify({"ok": True, "dows": dows, "heal": heal,
+                    "routes": out})
 
 
 @app.get("/api/board")
