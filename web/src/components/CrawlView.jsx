@@ -104,7 +104,13 @@ function PointFillCard() {
   const load = () => fetchPointGaps()
     .then((d) => { setGaps(d.routes || []); setErr(""); })
     .catch((e) => setErr(String(e.message || e)));
-  useEffect(() => { load(); }, []);
+  // v0.82: bookmarklet posts are fire-and-forget (no-cors), so the
+  // panel cannot be notified - it re-polls the gap list instead.
+  useEffect(() => {
+    load();
+    const iv = setInterval(load, 20000);
+    return () => clearInterval(iv);
+  }, []);
   const pick = (rt, date) => {
     setSel({ id: rt.id, from: rt.from_city, to: rt.to_city, date });
     setTotal(""); setFno(""); setDep(""); setArr(""); setMsg("");
@@ -141,7 +147,7 @@ function PointFillCard() {
     <div class="card">
       <div class="card-head">
         <h3>🎯 精点补查 · 缺价日期回填</h3>
-        <span class="sub">聚合日历未出价 ≠ 售罄 · 单日精点直查通常有票</span>
+        <span class="sub">聚合日历未出价 ≠ 售罄 · 点日期直达精查, 再点书签自动回填</span>
       </div>
       {err ? <div class="muted">加载失败: {err}</div> : null}
       {gaps === null ? <div class="muted">加载中…</div>
@@ -155,15 +161,22 @@ function PointFillCard() {
                 <span class="muted">{(rt.gaps || []).length} 个缺价日</span>
               </div>
               <div class="gap-dates">
-                {(rt.gaps || []).map((g) => (
-                  <span key={g.date}
-                    class={"gap-chip" + (g.cached ? " cached" : "")
-                      + (sel && sel.id === rt.id && sel.date === g.date ? " sel" : "")}
-                    title={g.cached ? "已回填(48h 内有效)" : "点击选中后回填"}
-                    onClick={() => { if (!g.cached) pick(rt, g.date); }}>
-                    {g.date.slice(5)}{g.cached ? " ✓" : ""}
+                {(rt.gaps || []).map((g) => (g.cached ? (
+                  <span key={g.date} class="gap-chip cached"
+                    title="已回填(48h 内有效), 到期或聚合源出价后自动让位">
+                    {g.date.slice(5)} ✓
                   </span>
-                ))}
+                ) : (
+                  <a key={g.date}
+                    class={"gap-chip link"
+                      + (sel && sel.id === rt.id && sel.date === g.date ? " sel" : "")}
+                    title="打开去哪儿单日精查 → 列表出来后点书签自动回填"
+                    target="_blank" rel="noopener noreferrer"
+                    href={qunarPointUrl(rt.from_city, rt.to_city, g.date)}
+                    onClick={() => pick(rt, g.date)}>
+                    {g.date.slice(5)} ↗
+                  </a>
+                )))}
               </div>
             </div>
           ))}

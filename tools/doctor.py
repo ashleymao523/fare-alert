@@ -141,7 +141,10 @@ def check_deploy():
 def check_autostart():
     """v0.79: reboot survivability - if neither the HKCU Run entries nor
     the scheduled tasks exist, a reboot silently kills both the panel
-    and the board sedimentation loop."""
+    and the board sedimentation loop.
+    v0.82: also probe the user Startup folder (shell:startup) - the
+    veil-proof mechanism on MSIX-python hosts where HKCU Run reads come
+    back virtualized (see tools/install_autostart.py field notes)."""
     if os.name != "nt":
         return PASS, "非 Windows (见部署指南对应形态)"
     found = []
@@ -163,8 +166,15 @@ def check_autostart():
                 found.append(n)
     except OSError:
         pass
+    msix = "WindowsApps" in sys.executable
+    startup_cmd = os.path.join(
+        os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming"),
+        "Microsoft", "Windows", "Start Menu", "Programs", "Startup",
+        "FareAlertStartup.cmd")
     if len(found) == 2:
-        return PASS, "开机自启已装 (webui+worker, HKCU Run)"
+        return PASS, ("开机自启已装 (webui+worker, HKCU Run"
+                      + ("; 启动文件夹另有一层" if os.path.exists(startup_cmd)
+                         else "") + ")")
     if not found:
         # task-mode installs (install_autostart.ps1 -Mode task) land in
         # the scheduler instead of the registry - probe it once.
@@ -179,6 +189,10 @@ def check_autostart():
                          if x in out]
         except Exception:
             pass
+    if os.path.exists(startup_cmd):
+        return PASS, ("开机自启已装 (启动文件夹 FareAlertStartup.cmd"
+                      + (", MSIX python 注册表探测被遮蔽 - Run 项以此为准"
+                         if msix else "") + ")")
     if not found:
         return WARN, "未装开机自启 - 重启后面板与班期沉淀停摆; 运行 tools/install_autostart.ps1"
     return WARN, ("自启不完整(%s) - 再跑一次 tools/install_autostart.ps1 补齐"

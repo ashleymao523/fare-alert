@@ -582,6 +582,16 @@ checks["v0.80 反向缓存榜+转正预告"] = (
     and ("最近扫描" in _dist_js)
     and ("healthcheck" in _compose_src))
 
+checks["v0.82 精点直达+启动文件夹自启"] = (
+    ("gap-chip link" in _crawl_src)
+    and ("qunarPointUrl(rt.from_city" in _crawl_src)
+    and ('target="_blank"' in _crawl_src)
+    and ("setInterval(load, 20000)" in _crawl_src)
+    and ("FareAlertStartup.cmd" in _doctor_src)
+    and ("WindowsApps" in _doctor_src)
+    and os.path.exists(os.path.join("tools", "install_autostart.py"))
+    and ("a.gap-chip" in _dist_css))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:
