@@ -23,6 +23,7 @@ from core.flights import (airline_name, booking_url, estimate_arrival_time,
                           NON_REAL_SOURCES)
 from core.booking_fill import fill_gaps as booking_fill_gaps
 from core.booking_fill import attach_times as booking_attach_times
+from core.booking_fill import DEFAULT_FX as _BK_FX
 from core.booking_fill import merge_booking_deals
 from core.intl import city_iata, fetch_intl_calendar, fetch_schedule_times
 from core.intl import fetch_cabin_offers, fetch_fill_offers
@@ -139,6 +140,7 @@ def _flight_dict(route, deal, cfg, alert_dates):
                        "craft": a.get("craft"),
                        "via": a.get("via"),
                        "dur": a.get("dur") or "",
+                       "price": a.get("price") or 0,
                        "exact": bool(a.get("exact")),
                        "src": a.get("src") or ""}
                       for a in (deal.alt_times or [])][:6],
@@ -201,8 +203,10 @@ def _booking_cross_fill(session, net, cfg, deals, fi, ti, date_from,
             url_fn = (lambda d: intl_booking_url(fc, tc, d)) if intl \
                 else (lambda d: booking_url(fc, tc, d))
             deals, _ = merge_booking_deals(deals, bk, url_fn)
-        deals = booking_attach_times(deals, DATA_DIR, route_id,
-                                     stats=bstats)
+        bk_cfg = cfg.get("booking_fill") or {}
+        deals = booking_attach_times(
+            deals, DATA_DIR, route_id, stats=bstats,
+            fx=float(bk_cfg.get("fx_eur_cny", _BK_FX) or _BK_FX))
         if rec:
             rec.step("booking-fill", route_id, "cross fill", "ok",
                      (time.time() - t0b) * 1000, count=bstats.get("filled", 0),

@@ -48,7 +48,11 @@ def _payload(units=163, nanos=430000000, airline="3U", n=208):
     }, "flightOffers": []}
     if n:
         p["flightOffers"] = [
-            {"segments": [{
+            # v0.94: 3U offer carries its own EUR total -> price_eur
+            {"priceBreakdown": {"total": {
+                "currencyCode": "EUR", "units": 158,
+                "nanos": 610000000}},
+             "segments": [{
                 "departureTime": "2026-10-13T18:40:00",
                 "arrivalTime": "2026-10-13T21:15:00",
                 "legs": [{"flightInfo": {
@@ -58,6 +62,8 @@ def _payload(units=163, nanos=430000000, airline="3U", n=208):
                 "travellerCheckedLuggage": [{"luggageAllowance": {
                     "luggageType": "CHECKED_IN", "maxTotalWeight": 20}}],
             }]},
+            # no priceBreakdown on purpose: non-EUR / legacy offers
+            # must degrade to price_eur=0, not break the parser
             {"segments": [{
                 "departureTime": "2026-10-13T07:05:00",
                 "arrivalTime": "2026-10-13T09:45:00",
@@ -238,20 +244,23 @@ class TestBookingExact(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]["no"], "GJ8827")   # 07:05 first
         self.assertEqual(rows[0]["dep"], "07:05")
+        self.assertEqual(rows[0]["price_eur"], 0.0)  # no breakdown
         self.assertEqual(rows[1]["no"], "3U2583")
         self.assertEqual(rows[1]["dur"], "2h35m")
+        self.assertEqual(rows[1]["price_eur"], 158.61)
 
     def test_deal_from_offers_priority(self):
         e = {"cny": 1273.0, "fno": "3U2583", "dep": "18:40",
              "arr": "21:15", "craft": "738",
-             "offers": [{"no": "GJ8827", "dep": "07:05", "arr": "09:45",
-                         "dur": "2h40m", "airline": "", "craft": "32N",
-                         "via": ""}]}
+            "offers": [{"no": "GJ8827", "dep": "07:05", "arr": "09:45",
+                        "dur": "2h40m", "airline": "", "craft": "32N",
+                        "via": "", "price_eur": 158.61}]}
         d = _deal_from(e, "2026-10-20", 120)
         self.assertEqual(len(d.alt_times), 1)
         self.assertEqual(d.alt_times[0]["no"], "GJ8827")
         self.assertEqual(d.alt_times[0]["src"], "booking")
         self.assertEqual(d.alt_times[0]["dur"], "2h40m")
+        self.assertEqual(d.alt_times[0]["price"], 1237.0)  # *7.8
 
     def test_extra_dates_cache_only_then_attach(self):
         dd = self.id() + str(int(time.time()))
@@ -276,6 +285,10 @@ class TestBookingExact(unittest.TestCase):
         self.assertTrue(real.alt_times)
         self.assertTrue(all(a.get("src") == "booking"
                             for a in real.alt_times))
+        # v0.94: cached offers replay per-flight reference prices
+        # (default fx 7.8 here, NOT the fill-time 8.0)
+        self.assertEqual(real.alt_times[1]["no"], "3U2583")
+        self.assertEqual(real.alt_times[1]["price"], 1237.0)
         import shutil
         shutil.rmtree(dd, ignore_errors=True)
 

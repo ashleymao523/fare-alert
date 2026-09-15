@@ -225,6 +225,28 @@ def offer_itinerary(j):
     return out
 
 
+def _money(d):
+    """units+nanos money object -> float (0.0 on junk)."""
+    try:
+        u = float(d.get("units") or 0)
+        n = float(d.get("nanos") or 0) / 1e9
+        return u + (n if n < 1 else 0.0)
+    except Exception:
+        return 0.0
+
+
+def offer_price_eur(of):
+    """v0.94: per-offer tax-inclusive EUR total (priceBreakdown.total),
+    0.0 when absent or non-EUR. LOWEST_PRICE flightOffers are price-
+    ascending, so every timetable row can now carry its OWN reference
+    quote - the user compares 3U8084 vs MF8475 directly instead of
+    only seeing the date floor."""
+    tot = (of.get("priceBreakdown") or {}).get("total") or {}
+    if (tot.get("currencyCode") or "") != "EUR":
+        return 0.0
+    return round(_money(tot), 2)
+
+
 def offer_list(j, limit=8):
     """v0.89: every flightOffers itinerary -> same-day timetable rows.
 
@@ -269,6 +291,7 @@ def offer_list(j, limit=8):
             "arr": _hhmm(last.get("arrivalTime") or ""),
             "dur": _dur_text(first.get("departureTime") or "",
                              last.get("arrivalTime") or ""),
+            "price_eur": offer_price_eur(of),
             "airline": al or mk,
             "craft": _CRAFT_NAMES.get(
                 str(info.get("planeType") or "").upper(),
@@ -370,7 +393,7 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
             # replay on gap dates - the reference price fills the
             # grey dot now; times ride the next expired re-probe.
             if d in gap_set:
-                out.append(_deal_from(e, d, tax))
+                out.append(_deal_from(e, d, tax, fx))
             continue
         if e and float(e.get("cny") or 0) <= 0:
             ttl = NEG_TTL_NODATA if e.get("kind") == "nodata" \
@@ -405,7 +428,7 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
                          "bag": got.get("bag") or "",
                          "offers": got.get("offers") or []}
             if d in gap_set:
-                out.append(_deal_from(bucket[d], d, tax))
+                out.append(_deal_from(bucket[d], d, tax, fx))
         else:
             if e and float(e.get("cny") or 0) > 0:
                 # legacy positive quote: a failed timetable upgrade
@@ -416,7 +439,7 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
                 # stale GDS reference beats a synthetic interp row.
                 e["ts"] = now
                 if d in gap_set:
-                    out.append(_deal_from(e, d, tax))
+                    out.append(_deal_from(e, d, tax, fx))
                 deferred += 1
                 continue
             bucket[d] = {"ts": now, "cny": 0,
@@ -428,7 +451,7 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
     return out
 
 
-def _deal_from(entry, d, tax):
+def _deal_from(entry, d, tax, fx=DEFAULT_FX):
     """Cache entry -> full FlightDeal (source=booking-ref, exact times
     whenever the offer carried them)."""
     from .models import FlightDeal
@@ -450,12 +473,19 @@ def _deal_from(entry, d, tax):
         baggage_note=entry.get("bag") or "")
     offers = entry.get("offers") or []
     if offers:
-        deal.alt_times = [{"no": o.get("no"), "dep": o.get("dep"),
-                           "arr": o.get("arr"), "airline": o.get("airline"),
-                           "craft": o.get("craft"), "via": o.get("via"),
-                           "dur": o.get("dur") or "",
-                           "exact": True, "src": "booking"}
-                          for o in offers]
+        alts = []
+        for o in offers:
+            alt = {"no": o.get("no"), "dep": o.get("dep"),
+                   "arr": o.get("arr"), "airline": o.get("airline"),
+                   "craft": o.get("craft"), "via": o.get("via"),
+                   "dur": o.get("dur") or "",
+                   "exact": True, "src": "booking"}
+            pe = float(o.get("price_eur") or 0)
+            if pe > 0:
+                # v0.94 per-flight reference quote in CNY
+                alt["price"] = round(pe * fx, 0)
+            alts.append(alt)
+        deal.alt_times = alts
     elif dep:
         try:
             from .flights import airline_name
@@ -468,7 +498,7 @@ def _deal_from(entry, d, tax):
     return deal
 
 
-def attach_times(deals, data_dir, route_id, stats=None):
+def attach_times(deals, data_dir, route_id, stats=None, fx=DEFAULT_FX):
     """v0.88: pin cached same-date Booking itineraries onto real-price
     rows whose dep time is missing or dow-borrowed (booking-x).
 
@@ -518,12 +548,18 @@ def attach_times(deals, data_dir, route_id, stats=None):
                           for a in cur_alts if isinstance(a, dict))
         offers = e.get("offers") or []
         if offers and not has_booking:
-            d.alt_times = [{"no": o.get("no"), "dep": o.get("dep"),
-                            "arr": o.get("arr"), "airline": o.get("airline"),
-                            "craft": o.get("craft"), "via": o.get("via"),
-                            "dur": o.get("dur") or "",
-                            "exact": True, "src": "booking"}
-                           for o in offers]
+            alts = []
+            for o in offers:
+                alt = {"no": o.get("no"), "dep": o.get("dep"),
+                       "arr": o.get("arr"), "airline": o.get("airline"),
+                       "craft": o.get("craft"), "via": o.get("via"),
+                       "dur": o.get("dur") or "",
+                       "exact": True, "src": "booking"}
+                pe = float(o.get("price_eur") or 0)
+                if pe > 0:
+                    alt["price"] = round(pe * fx, 0)
+                alts.append(alt)
+            d.alt_times = alts
         n += 1
     if stats is not None:
         stats["attached"] = n

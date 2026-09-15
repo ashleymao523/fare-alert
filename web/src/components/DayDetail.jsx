@@ -291,11 +291,13 @@ export default function DayDetail({ route, date }) {
                         ? " · " + [a.airline, a.craft].filter(Boolean).join(" ")
                         : "")
                       + (a.via ? " · 经停" + a.via : "")
+                      + (a.price ? " · 参考价约¥" + Math.round(a.price) : "")
                       + (best ? " · 本日最低价航班" : "")
                       + " · 点击直达去哪儿当日列表购票"}
                   >
                     {best ? <span class="ft-best">低价</span> : null}
                     {a.no} {a.dep}{a.arr ? "→" + a.arr : ""}
+                    {a.price ? <span class="ft-alt-craft">¥{Math.round(a.price)}</span> : null}
                     {a.craft ? <span class="ft-alt-craft">{a.craft.split("(")[0]}</span> : null}
                   </a>
                 );
