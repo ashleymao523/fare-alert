@@ -11,6 +11,7 @@ import os
 import time
 
 from .history import load_history
+from .alerts import conf_mark, dep_arr_text
 
 WEEK_SIZE = 7
 PUSH_INTERVAL = 7 * 86400  # seconds between weekly pushes
@@ -277,6 +278,10 @@ def global_best(snapshot):
                     "price": float(p),
                     "dep_time": d.get("dep_time") or "",
                     "arr_time": d.get("arr_time") or "",
+                    "time_src": d.get("time_src") or "",
+                    "borrow_dow": d.get("borrow_dow") or "",
+                    "borrow_votes": int(d.get("borrow_votes") or 0),
+                    "borrow_unstable": bool(d.get("borrow_unstable")),
                     "threshold": th,
                     "savings": round(th - float(p), 2),
                 })
@@ -291,9 +296,10 @@ def global_best_line(gb):
         return ""
     date = (gb.get("date") or "")[5:]
     times = ""
-    if gb.get("dep_time"):
-        times = " ({0}-{1})".format(gb.get("dep_time"),
-                                    gb.get("arr_time") or "")
+    ta = dep_arr_text(gb)
+    if ta:
+        mk = conf_mark(gb)
+        times = " ({0}{1})".format(ta, "·{0}".format(mk) if mk else "")
     route = "{0}→{1}".format(gb.get("from_city") or "?",
                              gb.get("to_city") or "?")
     sav = gb.get("savings") or 0

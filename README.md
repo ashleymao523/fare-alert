@@ -261,6 +261,8 @@ python tools/acceptance.py
 
 - [x] **v0.84 借班一致性投票 + reenrich 标签修复 + api_push 常备通道**: ① 跨 dow 借班此前"任取一个 dow 的时刻"无一致性校验, 不同星期执行同一航班时刻有偏差时会静默借错——board_lookup_x 借用分支升级众数投票: ≥2 个 dow 同 dep 时刻 → 借该一致时刻并带 borrow_votes 票数(证据越足越可信); 多 dow 分歧无众数 → borrow_unstable=True, DayDetail 徽标三态化(分歧警示?/票数一致 N 票原文案/单候选不标分歧); 单候选视为证据薄而非分歧, 诚实区分"不确定"与"证据少"两种状态; ② v0.77 遗留 bug 修复——reenrich 重查时刻时不回写 borrow_dow/borrow_votes/borrow_unstable 三键, 精确命中后旧借用标签残留造成"来源失真", 现在 TIME_FIELDS 三键齐清, 重查后标签与真实来源一致; ③ 新增 tools/api_push.py 正式推送工具(参数化 TAG, OLD=origin/master 自动推导, worktree clean 门禁, credential fill 取 token, 本地 annotated tag 解析重建)——github.com:443 不通而 api.github.com 可达的环境从此一条命令完成 commit+tag 推送, v0.83 推送三坑(循环步进/短 sha/TAG 未展开)全部内置修复。验证: TestBorrowConsensus 4 用例(众数+votes+库纯净/分歧 unstable/单候选不 unstable/exact 无投票键), 全套 271 单测绿。
 
+- [x] **v0.85 推送带上起飞时刻 + 可信度标记**: 手机端最需要时刻的三个触点全部补齐——① 阈值提醒标题带可信起降窗口(exact 或 ≥2 票一致才上标题, 单 dow 借用/分歧时刻只留在正文带标记, 不在锁屏冒充事实); ② 提醒正文逐航班行插入 "07:45-10:20(3票)" 式窗口+可信度——exact 无标记 / 跨 dow 一致 N票 / 单 dow 借用或 alt 参考"参考" / dow 分歧"⚠", 无时刻不加噪; ③ 周报全局最优行同步同一套标记 "(19:45-22:25·3票)"; 实现上 core/alerts 新增 dep_arr_text/conf_mark 双态助手(FlightDeal 属性与快照 dict 同一实现), 周报与阈值提醒共享; global_best 提取器补齐 borrow 三键。新增 tests/test_alert_msg.py 10 用例(窗口三态/五种来源标记/dict 形态/标题门控/正文标记/周报三态), 全套 281 单测绿。
+
 ## 免责声明
 
 本项目仅聚合公开接口数据做个人出行比价提醒,不保证价格实时准确,不构成购票建议;购票请以航司/12306/平台下单页为准。请遵守各数据源服务条款,合理控制查询频率。

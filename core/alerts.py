@@ -18,6 +18,47 @@ def tax_amount(tax_cfg):
     return tax_cfg.get("airport_fee", 0) + tax_cfg.get("fuel_surcharge", 0)
 
 
+def _fld(deal, name, default=""):
+    """v0.85: read a field off a FlightDeal (attr) or a snapshot deal
+    dict (key) - the helpers below serve both the live alert path and
+    the weekly report's snapshot path with one implementation."""
+    if isinstance(deal, dict):
+        return deal.get(name, default)
+    return getattr(deal, name, default)
+
+
+def dep_arr_text(deal):
+    """Compact dep-arr window for one line of push text:
+    "07:45-10:20" / "07:45" (arrival unknown) / "" (no dep yet)."""
+    dep = str(_fld(deal, "dep_time") or "").strip()
+    arr = str(_fld(deal, "arr_time") or "").strip()
+    if not dep:
+        return ""
+    return "{0}-{1}".format(dep, arr) if arr else dep
+
+
+def conf_mark(deal):
+    """v0.85 trust mark for a (possibly borrowed) departure time.
+
+    ""      exact board hit - the weekday itself vouches for it
+    "N票"   cross-dow borrow where >=2 weekdays run the same dep time
+    "参考"  lone-dow borrow or alt-day reference - thin but plausible
+    "⚠"    dows disagree on the time - trust the booking page only
+    Empty dep_time always yields "" (never decorate what we lack)."""
+    if not str(_fld(deal, "dep_time") or "").strip():
+        return ""
+    src = str(_fld(deal, "time_src") or "").strip()
+    borrow_dow = str(_fld(deal, "borrow_dow") or "").strip()
+    if not borrow_dow and src not in ("airport-board-x", "alt-ref"):
+        return ""
+    if _fld(deal, "borrow_unstable", False):
+        return "⚠"
+    votes = int(_fld(deal, "borrow_votes", 0) or 0)
+    if votes >= 2:
+        return "{0}票".format(votes)
+    return "参考"
+
+
 def evaluate(route_cfg, deals, state, cfg, now_ts, record=True):
     """Return (alert_list, below_list). alert_list = [(total, deal)] to push now."""
     threshold = route_cfg.get("threshold_total", 500)
@@ -124,18 +165,31 @@ def build_message(route_cfg, to_alert, below, train_info, cfg):
     threshold = route_cfg.get("threshold_total", 500)
 
     top_total, top_deal = to_alert[0]
+    # v0.85: the lock-screen title gets the dep-arr window too, but
+    # only when it is trustworthy (exact or >=2-dow consensus) - a
+    # lone borrow or unstable dows stay down in the body with their
+    # marks instead of posing as fact up top.
+    top_ta = dep_arr_text(top_deal)
+    top_mk = conf_mark(top_deal)
+    top_time = (" " + top_ta if top_ta and (not top_mk or top_mk.endswith("票"))
+                else "")
     title = "✈️{}→{} 低于¥{}: ¥{} ({})".format(
         route_cfg["from_city"], route_cfg["to_city"],
-        int(threshold), int(top_total), _fmt_date(top_deal.date))
+        int(threshold), int(top_total),
+        _fmt_date(top_deal.date) + top_time)
 
     body = []
     for total, d in to_alert:
         code = d.airline_code
         name = airline_name(code)
+        ta = dep_arr_text(d)
+        mk = conf_mark(d)
+        times = (" {0}{1}".format(ta, "({0})".format(mk) if mk else "")
+                 if ta else "")
         bag_note = bag.get(code, "托运额度以购票页为准")
         warn = "⚠️" if ("不含" in bag_note or "确认" in bag_note) else "🧳"
-        body.append("{} {} {} 裸价¥{}+税¥{}=¥{} {}{}".format(
-            _fmt_date(d.date), d.flight_no, name,
+        body.append("{} {} {}{} 裸价¥{}+税¥{}=¥{} {}{}".format(
+            _fmt_date(d.date), d.flight_no, name, times,
             int(d.bare_price), int(tax), int(total), warn, bag_note))
     body.append("")
     body.append("60天窗口内共{}天低于¥{}".format(len(below), int(threshold)))

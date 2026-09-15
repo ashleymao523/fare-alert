@@ -620,6 +620,16 @@ checks["v0.84 借班投票+标签回写+api_push"] = (
     and ("borrow_unstable" in _dist_js)
     and ("v2 ·" in _header_src))
 
+_alerts_src = open(os.path.join("core", "alerts.py"), encoding="utf-8").read()
+_weekly_src = open(os.path.join("core", "weekly.py"), encoding="utf-8").read()
+checks["v0.85 推送时刻+可信度标记"] = (
+    ("def dep_arr_text" in _alerts_src)
+    and ("def conf_mark" in _alerts_src)
+    and ("dep_arr_text(d)" in _alerts_src)
+    and ("conf_mark(gb)" in _weekly_src)
+    and ("borrow_votes" in _weekly_src)
+    and os.path.exists(os.path.join("tests", "test_alert_msg.py")))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:
