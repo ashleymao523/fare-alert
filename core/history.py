@@ -44,6 +44,15 @@ def _route_metrics(route):
         "best_date": best.get("date"),
         "n_deals": len(deals),
     }
+    # v0.97: archive the best deal's schedule so weekly highlights can
+    # say WHEN the cheapest flight leaves (the snapshot already has the
+    # times; dropping them here was why the weekly board showed none).
+    for src, dst in (("dep_time", "dep_time"), ("arr_time", "arr_time"),
+                     ("flight_no", "flight_no"),
+                     ("duration_text", "dur")):
+        v = best.get(src)
+        if v:
+            m[dst] = v
     # v0.45: archive dep-time coverage so the sources tab can chart how
     # exact-departure coverage grows day over day (goal-1 progress curve).
     cov = route.get("time_coverage") or {}

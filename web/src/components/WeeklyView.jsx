@@ -99,6 +99,11 @@ export default function WeeklyView() {
                 <span class="chip2 hero">低于阈值</span>
                 <b>{b.name}</b>
                 <span class="wk2-hl-nums">窗口内 {b.days_below} 天 ≤ {fmtMoney(b.threshold)} · 最低 {fmtMoney(b.cheapest_total)}</span>
+                {b.dep_time ? (
+                  <span class="chip2" title="当日最优班起降时刻">
+                    {(b.best_date || "").slice(5)} {b.dep_time}→{b.arr_time || ""}{b.flight_no ? " " + b.flight_no : ""}
+                  </span>
+                ) : null}
               </div>
             ))}
             {(hl.sharp_drops || []).map((s, i) => (
@@ -106,6 +111,11 @@ export default function WeeklyView() {
                 <span class="chip2 ok">骤降</span>
                 <b>{s.name}</b>
                 <span class="wk2-hl-nums">{(s.date || "").slice(5)} {fmtMoney(s.prev)} → {fmtMoney(s.today)}</span>
+                {s.dep_time ? (
+                  <span class="chip2" title="骤降日最优班起降时刻">
+                    {s.dep_time}→{s.arr_time || ""}{s.flight_no ? " " + s.flight_no : ""}
+                  </span>
+                ) : null}
                 <span class="chip2">-{Math.round(Math.abs(s.pct))}% / -¥{Math.round(Math.abs(s.delta))}</span>
               </div>
             ))}

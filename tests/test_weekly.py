@@ -31,6 +31,35 @@ def _snap(cheapest_total, days_below=0):
 
 
 class TestHistory(unittest.TestCase):
+    def test_route_metrics_archives_schedule(self):
+        """v0.97: the best deal's dep/arr/no/dur ride into the daily
+        archive so weekly highlights can show WHEN the cheapest flight
+        leaves (previously dropped at this boundary)."""
+        path = os.path.join(os.path.dirname(__file__), "_hist_sched.json")
+        if os.path.exists(path):
+            os.remove(path)
+        snap = {"routes": [{
+            "id": "r1", "from_city": "杭州", "to_city": "重庆",
+            "threshold_total": 600, "days_below": 0,
+            "deals": [
+                {"date": "2026-10-01", "total_price": 999,
+                 "source": "qunar-calendar"},
+                {"date": "2026-10-02", "total_price": 430,
+                 "source": "qunar-calendar",
+                 "dep_time": "06:50", "arr_time": "09:25",
+                 "flight_no": "3U2579", "duration_text": "2h35m"},
+            ]}]}
+        try:
+            append_history(snap, path)
+            m = list(load_history(path)["days"].values())[0]["routes"]["r1"]
+            self.assertEqual(m["dep_time"], "06:50")
+            self.assertEqual(m["arr_time"], "09:25")
+            self.assertEqual(m["flight_no"], "3U2579")
+            self.assertEqual(m["dur"], "2h35m")
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
+
     def test_append_and_overwrite_same_day(self):
         path = os.path.join(os.path.dirname(__file__), "_hist_test.json")
         if os.path.exists(path):
@@ -51,6 +80,28 @@ class TestHistory(unittest.TestCase):
 
 
 class TestWeekly(unittest.TestCase):
+    def test_sharp_drop_carries_dep_time(self):
+        """v0.97: highlight drop rows expose the archived schedule so
+        the weekly board / push can render 06:50→09:25 3U2579."""
+        days = {
+            "2026-09-14": {"routes": {"r1": {
+                "from_city": "杭州", "to_city": "重庆", "threshold": 600,
+                "cheapest_total": 500, "avg_total": 520, "days_below": 0,
+                "best_date": "2026-10-01", "n_deals": 30}}},
+            "2026-09-15": {"routes": {"r1": {
+                "from_city": "杭州", "to_city": "重庆", "threshold": 600,
+                "cheapest_total": 380, "avg_total": 400, "days_below": 2,
+                "best_date": "2026-10-02", "n_deals": 30,
+                "dep_time": "06:50", "arr_time": "09:25",
+                "flight_no": "3U2579", "dur": "2h35m"}}},
+        }
+        hl = week_highlights({"days": days})
+        self.assertTrue(hl["sharp_drops"])
+        s0 = hl["sharp_drops"][0]
+        self.assertEqual(s0["dep_time"], "06:50")
+        self.assertEqual(s0["flight_no"], "3U2579")
+        self.assertIn("06:50起飞", hl["text"])
+
     def _hist_path(self, week, prev=None):
         path = os.path.join(os.path.dirname(__file__), "_wk_test.json")
         days = {}

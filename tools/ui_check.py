@@ -758,6 +758,24 @@ checks["v0.96 当日最低参考班徽章"] = (
     and (".ft-alt.ref-best" in _css92_src)
     and ("test_alt_times_best_ref" in _t96_src))
 
+_hist97_src = open(os.path.join("core", "history.py"),
+                   encoding="utf-8").read()
+_wk97_src = open(os.path.join("core", "weekly.py"),
+                 encoding="utf-8").read()
+_wv97_src = open(os.path.join("web", "src", "components",
+                            "WeeklyView.jsx"), encoding="utf-8").read()
+_t97_src = open(os.path.join("tests", "test_weekly.py"),
+                encoding="utf-8").read()
+checks["v0.97 周报亮点带起降时刻"] = (
+    ('("dep_time", "dep_time")' in _hist97_src)
+    and ("s[k] = m[k]" in _wk97_src)
+    and ("b[k] = m[k]" in _wk97_src)
+    and ('str(s0["dep_time"]) + "起飞"' in _wk97_src)
+    and ("b.dep_time" in _wv97_src)
+    and ("s.dep_time" in _wv97_src)
+    and ("test_route_metrics_archives_schedule" in _t97_src)
+    and ("test_sharp_drop_carries_dep_time" in _t97_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

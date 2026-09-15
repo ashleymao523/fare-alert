@@ -181,10 +181,16 @@ def week_highlights(history, pct=15.0, abs_yuan=50.0):
             delta = round(float(t) - float(p), 1)
             rel = round(delta * 100.0 / float(p), 1)
             if delta < 0 and -rel >= float(pct) and -delta >= float(abs_yuan):
-                sharps.append({"route_id": rid, "name": _name(m),
-                               "date": d1, "prev": round(float(p), 1),
-                               "today": round(float(t), 1),
-                               "delta": delta, "pct": rel})
+                s = {"route_id": rid, "name": _name(m),
+                     "date": d1, "prev": round(float(p), 1),
+                     "today": round(float(t), 1),
+                     "delta": delta, "pct": rel}
+                # v0.97: ride the best deal's schedule onto the drop row
+                # (archived since v0.97 by core.history._route_metrics).
+                for k in ("dep_time", "arr_time", "flight_no", "dur"):
+                    if m.get(k):
+                        s[k] = m[k]
+                sharps.append(s)
     sharps.sort(key=lambda s: s["delta"])
     sharps = sharps[:5]
 
@@ -195,11 +201,15 @@ def week_highlights(history, pct=15.0, abs_yuan=50.0):
             continue
         day, m = series[-1]
         if m.get("days_below") and m.get("threshold"):
-            below.append({"route_id": rid, "name": _name(m),
-                          "days_below": m.get("days_below"),
-                          "threshold": m.get("threshold"),
-                          "cheapest_total": m.get("cheapest_total"),
-                          "best_date": m.get("best_date") or day})
+            b = {"route_id": rid, "name": _name(m),
+                 "days_below": m.get("days_below"),
+                 "threshold": m.get("threshold"),
+                 "cheapest_total": m.get("cheapest_total"),
+                 "best_date": m.get("best_date") or day}
+            for k in ("dep_time", "arr_time", "flight_no", "dur"):
+                if m.get(k):
+                    b[k] = m[k]
+            below.append(b)
     below.sort(key=lambda b: b.get("cheapest_total") or 1e18)
 
     return {"biggest_drop": biggest, "sharp_drops": sharps,
@@ -220,7 +230,12 @@ def _highlights_text(biggest, sharps, below, pct, abs_yuan):
     if below:
         parts.append("{} 条路线当前低于阈值".format(len(below)))
     if sharps:
-        parts.append("本周 {} 次骤降".format(len(sharps)))
+        s0 = sharps[0]
+        when = str(s0.get("date") or "")[5:]
+        if s0.get("dep_time"):
+            when += " " + str(s0["dep_time"]) + "起飞"
+        parts.append("本周 {} 次骤降，最大 {} ¥{}".format(
+            len(sharps), when, _fmt(s0["today"])))
     return "⭐ 本周值得关注：" + "；".join(parts) + "。"
 
 
