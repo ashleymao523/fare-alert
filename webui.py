@@ -1111,7 +1111,12 @@ def api_day_schedule():
     schedule library knows for this city pair on that weekday, each
     with dep->arr and an exact/cross-dow-borrow flag. Directly answers
     "该日每个班次几点起飞" even when the cheapest deal row itself is a
-    reference price without a flight number."""
+    reference price without a flight number.
+
+    v0.89: Booking.com same-day offers (exact timestamps measured for
+    THIS date, not a weekday borrow) are merged on top - the board
+    library stays the backbone for uncovered dates, but whenever the
+    booking fill probed this date the strip gains measured rows."""
     from core.sched_board import (load_sched_db, city_dep_times,
                                   city_return_dep_times, flight_duration)
     from_city = (request.args.get("from") or "").strip()
@@ -1131,6 +1136,10 @@ def api_day_schedule():
     else:
         rows = city_return_dep_times(db, from_city, date, limit=None)
     total = len(rows)
+    try:
+        rows = _merge_booking_schedule(rows, from_city, to_city, date)
+    except Exception:
+        pass
     return jsonify({"ok": True, "date": date,
                     "from": from_city, "to": to_city,
                     "covered": bool(rows),
@@ -1144,8 +1153,58 @@ def api_day_schedule():
                               "airline": a.get("airline") or "",
                               "craft": a.get("craft") or "",
                               "via": a.get("via") or "",
-                              "exact": bool(a.get("exact"))}
+                              "exact": bool(a.get("exact")),
+                              "src": a.get("src") or ""}
                              for a in rows[:30]]})
+
+
+def _merge_booking_schedule(rows, from_city, to_city, date):
+    """v0.89: same-date Booking offers merged into board rows.
+
+    Board rows are weekday borrows at heart (dow library); booking
+    rows were measured for THIS exact date, so a booking row with the
+    same flight number wins (its times are authoritative for the
+    strip) and flights the board never saw appear as new rows."""
+    from core.booking_fill import _load, POS_TTL
+    cfg = load_config(CONFIG_PATH)
+    rid = None
+    for r in (cfg.get("routes") or []):
+        if (r.get("from_city") == from_city
+                and r.get("to_city") == to_city):
+            rid = r.get("id")
+            break
+    if not rid:
+        return rows
+    entry = ((_load(DATA_DIR).get(rid) or {}).get(date)) or {}
+    offers = entry.get("offers") or []
+    if not offers or float(entry.get("cny") or 0) <= 0:
+        return rows
+    import time as _t
+    if not entry.get("ts") or _t.time() - float(entry["ts"]) > POS_TTL:
+        return rows
+    out = [dict(r) for r in rows]
+    have = {str(r.get("no") or "") for r in out}
+    for o in offers:
+        no = str(o.get("no") or "")
+        if not no:
+            continue
+        bk = {"no": no, "dep": o.get("dep") or "",
+              "arr": o.get("arr") or "",
+              "dur": o.get("dur") or "",
+              "airline": o.get("airline") or "",
+              "craft": o.get("craft") or "",
+              "via": o.get("via") or "",
+              "exact": True, "src": "booking"}
+        if no in have:
+            for i, r in enumerate(out):
+                if str(r.get("no") or "") == no:
+                    out[i] = bk
+                    break
+        else:
+            out.append(bk)
+    out.sort(key=lambda r: (str(r.get("dep") or ""),
+                            str(r.get("no") or "")))
+    return out[:60]
 
 
 @app.get("/api/health")

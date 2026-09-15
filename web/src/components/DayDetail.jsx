@@ -124,7 +124,8 @@ export default function DayDetail({ route, date }) {
           const hasArr = !isNaN(aH) && !isNaN(aM);
           const am = hasArr ? (aH * 60 + aM) : 0;
           const depPct = Math.min(100, Math.max(0, mm / 1440 * 100));
-          const tip = (a.exact ? "" : "参考·") + a.no + " " + a.dep
+          const tip = (a.src === "booking" ? "Booking当日实测·"
+            : (a.exact ? "" : "参考·")) + a.no + " " + a.dep
             + (a.arr ? "→" + a.arr : "")
             + (a.dur ? " · 历时" + a.dur : "")
             + ((a.airline || a.craft)
@@ -266,7 +267,30 @@ export default function DayDetail({ route, date }) {
             ) : null}
           </div>
           <div class="ft-path"><span class="ft-plane">✈</span></div>
-          {!hasDep && !hasArr && alts.length > 0 && (
+          {alts.some((a) => a.src === "booking") && (
+            <div>
+              <span class="ft-alts-label"
+                title="Booking.com 该日期实测报价航班的精确起降时刻(非星期推断)">
+                当日实测班次 · {alts.filter((a) => a.src === "booking").length}班
+              </span>
+              {alts.filter((a) => a.src === "booking").map((a) => (
+                <span
+                  class="ft-alt"
+                  title={"Booking当日实测 " + a.no + " " + a.dep
+                    + (a.arr ? "→" + a.arr : "")
+                    + (a.dur ? " · 历时" + a.dur : "")
+                    + ((a.airline || a.craft)
+                      ? " · " + [a.airline, a.craft].filter(Boolean).join(" ")
+                      : "")
+                    + (a.via ? " · 经停" + a.via : "")}
+                >
+                  {a.no} {a.dep}{a.arr ? "→" + a.arr : ""}
+                  {a.craft ? <span class="ft-alt-craft">{a.craft.split("(")[0]}</span> : null}
+                </span>
+              ))}
+            </div>
+          )}
+          {!hasDep && !hasArr && !alts.some((a) => a.src === "booking") && alts.length > 0 && (
             <div>
               <span class="ft-alts-label">当日参考班次</span>
               {alts.map((a) => (

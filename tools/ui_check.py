@@ -686,6 +686,23 @@ checks["v0.88 Booking完整行程+负缓存分级"] = (
     and ("booking-x" in _kpis88_src)
     and ("TestBookingExact" in _tests88_src))
 
+_bkf89_src = open(os.path.join("core", "booking_fill.py"),
+                  encoding="utf-8").read()
+_webui89_src = open(os.path.join("webui.py"), encoding="utf-8").read()
+_day89_src = open(os.path.join("web", "src", "components",
+                               "DayDetail.jsx"), encoding="utf-8").read()
+checks["v0.89 当日实测班次+systemd部署"] = (
+    ("def offer_list" in _bkf89_src)
+    and ("get(\"offers\")" in _bkf89_src)
+    and ("_merge_booking_schedule" in _webui89_src)
+    and ("src === \"booking\"" in _day89_src)
+    and ("当日实测班次" in _day89_src)
+    and ("Booking当日实测" in _day89_src)
+    and os.path.exists(os.path.join("deploy", "systemd",
+                                    "fare-alert.service"))
+    and os.path.exists(os.path.join("deploy", "systemd", "install.sh"))
+    and os.path.exists(os.path.join("deploy", "README.md")))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

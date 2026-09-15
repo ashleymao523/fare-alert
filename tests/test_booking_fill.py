@@ -12,6 +12,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from core.booking_fill import (BOOKING_REF, fill_gaps, fetch_lowest,
                                merge_booking_deals, attach_times,
                                _deal_from, cache_path,
+                               offer_list,
                                NEG_TTL_ERR, NEG_TTL_NODATA)
 from core.flights import NON_REAL_SOURCES, window_dates
 from core.models import FlightDeal
@@ -45,16 +46,34 @@ def _payload(units=163, nanos=430000000, airline="3U", n=208):
         "stops": [{"cheapestAirline": {"code": airline}}],
     }, "flightOffers": []}
     if n:
-        p["flightOffers"] = [{"segments": [{
-            "departureTime": "2026-10-13T18:40:00",
-            "arrivalTime": "2026-10-13T21:15:00",
-            "legs": [{"flightInfo": {
-                "flightNumber": "2583",
-                "carrierInfo": {"marketingCarrier": "3U"},
-                "planeType": "738"}}],
-            "travellerCheckedLuggage": [{"luggageAllowance": {
-                "luggageType": "CHECKED_IN", "maxTotalWeight": 20}}],
-        }]}]
+        p["flightOffers"] = [
+            {"segments": [{
+                "departureTime": "2026-10-13T18:40:00",
+                "arrivalTime": "2026-10-13T21:15:00",
+                "legs": [{"flightInfo": {
+                    "flightNumber": "2583",
+                    "carrierInfo": {"marketingCarrier": "3U"},
+                    "planeType": "738"}}],
+                "travellerCheckedLuggage": [{"luggageAllowance": {
+                    "luggageType": "CHECKED_IN", "maxTotalWeight": 20}}],
+            }]},
+            {"segments": [{
+                "departureTime": "2026-10-13T07:05:00",
+                "arrivalTime": "2026-10-13T09:45:00",
+                "legs": [{"flightInfo": {
+                    "flightNumber": "8827",
+                    "carrierInfo": {"marketingCarrier": "GJ"},
+                    "planeType": "32N"}}],
+            }]},
+            {"segments": [{
+                "departureTime": "2026-10-13T18:40:00",
+                "arrivalTime": "2026-10-13T21:15:00",
+                "legs": [{"flightInfo": {
+                    "flightNumber": "2583",
+                    "carrierInfo": {"marketingCarrier": "3U"},
+                    "planeType": "738"}}],
+            }]},
+        ]
     return p
 
 
@@ -212,6 +231,27 @@ class TestBookingExact(unittest.TestCase):
         self.assertEqual(d.alt_times[0]["no"], "3U2583")
         self.assertTrue(d.alt_times[0]["exact"])
 
+    def test_offer_list_parse_dedup_sort(self):
+        from core.booking_fill import offer_list as ol
+        rows = ol(_payload())
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["no"], "GJ8827")   # 07:05 first
+        self.assertEqual(rows[0]["dep"], "07:05")
+        self.assertEqual(rows[1]["no"], "3U2583")
+        self.assertEqual(rows[1]["dur"], "2h35m")
+
+    def test_deal_from_offers_priority(self):
+        e = {"cny": 1273.0, "fno": "3U2583", "dep": "18:40",
+             "arr": "21:15", "craft": "738",
+             "offers": [{"no": "GJ8827", "dep": "07:05", "arr": "09:45",
+                         "dur": "2h40m", "airline": "", "craft": "32N",
+                         "via": ""}]}
+        d = _deal_from(e, "2026-10-20", 120)
+        self.assertEqual(len(d.alt_times), 1)
+        self.assertEqual(d.alt_times[0]["no"], "GJ8827")
+        self.assertEqual(d.alt_times[0]["src"], "booking")
+        self.assertEqual(d.alt_times[0]["dur"], "2h40m")
+
     def test_extra_dates_cache_only_then_attach(self):
         dd = self.id() + str(int(time.time()))
         os.makedirs(dd, exist_ok=True)
@@ -232,6 +272,9 @@ class TestBookingExact(unittest.TestCase):
         self.assertEqual(st2["attached"], 1)
         self.assertEqual(real.dep_time, "18:40")
         self.assertEqual(real.dep_src, "booking-x")
+        self.assertTrue(real.alt_times)
+        self.assertTrue(all(a.get("src") == "booking"
+                            for a in real.alt_times))
         import shutil
         shutil.rmtree(dd, ignore_errors=True)
 

@@ -1,0 +1,23 @@
+[Unit]
+Description=fare-alert (webui + crawler loop)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# adjust to your install path; venv recommended:
+#   python3 -m venv /opt/fare-alert/.venv
+#   /opt/fare-alert/.venv/bin/pip install -r requirements.txt
+WorkingDirectory=/opt/fare-alert
+ExecStart=/opt/fare-alert/.venv/bin/python run_all.py
+Environment=FA_ROLE=all
+Environment=FAREALERT_HOST=0.0.0.0
+Environment=FAREALERT_PORT=8765
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

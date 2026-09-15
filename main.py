@@ -138,8 +138,10 @@ def _flight_dict(route, deal, cfg, alert_dates):
                        "airline": a.get("airline"),
                        "craft": a.get("craft"),
                        "via": a.get("via"),
-                       "exact": bool(a.get("exact"))}
-                      for a in (deal.alt_times or [])][:4],
+                       "dur": a.get("dur") or "",
+                       "exact": bool(a.get("exact")),
+                       "src": a.get("src") or ""}
+                      for a in (deal.alt_times or [])][:6],
         "stop_kind": deal.stop_kind,
         "stop_city": deal.stop_city,
         "stop_arr": deal.stop_arr,

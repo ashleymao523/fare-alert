@@ -118,6 +118,7 @@ def fetch_lowest(session, net_cfg, fi, ti, date):
     got = {"total_eur": round(total, 1), "airline": airline,
            "n_offers": int(agg.get("totalCount") or 0)}
     got.update(offer_itinerary(j))
+    got["offers"] = offer_list(j)
     return got
 
 
@@ -197,6 +198,62 @@ def offer_itinerary(j):
         out.update(stop_kind="via", stop_city=ap.get("code") or "",
                    stop_arr=_hhmm(first.get("arrivalTime") or ""))
     return out
+
+
+def offer_list(j, limit=8):
+    """v0.89: every flightOffers itinerary -> same-day timetable rows.
+
+    The LOWEST_PRICE response carries ~15 complete offers (different
+    flights, each with exact timestamps). Parsing only offers[0] (the
+    cheapest) answers "when does THE cheapest fly" but the user's
+    standing complaint is "I cannot see the departure times of the
+    flights on this date" - so keep them all (deduped by flight no,
+    sorted by departure) for the snapshot alt_times and the
+    day-schedule strip."""
+    rows, seen = [], set()
+    for of in (j.get("flightOffers") or [])[:limit * 2]:
+        segs = of.get("segments") or []
+        if not segs:
+            continue
+        first, last = segs[0], segs[-1]
+        legs = first.get("legs") or []
+        leg0 = legs[0] if legs else {}
+        info = leg0.get("flightInfo") or {}
+        mk = ((info.get("carrierInfo") or {}).get(
+            "marketingCarrier") or "")
+        num = info.get("flightNumber") or ""
+        fno = ("%s%s" % (mk, num)) if (mk and num) else ""
+        dep = _hhmm(first.get("departureTime") or "")
+        if not (fno and dep) or fno in seen:
+            continue
+        seen.add(fno)
+        stop_city = ""
+        if len(segs) > 1:
+            stop_city = (segs[0].get("arrivalAirport")
+                         or {}).get("code") or ""
+        elif len(legs) > 1:
+            stop_city = ((legs[-1].get("departureAirport")
+                          or {}).get("code") or "")
+        try:
+            from .flights import airline_name
+            al = airline_name(fno[:2]) if len(fno) >= 2 else ""
+        except Exception:
+            al = ""
+        rows.append({
+            "no": fno, "dep": dep,
+            "arr": _hhmm(last.get("arrivalTime") or ""),
+            "dur": _dur_text(first.get("departureTime") or "",
+                             last.get("arrivalTime") or ""),
+            "airline": al or mk,
+            "craft": _CRAFT_NAMES.get(
+                str(info.get("planeType") or "").upper(),
+                str(info.get("planeType") or "")),
+            "via": stop_city,
+        })
+        if len(rows) >= limit:
+            break
+    rows.sort(key=lambda r: (r["dep"], r["no"]))
+    return rows
 
 
 def _fresh(entry, now, ttl):
@@ -282,7 +339,8 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
                          "stop_city": got.get("stop_city") or "",
                          "stop_arr": got.get("stop_arr") or "",
                          "craft": got.get("craft") or "",
-                         "bag": got.get("bag") or ""}
+                         "bag": got.get("bag") or "",
+                         "offers": got.get("offers") or []}
             if d in gap_set:
                 out.append(_deal_from(bucket[d], d, tax))
         else:
@@ -315,7 +373,15 @@ def _deal_from(entry, d, tax):
         stop_city=entry.get("stop_city") or "",
         stop_arr=entry.get("stop_arr") or "",
         baggage_note=entry.get("bag") or "")
-    if dep:
+    offers = entry.get("offers") or []
+    if offers:
+        deal.alt_times = [{"no": o.get("no"), "dep": o.get("dep"),
+                           "arr": o.get("arr"), "airline": o.get("airline"),
+                           "craft": o.get("craft"), "via": o.get("via"),
+                           "dur": o.get("dur") or "",
+                           "exact": True, "src": "booking"}
+                          for o in offers]
+    elif dep:
         try:
             from .flights import airline_name
             al = airline_name(fno[:2]) if len(fno) >= 2 else ""
@@ -369,6 +435,13 @@ def attach_times(deals, data_dir, route_id, stats=None):
         if dur and (not getattr(d, "duration_text", "")
                    or "(估)" in (getattr(d, "duration_text", "") or "")):
             d.duration_text = dur
+        if not (getattr(d, "alt_times", None) or []):
+            d.alt_times = [{"no": o.get("no"), "dep": o.get("dep"),
+                           "arr": o.get("arr"), "airline": o.get("airline"),
+                           "craft": o.get("craft"), "via": o.get("via"),
+                           "dur": o.get("dur") or "",
+                           "exact": True, "src": "booking"}
+                          for o in (e.get("offers") or [])]
         n += 1
     if stats is not None:
         stats["attached"] = n
