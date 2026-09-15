@@ -129,9 +129,12 @@ def airline_name(code):
     return AIRLINE_NAMES.get(code, code or "未知航司")
 
 
-# Deals whose price itself is borrowed/interpolated: excluded from time
-# coverage stats so the widget reflects real purchasable flights only.
-NON_REAL_SOURCES = ("nearby-ref", "interp")
+# Deals whose price itself is borrowed/interpolated or an intl-channel
+# reference: excluded from time-coverage stats, alerts, KPI and history
+# so the widget reflects real purchasable OTA prices only. booking-ref
+# (v0.87) is a real Booking.com quote but usually ABOVE the CN OTA
+# price - display-only until the qunar cache prices the date itself.
+NON_REAL_SOURCES = ("nearby-ref", "interp", "booking-ref")
 
 
 def time_coverage(deals, today=None, dows=None):

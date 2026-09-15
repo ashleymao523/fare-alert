@@ -19,7 +19,10 @@ from core.flights import (airline_name, booking_url, estimate_arrival_time,
                           estimate_duration_text, fetch_calendar,
                           fetch_intl_promo_calendar,
                           merge_fill_deals, time_coverage, window_dates,
+                          intl_booking_url,
                           NON_REAL_SOURCES)
+from core.booking_fill import fill_gaps as booking_fill_gaps
+from core.booking_fill import merge_booking_deals
 from core.intl import city_iata, fetch_intl_calendar, fetch_schedule_times
 from core.intl import fetch_cabin_offers, fetch_fill_offers
 from core.cabin_monitor import (
@@ -143,6 +146,55 @@ def _flight_dict(route, deal, cfg, alert_dates):
 
 
 FILL_ENABLED_DFT = True
+
+
+def _booking_cross_fill(session, net, cfg, deals, fi, ti, date_from,
+                        date_to, fc, tc, intl, rec, route_id):
+    """v0.87: keyless Booking.com lowest quotes for still-grey dates.
+
+    Runs on BOTH the domestic and intl legs as the last automatic
+    fill before _fill_reference_deals: dates the qunar calendar left
+    unpriced AND amadeus (when configured) also missed get a real -
+    but intl-channel - reference quote. Rows are source=booking-ref
+    (NON_REAL: display only). Budget-rotated, cached, never raises."""
+    covered = {d.date for d in deals if (d.cabin or "") == ""}
+    still = [d for d in window_dates(date_from, date_to)
+             if d not in covered]
+    if not still:
+        return deals
+    enabled = ((cfg.get("sources") or {}).get("enabled") or {})
+    if not enabled.get("booking-fill", True):
+        if rec:
+            rec.step("booking-fill", route_id, "cross fill", "skip", 0,
+                     error="缺{}天·源已停用".format(len(still)))
+        return deals
+    fi2 = (fi or "").strip().upper() or city_iata(fc)
+    ti2 = (ti or "").strip().upper() or city_iata(tc)
+    if not (fi2 and ti2):
+        if rec:
+            rec.step("booking-fill", route_id, "cross fill", "skip", 0,
+                     error="缺{}天·无IATA映射".format(len(still)))
+        return deals
+    t0b = time.time()
+    try:
+        bstats = {}
+        bk = booking_fill_gaps(session, net, cfg, fi2, ti2, still,
+                               None, DATA_DIR, route_id, stats=bstats)
+        if bk:
+            url_fn = (lambda d: intl_booking_url(fc, tc, d)) if intl \
+                else (lambda d: booking_url(fc, tc, d))
+            deals, _ = merge_booking_deals(deals, bk, url_fn)
+        if rec:
+            rec.step("booking-fill", route_id, "cross fill", "ok",
+                     (time.time() - t0b) * 1000, count=bstats.get("filled", 0),
+                     error="缺{}天·本轮探{}·待轮询{}·已补{}".format(
+                         len(still), bstats.get("probed", 0),
+                         bstats.get("deferred", 0), bstats.get("filled", 0)))
+    except Exception as e:
+        if rec:
+            rec.step("booking-fill", route_id, "cross fill", "skip",
+                     (time.time() - t0b) * 1000, error=e)
+    return deals
 
 
 def _fill_reference_deals(deals, date_from, date_to, fc, tc,
@@ -336,7 +388,11 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
                          (time.time() - t0p) * 1000, error=e)
             if not deals:
                 raise
-        return deals
+        # v0.87: intl legs had NO offer-level fill at all - the Booking
+        # cross source is what turns intl grey dates into priced rows.
+        return _booking_cross_fill(session, net, cfg, deals, fi, ti,
+                                   date_from, date_to, fc, tc, True,
+                                   rec, route_id)
     deals = fetch_calendar(session, net, fc, tc, date_from, date_to)
 
     # v0.43: business-cabin offers BEFORE the gap-fill early-return so a
@@ -392,7 +448,12 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
         if rec:
             rec.step("amadeus-fill", route_id, "fill gaps", "skip", 0,
                      error="缺{}天·未配Amadeus密钥".format(len(gaps)))
-        return deals
+        # v0.87: no amadeus key must not mean no automatic fill - the
+        # keyless Booking source keeps grey dates covered for open-
+        # source users who never register anything.
+        return _booking_cross_fill(session, net, cfg, deals, fi, ti,
+                                   date_from, date_to, fc, tc, False,
+                                   rec, route_id)
     fi2 = (fi or "").strip().upper() or city_iata(fc)
     ti2 = (ti or "").strip().upper() or city_iata(tc)
     t0f = time.time()
@@ -401,7 +462,9 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
             rec.step("amadeus-fill", route_id, "fill gaps", "skip",
                      (time.time() - t0f) * 1000,
                      error="缺{}天·无IATA映射".format(len(gaps)))
-        return deals
+        return _booking_cross_fill(session, net, cfg, deals, fi, ti,
+                                   date_from, date_to, fc, tc, False,
+                                   rec, route_id)
     try:
         ama_deals = _cached_amadeus_fill(session, net, cfg, ama_cfg,
                                          fi2, ti2, date_from, date_to, DATA_DIR)
@@ -440,7 +503,9 @@ def _fetch_route_flights(session, net, route, date_from, date_to,
         if rec:
             rec.step("amadeus-fill-offer", route_id, "offer fill", "skip",
                      (time.time() - t0o) * 1000, error=e)
-    return deals
+    return _booking_cross_fill(session, net, cfg, deals, fi, ti,
+                               date_from, date_to, fc, tc, False,
+                               rec, route_id)
 
 
 def _cached_fill_offers(session, net, cfg, ama_cfg, fi, ti,

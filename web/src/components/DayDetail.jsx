@@ -6,6 +6,13 @@ function srcBadge(d) {
   if (d.source === "qunar-intl") return <span class="badge sky">国际特价</span>;
   if (d.source === "amadeus-intl") return <span class="badge sky">Amadeus</span>;
   if (d.source === "amadeus-fill") return <span class="badge amber">Amadeus补</span>;
+  if (d.source === "booking-ref") {
+    return (
+      <span class="badge sky" title="Booking.com 无key国际渠道参考价，通常高于国内OTA；待去哪儿日历生成缓存价后自动替换">
+        Booking参考
+      </span>
+    );
+  }
   if (d.source === "point-fill") return <span class="badge green">精点核价</span>;
   if (d.source === "nearby-ref") {
     return <span class="badge gray">{d.ref_offset ? "临近日参考 · 距" + d.ref_offset + "天" : "临近日参考"}</span>;

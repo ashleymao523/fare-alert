@@ -44,6 +44,13 @@ SOURCE_REGISTRY = {
         "status": "需配置密钥",
         "desc": "去哪儿日历缺价日期自动用Amadeus含税最低价补洞,UI打'补'徽标;结果缓存24小时保护免费额度",
     },
+    "booking-fill": {
+        "kind": "flight",
+        "name": "Booking·无key缺价补全",
+        "status": "可用",
+        "default": True,
+        "desc": "国内+国际灰点日期用Booking.com公开最低价接口(无需注册)交叉补价;国际渠道参考价通常高于OTA,仅展示不参与低价提醒;每轮预算轮询+48h缓存,待去哪儿生成缓存价后自动让位",
+    },
     "hgh-board-times": {
         "kind": "flight",
         "name": "机场班期·参考时刻",

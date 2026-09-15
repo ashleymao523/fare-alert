@@ -10,7 +10,7 @@ import json
 import os
 
 MAX_DAYS = 180  # keep ~6 months of history
-NON_REAL_SOURCES = ("nearby-ref", "interp")
+NON_REAL_SOURCES = ("nearby-ref", "interp", "booking-ref")
 
 
 def load_history(path):

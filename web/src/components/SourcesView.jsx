@@ -197,7 +197,9 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
           const ok = src.status === "可用";
           return (
             <div class="src-row2" key={k}>
-              <input type="checkbox" checked={!!enabled[k]} disabled={!ok}
+              <input type="checkbox"
+                checked={src.default ? enabled[k] !== false : !!enabled[k]}
+                disabled={!ok}
                 onChange={(e) => setSrc(k, e.target.checked)} />
               <span class="s-name2">{src.name || k}</span>
               <span class={"chip2 " + (ok ? "ok" : "plan")}>{src.status || "规划"}</span>

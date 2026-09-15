@@ -78,7 +78,10 @@ class TestTimeCoverage(unittest.TestCase):
         self.assertEqual(cov["arr_exact"], 1)
 
     def test_marker_tuple(self):
-        self.assertEqual(NON_REAL_SOURCES, ("nearby-ref", "interp"))
+        # v0.87: booking-ref joined - a real Booking.com quote but an
+        # intl-channel reference ABOVE the OTA price; display-only.
+        self.assertEqual(NON_REAL_SOURCES,
+                         ("nearby-ref", "interp", "booking-ref"))
 
     def test_promote_on_next_weekday(self):
         # v0.80: a borrowed row whose OWN date is a Sunday (2026-09-20)

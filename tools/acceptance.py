@@ -18,7 +18,9 @@ os.chdir(ROOT)
 sys.path.insert(0, ROOT)
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-NON_REAL = ("nearby-ref", "interp")
+from core.flights import NON_REAL_SOURCES
+
+NON_REAL = NON_REAL_SOURCES
 results = []
 
 

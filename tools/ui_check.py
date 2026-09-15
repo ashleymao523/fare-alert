@@ -648,6 +648,23 @@ checks["v0.86 迁移包+Web一键导出导入"] = (
     and ("BackupCard" in _crawl86_src)
     and ("备份与迁移" in _dist_js))
 
+_bkf87_src = open(os.path.join("core", "booking_fill.py"),
+                  encoding="utf-8").read()
+_main87_src = open(os.path.join("main.py"), encoding="utf-8").read()
+_day87_src = open(os.path.join("web", "src", "components",
+                               "DayDetail.jsx"), encoding="utf-8").read()
+_src87_src = open(os.path.join("core", "sources.py"),
+                  encoding="utf-8").read()
+checks["v0.87 Booking无key灰点交叉补价"] = (
+    ("LOWEST_PRICE" in _bkf87_src)
+    and ("max_per_cycle" in _bkf87_src)
+    and ("_booking_cross_fill" in _main87_src)
+    and ("from core.booking_fill import" in _main87_src)
+    and ("Booking参考" in _day87_src)
+    and ("booking-fill" in _src87_src)
+    and ("booking-ref" in _dist_js)
+    and os.path.exists(os.path.join("tests", "test_booking_fill.py")))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

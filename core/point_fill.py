@@ -264,7 +264,9 @@ def patch_snapshot_deals(deals, cache, route_id, now=None):
         if not isinstance(d, dict):
             continue
         e = entries.get(str(d.get("date") or ""))
-        if e and d.get("source") in ("interp", "nearby-ref"):
+        # v0.87: booking-ref also yields to a captured real OTA price.
+        if e and d.get("source") in ("interp", "nearby-ref",
+                                     "booking-ref"):
             d["bare_price"] = float(e["bare"])
             d["total_price"] = float(e.get("total") or e["bare"])
             d["source"] = POINT_SOURCE

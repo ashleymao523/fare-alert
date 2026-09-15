@@ -8,6 +8,8 @@ const SRC_NAMES = {
   "12306-train": "12306 火车票查询",
   "amadeus-intl": "Amadeus · 国际低价",
   "amadeus-fill": "Amadeus · 缺价补全",
+  "booking-fill": "Booking · 无key补全",
+  "booking-ref": "Booking · 国际渠道参考价",
   "amadeus-times": "Amadeus · 时刻增强",
   "point-fill": "精点核价 · 实抓",
   "hgh-board-times": "机场板期 · 参考时刻",

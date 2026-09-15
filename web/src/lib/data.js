@@ -65,6 +65,7 @@ export function trainMinPrice(t) {
 export function cheapestFlight(route) {
   const ds = ((route && route.deals) || []).filter(
     (d) => d.source !== "nearby-ref" && d.source !== "interp"
+      && d.source !== "booking-ref"
   );
   if (!ds.length) return null;
   let best = ds[0];
@@ -133,5 +134,6 @@ export function dealForDate(route, date) {
 }
 
 export function isRefDeal(d) {
-  return d && (d.source === "nearby-ref" || d.source === "interp");
+  return d && (d.source === "nearby-ref" || d.source === "interp"
+    || d.source === "booking-ref");
 }
