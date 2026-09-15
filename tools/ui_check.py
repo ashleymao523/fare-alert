@@ -568,6 +568,20 @@ checks["v0.79 书签回填+自启体检"] = (
     and ("书签" in _dist_js)
     and ("bm-code" in _dist_css))
 
+_flights_src = open(os.path.join("core", "flights.py"),
+                    encoding="utf-8").read()
+_revview_src = open(os.path.join("web", "src", "components",
+                                 "ReverseView.jsx"), encoding="utf-8").read()
+checks["v0.80 反向缓存榜+转正预告"] = (
+    ("promote_on" in _flights_src)
+    and ("/api/reverse-latest" in _webui_src)
+    and ("fetchReverseLatest" in _api_js_src)
+    and ("最近扫描" in _revview_src)
+    and ("转精查" in _kpis_src)
+    and ("promote_on" in _dist_js)
+    and ("最近扫描" in _dist_js)
+    and ("healthcheck" in _compose_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

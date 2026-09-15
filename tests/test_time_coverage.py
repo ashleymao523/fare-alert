@@ -80,6 +80,56 @@ class TestTimeCoverage(unittest.TestCase):
     def test_marker_tuple(self):
         self.assertEqual(NON_REAL_SOURCES, ("nearby-ref", "interp"))
 
+    def test_promote_on_next_weekday(self):
+        # v0.80: a borrowed row whose OWN date is a Sunday (2026-09-20)
+        # can flip exact when the board lands that dow; from
+        # today=2026-09-15 (Tuesday) the next Sunday is 2026-09-20.
+        import datetime as _dt
+        cov = time_coverage([
+            deal(date="2026-09-20", dep_time="10:00",
+                 time_src="airport-board-x", borrow_dow="2"),
+        ], today=_dt.date(2026, 9, 15))
+        self.assertEqual(cov["dep_borrow"], 1)
+        self.assertEqual(cov["promote_on"], "2026-09-20")
+        self.assertEqual(cov["promote_dow"], "6")
+
+    def test_promote_on_picks_earliest_dow(self):
+        # two own-date dows -> the nearer calendar date wins
+        import datetime as _dt
+        cov = time_coverage([
+            deal(date="2026-09-20", dep_time="10:00",
+                 time_src="airport-board-x"),  # next Sun = 09-20
+            deal(date="2026-09-18", dep_time="12:00",
+                 time_src="airport-board-x"),  # next Fri = 09-18
+        ], today=_dt.date(2026, 9, 15))
+        self.assertEqual(cov["promote_on"], "2026-09-18")
+        self.assertEqual(cov["promote_dow"], "4")
+
+    def test_promote_on_absent_without_borrow(self):
+        import datetime as _dt
+        cov = time_coverage([
+            deal(dep_time="08:00", time_src="airport-board"),
+        ], today=_dt.date(2026, 9, 15))
+        self.assertEqual(cov["promote_on"], "")
+        self.assertEqual(cov["dep_borrow"], 0)
+
+    def test_promote_skips_landed_dows(self):
+        # dows says Friday already has board data -> a Friday borrow row
+        # stays un-promised (the source just lacks that flight); a
+        # still-empty Sunday keeps its flip date.
+        import datetime as _dt
+        cov = time_coverage([
+            deal(date="2026-09-18", dep_time="10:00",
+                 time_src="airport-board-x"),
+        ], today=_dt.date(2026, 9, 15), dows={"4": 500, "6": 0})
+        self.assertEqual(cov["dep_borrow"], 1)
+        self.assertEqual(cov["promote_on"], "")
+        cov2 = time_coverage([
+            deal(date="2026-09-20", dep_time="10:00",
+                 time_src="airport-board-x"),
+        ], today=_dt.date(2026, 9, 15), dows={"4": 500, "6": 0})
+        self.assertEqual(cov2["promote_on"], "2026-09-20")
+
 
 if __name__ == "__main__":
     unittest.main()

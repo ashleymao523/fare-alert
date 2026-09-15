@@ -41,6 +41,7 @@ from core.sched_board import (board_lookup_x, build_route_priors,
                               flight_duration,
                               city_dep_times, city_return_dep_times,
                               load_sched_db,
+                              sched_stats,
                               prior_minutes_for, promote_alt_time,
                               touches_hangzhou, update_sched_db)
 from core.state import load_state, save_state
@@ -1122,7 +1123,10 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 deals[0].date, deals[0].flight_no,
                 int(route_snap["cheapest_total"]), len(below)))
         route_snap["train"] = train_info
-        route_snap["time_coverage"] = time_coverage(deals)
+        # v0.80: pass board dow completeness so promote_on only promises
+        # a flip date for weekdays the board has not landed yet.
+        route_snap["time_coverage"] = time_coverage(
+            deals, dows=sched_stats(load_sched_db(DATA_DIR)).get("dows"))
         if verbose:
             for d in deals[:15]:
                 log.info("   {} {} {} bare ¥{} total ¥{}".format(

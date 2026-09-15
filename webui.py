@@ -622,6 +622,43 @@ def api_reverse_search():
     return jsonify({"ok": True, "result": result})
 
 
+@app.get("/api/reverse-latest")
+def api_reverse_latest():
+    """v0.80: last reverse-scan hits straight from the 6h route cache, so
+    the budget-discovery tab shows real destinations before the user's
+    first scan. Pure cache read - zero network, safe to hit on load."""
+    from core.alerts import total_price
+    from core.flights import airline_name
+    cfg = load_config(CONFIG_PATH)
+    tax = cfg.get("tax", {})
+    cache = _read_json(os.path.join(DATA_DIR, "reverse_cache.json"), {}) or {}
+    now = time.time()
+    hits, as_of = [], 0.0
+    for key, ent in cache.items():
+        if not isinstance(ent, dict) or ent.get("no_data") or not ent.get("bare"):
+            continue
+        try:
+            head = str(key).split("|", 1)[0]
+            frm, to = head.split("->", 1)
+        except ValueError:
+            continue
+        ts = float(ent.get("ts") or 0)
+        as_of = max(as_of, ts)
+        code = (ent.get("flight_no") or "")[:2].upper()
+        hits.append({
+            "from": frm.strip(), "city": to.strip(),
+            "total_price": int(round(total_price(float(ent["bare"]), tax))),
+            "bare_price": float(ent["bare"]),
+            "date": ent.get("date", ""),
+            "flight_no": ent.get("flight_no", ""),
+            "airline": airline_name(code) if code else "",
+            "url": ent.get("url", ""),
+            "age_hours": round((now - ts) / 3600.0, 1) if ts else None})
+    hits.sort(key=lambda h: (h["total_price"], h["city"]))
+    return jsonify({"ok": True, "count": len(hits), "as_of": as_of,
+                    "hits": hits[:12]})
+
+
 @app.post("/api/amadeus-test")
 def api_amadeus_test():
     """Validate Amadeus key by fetching an OAuth token (helps first-run setup)."""

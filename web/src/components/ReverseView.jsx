@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { reverseSearch, fetchCities, fetchSnapshot } from "../lib/api.js";
+import { reverseSearch, fetchReverseLatest, fetchCities, fetchSnapshot } from "../lib/api.js";
 import AcField from "./AcField.jsx";
 
 export default function ReverseView() {
@@ -10,12 +10,16 @@ export default function ReverseView() {
   const [res, setRes] = useState(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [latest, setLatest] = useState(null);
   useEffect(() => {
     fetchSnapshot()
       .then((s) => {
         const r0 = (s && s.routes && s.routes[0]);
         if (r0 && r0.from_city) setFrom(r0.from_city);
       })
+      .catch(() => {});
+    fetchReverseLatest()
+      .then((d) => { if (d && d.ok) setLatest(d); })
       .catch(() => {});
   }, []);
   const scan = () => {
@@ -108,6 +112,30 @@ export default function ReverseView() {
           </div>
         ) : null}
       </div>
+      {(latest && latest.count) ? (
+        <div class="card">
+          <div class="card-head">
+            <h3>🗂 最近扫描 · 命中 {latest.count} 条线路</h3>
+            <span class="sub">6 小时缓存 · 未扫描也能看可去哪 · 点击直达购票</span>
+          </div>
+          {latest.hits.map((h, i) => (
+            <a class="rev-hit2" key={h.city + String(h.date) + String(h.total_price)}
+              href={h.url} target="_blank" rel="noopener"
+              title={(h.airline || h.flight_no || "") + " · 裸价¥" + h.bare_price + "+税费 · 点击直达"}>
+              <span class="rev-rank2">{i + 1}</span>
+              <div class="rev-main2">
+                <div class="rev-city2">{h.city}</div>
+                <div class="muted rev-sub2">
+                  {h.date} · {(h.airline || h.flight_no || "")}
+                  {h.age_hours != null ? " · " + (h.age_hours >= 1
+                    ? Math.round(h.age_hours) + "小时前" : "刚刚") : ""}
+                </div>
+              </div>
+              <div class="rev-price2">¥{h.total_price}</div>
+            </a>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -88,4 +88,8 @@ export function reverseSearch(body) {
   return post("/api/reverse-search", body).then((x) => x.result);
 }
 
+export function fetchReverseLatest() {
+  return fetch("/api/reverse-latest").then(j);
+}
+
 export function fetchLog() { return fetch("/api/log").then(j); }

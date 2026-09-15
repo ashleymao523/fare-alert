@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Flight price source: Qunar low-price calendar gateway (no auth needed)."""
+import datetime as _dt
 import urllib.parse
 
 import requests
@@ -133,15 +134,26 @@ def airline_name(code):
 NON_REAL_SOURCES = ("nearby-ref", "interp")
 
 
-def time_coverage(deals):
+def time_coverage(deals, today=None, dows=None):
     """Count dep/arr time quality across deals (pure, no IO).
 
     dep: exact (amadeus/airport-board + dep_time) / borrow (airport-board-x
     + dep_time) / missing. arr adds est (arr_est only, never real).
     NON_REAL_SOURCES rows are skipped: their price is already a reference.
+
+    v0.80: promote_on/promote_dow - the earliest calendar date when a
+    borrowed (airport-board-x) row can turn exact. The promote candidate
+    is the deal's OWN weekday (not the borrowed source dow): the board
+    files tomorrow's rows under tomorrow's dow, so the next occurrence of
+    a still-missing weekday is when its flights flip to exact. When dows
+    (board completeness) says that weekday already has data, the row
+    stays borrowed because the board source just does not carry that
+    flight - no deadline is promised for those.
     """
     cov = {"total": 0, "dep_exact": 0, "dep_borrow": 0, "dep_missing": 0,
            "arr_exact": 0, "arr_borrow": 0, "arr_est": 0, "arr_missing": 0}
+    base = today or _dt.date.today()
+    promote = {}
     for d in deals:
         if (getattr(d, "source", "") or "") in NON_REAL_SOURCES:
             continue
@@ -149,8 +161,22 @@ def time_coverage(deals):
         dep_src = getattr(d, "dep_src", "") or getattr(d, "time_src", "")
         arr_src = getattr(d, "arr_src", "") or getattr(d, "time_src", "")
         if getattr(d, "dep_time", ""):
-            cov["dep_borrow" if dep_src not in ("amadeus", "airport-board")
-                else "dep_exact"] += 1
+            borrowed = dep_src not in ("amadeus", "airport-board")
+            cov["dep_borrow" if borrowed else "dep_exact"] += 1
+            if borrowed:
+                try:
+                    own = _dt.date.fromisoformat(str(getattr(d, "date", "")))
+                except ValueError:
+                    own = None
+                if own is not None:
+                    dow = own.weekday()
+                    if dows is None or not int((dows or {}).get(str(dow), 0)):
+                        for k in range(1, 8):
+                            cand = base + _dt.timedelta(days=k)
+                            if cand.weekday() == dow:
+                                if dow not in promote or cand < promote[dow]:
+                                    promote[dow] = cand
+                                break
         else:
             cov["dep_missing"] += 1
         if getattr(d, "arr_time", ""):
@@ -160,6 +186,13 @@ def time_coverage(deals):
             cov["arr_est"] += 1
         else:
             cov["arr_missing"] += 1
+    if promote:
+        best_dow, best_date = min(promote.items(), key=lambda kv: kv[1])
+        cov["promote_on"] = best_date.isoformat()
+        cov["promote_dow"] = str(best_dow)
+    else:
+        cov["promote_on"] = ""
+        cov["promote_dow"] = ""
     return cov
 
 

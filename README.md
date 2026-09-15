@@ -230,6 +230,7 @@ fare-alert/
 - [x] **v0.78 精点补查 UI + 时刻沉淀透明卡**: ① 运维页新增「精点补查 · 缺价日期回填」卡——GET /api/point-gaps 按路线列出聚合日历未出价的日期(已回填绿 chip), 点击 chip 展开回填表单并附去哪儿单日精查直达链接(与日详情同款 deep link), 填「最终付款价(含税)+航班号+起降时刻(选填)」POST /api/point-fill 后快照热更新, 卡内明示口径(自动扣机建+燃油/缓存 48h/真实源优先); ② 新增「时刻沉淀 · 按路线透明度」卡——各路线起飞时刻精确/借用双色占比条(snapshot time_coverage), 七星期班期覆盖格 + 缺口自动补齐预测(板库每轮沉淀当日+次日, 周三/周日何时长满直接给日期)。验证: ui_check v0.78 断言(精点补查/nextRunForDow/两 api helper 源码+dist), 版本 0.78 四处盖章。
 
 - [x] **v0.79 精点回填书签 + 开机自启体检**: ① 运维页「精点补查」卡新增书签脚本区块——GET /api/bookmarklet 生成绑定当前面板地址的 bookmarklet(手机从局域网 URL 生成即指向台式机), 添加到收藏栏后在去哪儿精查页点击, 从渲染 DOM 挖最低价(¥ 2-5 位 + 50-99999 过滤, 尽力抓航班号/起降时刻), no-cors text/plain POST 回填, 抓不到价弹窗手输, 页角 toast 反馈结果; ② /api/point-fill 支持 from_city/to_city 城市对自动解析 route_id(bookmarklet 只知城市名), 歧义/未知返回 400; ③ doctor 新增 check_autostart——Windows HKCU Run + 计划任务双路探测 webui/worker 自启是否齐装, 未装/不完整 WARN 并给安装命令, 重启存活从「口头相信」变成可验证。验证: 新增 test_bookmarklet(生成器形状/origin 注入/城市对解析 200+400/端点契约), test_doctor +autostart 断言, ui_check v0.79 断言, 版本 0.79 四处盖章。
+- [x] **v0.80 反向缓存榜 + 借班转正预告 + compose 健康检查**: ① 「预算找目的地」页新增 GET /api/reverse-latest——纯读 6 小时 reverse 缓存(零网络请求), 按 含税总价 升序回最近扫描命中线路(城市/日期/航班号/航司/裸价/直达链接/新鲜度), 前端首屏即渲染「最近扫描 · 命中 N 条线路」卡片榜, 该 tab 从空表单变成默认有内容; ② time_coverage 新增 promote_on/promote_dow——对每条借班行按 borrow_dow 推「该星期几的下一个日历日」, 取最早者, 时刻覆盖 KPI 直接显示「MM/DD 起借班转精查」, 把「为什么是参考时刻」变成带截止日的透明承诺; ③ docker-compose 补 healthcheck 声明(与镜像内置双保险), unhealthy 容器触发 unless-stopped 重启。验证: test_time_coverage +3(下个周日/最早 dow/无借班), 新增 test_reverse_latest(排序/税口径/字段/空缓存), ui_check v0.80 断言, 版本 0.80 四处盖章。
 
 ## 常见问题
 

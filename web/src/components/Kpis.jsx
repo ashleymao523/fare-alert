@@ -71,8 +71,10 @@ export default function Kpis({ route, drop }) {
       label: "真实票时刻覆盖",
       value: Math.round(100 * (depN + altN) / real.length) + "%",
       sub: (altN
-        ? "精确 " + depN + " 天 · 参考 " + altN + " 天 · 班期库每日沉淀"
+        ? "精确 " + depN + " 天 · 参考 " + altN + " 天"
         : "班期库每日自动沉淀, 约7天长滑窗")
+        + (route.time_coverage && route.time_coverage.promote_on
+          ? " · " + fmtMD(route.time_coverage.promote_on) + " 起借班转精查" : "")
         + (refN ? " · 另参考价 " + refN + " 天(无时刻)" : ""),
       cls: ""
     });

@@ -13,4 +13,13 @@ services:
       # all (default) = full feature - the crawler sediments the
       # sched-board dow library daily (exact departure times).
       - FA_ROLE=all
+    # v0.80: runtime healthcheck at the compose layer too (the image
+    # carries its own); orphans/stale containers get marked unhealthy so
+    # restart: unless-stopped can bring the stack back.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=8)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
