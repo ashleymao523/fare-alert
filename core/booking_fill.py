@@ -17,6 +17,13 @@ cache later prices the same date the real row wins on its own; a
 point-fill capture may also overwrite it (merge conditions include
 booking-ref since v0.87).
 
+v0.88: the SAME response carries flightOffers[] - full cheapest
+itineraries with flight number, exact dep/arr timestamps, duration,
+stop legs and the real checked-luggage allowance. Gap rows now ship
+with exact times (dep_src=booking), and cached same-date itineraries
+pin reference times onto real-price rows still missing exact
+departures (dep_src=booking-x - the price row stays authoritative).
+
 Budget: <= max_per_cycle fresh dates per crawl round (near-first
 rotation like the amadeus offer fill), positive cache 48h, negative
 24h, >=4s between live calls, quiet 429/5xx backoff.
@@ -32,10 +39,12 @@ BOOKING_REF = "booking-ref"
 ENDPOINT = "https://flights.booking.com/api/flights/LOWEST_PRICE"
 CACHE_NAME = "booking_fill_cache.json"
 POS_TTL = 48 * 3600
-NEG_TTL = 24 * 3600
+NEG_TTL_ERR = 90 * 60        # transient failure: retry fast
+NEG_TTL_NODATA = 12 * 3600   # server-confirmed no offer
 DEFAULT_FX = 7.8           # EUR -> CNY, config booking_fill.fx_eur_cny
 DEFAULT_MAX_PER_CYCLE = 6
 CALL_INTERVAL = 4.0
+EXACT_SOURCES = ("amadeus", "airport-board", "booking")
 
 
 def cache_path(data_dir):
@@ -62,8 +71,19 @@ def _save(data_dir, cache):
 def fetch_lowest(session, net_cfg, fi, ti, date):
     """One keyless LOWEST_PRICE call -> dict or None (no exception).
 
-    Returns {"total_eur", "airline", "n_offers"}; total_eur is the
-    tax-inclusive grand total (matches amadeus fill semantics)."""
+    Returns {"total_eur", "airline", "n_offers", ...itinerary};
+    total_eur is the tax-inclusive grand total (matches amadeus fill
+    semantics). v0.88 adds fno/dep/arr/dur/stop_kind/stop_city/stop_arr/
+    craft/bag from flightOffers[0] when present.
+
+    v0.88.1: a 200 answer with no aggregation.minPrice means the
+    SERVER confirmed no offer -> {"no_data": True} (long negative
+    cache). Non-200 / transport errors return None - those are
+    transient (throttle, hiccup) and live probing proves the date
+    often prices minutes later, so they only get a short negative
+    cache. This split is what kills the grey-date complaint: dates
+    a manual precise search CAN find were previously locked out for
+    24h by one unlucky call."""
     params = {
         "type": "ONEWAY", "from": fi, "to": ti, "depart": date,
         "adults": "1", "cabinClass": "ECONOMY",
@@ -86,7 +106,7 @@ def fetch_lowest(session, net_cfg, fi, ti, date):
     mp = agg.get("minPrice") or {}
     units = mp.get("units")
     if units is None:
-        return None
+        return {"no_data": True}
     nanos = float(mp.get("nanos") or 0) / 1e9
     total = float(units) + (nanos if nanos < 1 else 0.0)
     airline = ""
@@ -95,8 +115,88 @@ def fetch_lowest(session, net_cfg, fi, ti, date):
         if code:
             airline = code
             break
-    return {"total_eur": round(total, 1), "airline": airline,
-            "n_offers": int(agg.get("totalCount") or 0)}
+    got = {"total_eur": round(total, 1), "airline": airline,
+           "n_offers": int(agg.get("totalCount") or 0)}
+    got.update(offer_itinerary(j))
+    return got
+
+
+_CRAFT_NAMES = {
+    "738": "波音737-800", "73H": "波音737-800", "739": "波音737-900",
+    "32N": "空客A320neo", "A20N": "空客A320neo", "A21N": "空客A321neo",
+    "320": "空客A320", "321": "空客A321", "323": "空客A321",
+    "333": "空客A330-300", "339": "空客A330-900", "359": "空客A350-900",
+    "77W": "波音777-300ER", "789": "波音787-9", "788": "波音787-8",
+    "919": "中国商飞C919",
+}
+
+
+def _hhmm(iso):
+    s = str(iso or "")
+    return s[11:16] if len(s) >= 16 else ""
+
+
+def _dur_text(dep_iso, arr_iso):
+    try:
+        d0 = _dt.datetime.fromisoformat(str(dep_iso)[:19])
+        d1 = _dt.datetime.fromisoformat(str(arr_iso)[:19])
+        mins = int((d1 - d0).total_seconds() // 60)
+    except Exception:
+        return ""
+    if mins < 0:
+        mins += 24 * 60
+    return "%dh%02dm" % (mins // 60, mins % 60)
+
+
+def _bag_text(segs):
+    for s in segs:
+        for t in (s.get("travellerCheckedLuggage") or []):
+            la = t.get("luggageAllowance") or {}
+            if la.get("luggageType") != "CHECKED_IN":
+                continue
+            w = la.get("maxTotalWeight")
+            pc = la.get("maxPiece")
+            if w:
+                return "含%skg托运" % w
+            if pc:
+                return "含%spc托运" % pc
+    return "无免费托运"
+
+
+def offer_itinerary(j):
+    """flightOffers[0] -> exact itinerary fields ({} when absent)."""
+    offers = j.get("flightOffers") or []
+    if not offers:
+        return {}
+    segs = offers[0].get("segments") or []
+    if not segs:
+        return {}
+    first, last = segs[0], segs[-1]
+    legs = first.get("legs") or []
+    leg0 = legs[0] if legs else {}
+    info = leg0.get("flightInfo") or {}
+    mk = ((info.get("carrierInfo") or {}).get("marketingCarrier") or "")
+    num = info.get("flightNumber") or ""
+    dep_iso = first.get("departureTime") or ""
+    arr_iso = last.get("arrivalTime") or ""
+    out = {
+        "fno": ("%s%s" % (mk, num)) if (mk and num) else "",
+        "dep": _hhmm(dep_iso), "arr": _hhmm(arr_iso),
+        "dur": _dur_text(dep_iso, arr_iso),
+        "stop_kind": "", "stop_city": "", "stop_arr": "",
+        "craft": _CRAFT_NAMES.get(str(info.get("planeType") or "").upper(),
+                                  str(info.get("planeType") or "")),
+        "bag": _bag_text(segs),
+    }
+    if len(segs) > 1:
+        ap = segs[0].get("arrivalAirport") or {}
+        out.update(stop_kind="transfer", stop_city=ap.get("code") or "",
+                   stop_arr=_hhmm(segs[0].get("arrivalTime") or ""))
+    elif len(legs) > 1:
+        ap = (legs[-1].get("departureAirport") or {})
+        out.update(stop_kind="via", stop_city=ap.get("code") or "",
+                   stop_arr=_hhmm(first.get("arrivalTime") or ""))
+    return out
 
 
 def _fresh(entry, now, ttl):
@@ -107,14 +207,21 @@ def _fresh(entry, now, ttl):
 
 
 def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
-              route_id, stats=None, sleeper=None):
+              route_id, stats=None, sleeper=None, extra_dates=None):
     """Return list[FlightDeal] (source=booking-ref) for gap dates.
 
     Near-date-first rotation: fresh positive cache rows replay free;
     uncached dates are probed live up to max_per_cycle per round; the
     negative cache doubles as the rotation cursor (same pattern as the
     v0.67 amadeus offer budget). Errors never raise - the caller's
-    pipeline must stay alive."""
+    pipeline must stay alive.
+
+    v0.88: extra_dates are real-price dates whose cheapest row still
+    lacks an exact departure; probing them sedimentates the same cache
+    (attach_times consumes it later) - they never produce rows here,
+    the qunar price stays authoritative. v0.87 cache entries without
+    itinerary fields are re-probed once so rows upgrade to exact times
+    organically."""
     from .alerts import tax_amount
     from .models import FlightDeal
 
@@ -127,25 +234,30 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
     tax = tax if tax is not None else tax_amount(cfg.get("tax", {}))
     sleeper = sleeper or time.sleep
 
+    gap_set = {str(d) for d in (gap_dates or [])}
+    targets = sorted(gap_set | {str(d) for d in (extra_dates or [])})
     cache = _load(data_dir)
     bucket = cache.setdefault(route_id, {}) if isinstance(cache, dict) else {}
     now = time.time()
     out, probed, deferred, last_call = [], 0, 0, 0.0
-    for d in sorted(gap_dates or []):
+    for d in targets:
         try:
             _dt.date.fromisoformat(str(d))
         except ValueError:
             continue
         e = bucket.get(d)
-        if e and _fresh(e, now, POS_TTL) and float(e.get("cny") or 0) > 0:
-            out.append(FlightDeal(
-                date=d, bare_price=round(float(e["cny"]) - tax, 1),
-                flight_no=e.get("airline") or "", source=BOOKING_REF,
-                url="", ref_offset=-1))
+        if (e and _fresh(e, now, POS_TTL)
+                and float(e.get("cny") or 0) > 0
+                and e.get("dep") is not None):
+            if d in gap_set:
+                out.append(_deal_from(e, d, tax))
             continue
-        if e and _fresh(e, now, NEG_TTL) and float(e.get("cny") or 0) <= 0:
-            deferred += 1          # known-empty recently: skip this round
-            continue
+        if e and float(e.get("cny") or 0) <= 0:
+            ttl = NEG_TTL_NODATA if e.get("kind") == "nodata" \
+                else NEG_TTL_ERR
+            if _fresh(e, now, ttl):
+                deferred += 1      # fresh negative: skip this round
+                continue
         if probed >= max_n:
             deferred += 1
             continue
@@ -161,17 +273,106 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
             cny = round(got["total_eur"] * fx, 0)
             bucket[d] = {"ts": now, "cny": cny,
                          "airline": got.get("airline") or "",
-                         "n": got.get("n_offers") or 0}
-            out.append(FlightDeal(
-                date=d, bare_price=round(cny - tax, 1),
-                flight_no=got.get("airline") or "", source=BOOKING_REF,
-                url="", ref_offset=-1))
+                         "n": got.get("n_offers") or 0,
+                         "fno": got.get("fno") or "",
+                         "dep": got.get("dep") or "",
+                         "arr": got.get("arr") or "",
+                         "dur": got.get("dur") or "",
+                         "stop_kind": got.get("stop_kind") or "",
+                         "stop_city": got.get("stop_city") or "",
+                         "stop_arr": got.get("stop_arr") or "",
+                         "craft": got.get("craft") or "",
+                         "bag": got.get("bag") or ""}
+            if d in gap_set:
+                out.append(_deal_from(bucket[d], d, tax))
         else:
-            bucket[d] = {"ts": now, "cny": 0}
+            bucket[d] = {"ts": now, "cny": 0,
+                         "kind": "nodata" if (got and got.get("no_data"))
+                         else "err"}
     if probed:
         _save(data_dir, cache)
     stats.update({"probed": probed, "deferred": deferred, "filled": len(out)})
     return out
+
+
+def _deal_from(entry, d, tax):
+    """Cache entry -> full FlightDeal (source=booking-ref, exact times
+    whenever the offer carried them)."""
+    from .models import FlightDeal
+
+    cny = float(entry.get("cny") or 0)
+    dep = entry.get("dep") or ""
+    arr = entry.get("arr") or ""
+    fno = entry.get("fno") or entry.get("airline") or ""
+    deal = FlightDeal(
+        date=d, bare_price=round(cny - tax, 1),
+        flight_no=fno, source=BOOKING_REF, url="", ref_offset=-1,
+        dep_time=dep, arr_time=arr, duration_text=entry.get("dur") or "",
+        time_src="booking" if dep else "",
+        dep_src="booking" if dep else "",
+        arr_src="booking" if arr else "",
+        stop_kind=entry.get("stop_kind") or "",
+        stop_city=entry.get("stop_city") or "",
+        stop_arr=entry.get("stop_arr") or "",
+        baggage_note=entry.get("bag") or "")
+    if dep:
+        try:
+            from .flights import airline_name
+            al = airline_name(fno[:2]) if len(fno) >= 2 else ""
+        except Exception:
+            al = ""
+        deal.alt_times = [{"no": fno, "dep": dep, "arr": arr,
+                          "airline": al, "craft": entry.get("craft") or "",
+                          "via": "", "exact": True}]
+    return deal
+
+
+def attach_times(deals, data_dir, route_id, stats=None):
+    """v0.88: pin cached same-date Booking itineraries onto real-price
+    rows whose dep time is missing or dow-borrowed (booking-x).
+
+    Overwrite policy: exact sources (amadeus/airport-board) and alt-ref
+    (same-flight reference) keep their times; only missing or
+    airport-board-x (dow borrow) rows upgrade - a same-date real
+    schedule beats a borrowed weekday. The price and flight identity
+    of the real row are NEVER touched (the booking cheapest flight
+    may differ from the OTA cheapest)."""
+    from .flights import NON_REAL_SOURCES
+
+    cache = _load(data_dir)
+    bucket = cache.get(route_id) if isinstance(cache, dict) else None
+    bucket = bucket or {}
+    now = time.time()
+    n = 0
+    for d in deals:
+        src = (getattr(d, "source", "") or "")
+        if src in NON_REAL_SOURCES or getattr(d, "cabin", ""):
+            continue
+        dep_src = (getattr(d, "dep_src", "") or "") or \
+            (getattr(d, "time_src", "") or "")
+        if getattr(d, "dep_time", "") and \
+                dep_src in EXACT_SOURCES + ("alt-ref",):
+            continue
+        e = bucket.get(getattr(d, "date", ""))
+        if not e or not _fresh(e, now, POS_TTL):
+            continue
+        dep = e.get("dep") or ""
+        if not dep or float(e.get("cny") or 0) <= 0:
+            continue
+        d.dep_time = dep
+        d.dep_src = "booking-x"
+        d.time_src = "booking-x"
+        if not (getattr(d, "arr_time", "") or "").strip() and e.get("arr"):
+            d.arr_time = e["arr"]
+            d.arr_src = "booking-x"
+        dur = e.get("dur") or ""
+        if dur and (not getattr(d, "duration_text", "")
+                   or "(估)" in (getattr(d, "duration_text", "") or "")):
+            d.duration_text = dur
+        n += 1
+    if stats is not None:
+        stats["attached"] = n
+    return deals
 
 
 def merge_booking_deals(deals, bk_deals, booking_url_fn):

@@ -56,13 +56,17 @@ export default function Kpis({ route, drop }) {
     cls: route.days_below > 0 ? "good" : "warn"
   }];
   const ds = route.deals || [];
-  const real = ds.filter((x) => x.source !== "nearby-ref" && x.source !== "interp");
+  const real = ds.filter((x) => ["nearby-ref", "interp", "booking-ref"]
+    .indexOf(x.source) < 0);
   let depN = 0;
   let altN = 0;
   real.forEach((x) => {
     // v0.48: alt-ref promoted times stay in the "参考" bucket so the
     // KPI never counts a different flight's departure as exact.
-    if ((x.dep_time || "").trim() && x.dep_src !== "alt-ref") depN++;
+    // v0.88: booking-x (Booking same-date itinerary pinned onto a
+    // real-price row) is the same kind of cross-flight reference.
+    if ((x.dep_time || "").trim()
+      && x.dep_src !== "alt-ref" && x.dep_src !== "booking-x") depN++;
     else if ((x.dep_time || "").trim() || (x.alt_times || []).length) altN++;
   });
   const refN = ds.length - real.length;

@@ -22,6 +22,7 @@ from core.flights import (airline_name, booking_url, estimate_arrival_time,
                           intl_booking_url,
                           NON_REAL_SOURCES)
 from core.booking_fill import fill_gaps as booking_fill_gaps
+from core.booking_fill import attach_times as booking_attach_times
 from core.booking_fill import merge_booking_deals
 from core.intl import city_iata, fetch_intl_calendar, fetch_schedule_times
 from core.intl import fetch_cabin_offers, fetch_fill_offers
@@ -106,6 +107,9 @@ def _flight_dict(route, deal, cfg, alert_dates):
     elif deal.source == "interp":
         airline = "两侧真实价插值(估)"
         bag_default = "以购票页为准"
+    elif deal.source == "booking-ref":
+        airline = "Booking直达价(国际渠道·EUR折算)"
+        bag_default = "以Booking报价页为准"
     else:
         airline = airline_name(code)
         bag_default = "以购票页为准"
@@ -116,7 +120,7 @@ def _flight_dict(route, deal, cfg, alert_dates):
         "flight_no": deal.flight_no,
         "airline": airline,
         "airline_code": code,
-        "baggage": bag.get(code, bag_default),
+        "baggage": deal.baggage_note or bag.get(code, bag_default),
         "below": total < route.get("threshold_total", 500),
         "alert": deal.date in alert_dates,
         "url": deal.url,
@@ -156,11 +160,21 @@ def _booking_cross_fill(session, net, cfg, deals, fi, ti, date_from,
     fill before _fill_reference_deals: dates the qunar calendar left
     unpriced AND amadeus (when configured) also missed get a real -
     but intl-channel - reference quote. Rows are source=booking-ref
-    (NON_REAL: display only). Budget-rotated, cached, never raises."""
-    covered = {d.date for d in deals if (d.cabin or "") == ""}
+    (NON_REAL: display only). Budget-rotated, cached, never raises.
+    v0.88: the same LOWEST_PRICE response carries the full cheapest
+    itinerary (flight no, exact dep/arr, duration, luggage), so the
+    fill now also pins reference times (booking-x) onto real-price
+    rows that still lack exact departures."""
+    economy = [d for d in deals if (d.cabin or "") == ""]
+    covered = {d.date for d in economy}
     still = [d for d in window_dates(date_from, date_to)
              if d not in covered]
-    if not still:
+    exact_dep = {"amadeus", "airport-board", "alt-ref", "booking"}
+    time_gaps = [d.date for d in economy
+                 if d.source not in NON_REAL_SOURCES
+                 and (not d.dep_time
+                      or ((d.dep_src or d.time_src) not in exact_dep))]
+    if not still and not time_gaps:
         return deals
     enabled = ((cfg.get("sources") or {}).get("enabled") or {})
     if not enabled.get("booking-fill", True):
@@ -179,17 +193,21 @@ def _booking_cross_fill(session, net, cfg, deals, fi, ti, date_from,
     try:
         bstats = {}
         bk = booking_fill_gaps(session, net, cfg, fi2, ti2, still,
-                               None, DATA_DIR, route_id, stats=bstats)
+                               None, DATA_DIR, route_id, stats=bstats,
+                               extra_dates=time_gaps)
         if bk:
             url_fn = (lambda d: intl_booking_url(fc, tc, d)) if intl \
                 else (lambda d: booking_url(fc, tc, d))
             deals, _ = merge_booking_deals(deals, bk, url_fn)
+        deals = booking_attach_times(deals, DATA_DIR, route_id,
+                                     stats=bstats)
         if rec:
             rec.step("booking-fill", route_id, "cross fill", "ok",
                      (time.time() - t0b) * 1000, count=bstats.get("filled", 0),
-                     error="缺{}天·本轮探{}·待轮询{}·已补{}".format(
-                         len(still), bstats.get("probed", 0),
-                         bstats.get("deferred", 0), bstats.get("filled", 0)))
+                     error="缺价{}天·缺时刻{}天·探{}·缓{}·补价{}·补时刻{}".format(
+                         len(still), len(time_gaps), bstats.get("probed", 0),
+                         bstats.get("deferred", 0), bstats.get("filled", 0),
+                         bstats.get("attached", 0)))
     except Exception as e:
         if rec:
             rec.step("booking-fill", route_id, "cross fill", "skip",

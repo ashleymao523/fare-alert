@@ -27,6 +27,8 @@ class FlightDeal:
     borrow_votes: int = 0     # v0.84 借用时刻的周内一致票数(>=2=稳定排班)
     borrow_unstable: bool = False  # v0.84 各dow时刻分歧(无众数), 以购票页为准
 
+    baggage_note: str = ""    # v0.88 real checked-luggage allowance (Booking offer)
+
     @property
     def airline_code(self):
         return self.flight_no[:2].upper() if len(self.flight_no) >= 2 else ""

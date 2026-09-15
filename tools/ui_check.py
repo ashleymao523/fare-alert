@@ -665,6 +665,27 @@ checks["v0.87 Booking无key灰点交叉补价"] = (
     and ("booking-ref" in _dist_js)
     and os.path.exists(os.path.join("tests", "test_booking_fill.py")))
 
+_bkf88_src = open(os.path.join("core", "booking_fill.py"),
+                  encoding="utf-8").read()
+_main88_src = open(os.path.join("main.py"), encoding="utf-8").read()
+_kpis88_src = open(os.path.join("web", "src", "components",
+                                "Kpis.jsx"), encoding="utf-8").read()
+_tests88_src = open(os.path.join("tests", "test_booking_fill.py"),
+                    encoding="utf-8").read()
+checks["v0.88 Booking完整行程+负缓存分级"] = (
+    ("offer_itinerary" in _bkf88_src)
+    and ("attach_times" in _bkf88_src)
+    and ("NEG_TTL_ERR" in _bkf88_src)
+    and ("NEG_TTL_NODATA" in _bkf88_src)
+    and ("no_data" in _bkf88_src)
+    and ("booking_attach_times" in _main88_src)
+    and ("extra_dates=time_gaps" in _main88_src)
+    and ("baggage_note" in _main88_src)
+    and ("Booking精确" in _day87_src)
+    and ("booking-x" in _day87_src)
+    and ("booking-x" in _kpis88_src)
+    and ("TestBookingExact" in _tests88_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

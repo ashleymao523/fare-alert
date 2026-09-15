@@ -55,6 +55,20 @@ function timeSrcBadge(label, src, deal) {
       </span>
     );
   }
+  if (src === "booking") {
+    return (
+      <span class="badge sky ts-badge" title="Booking.com 当日最低报价的完整行程: 航班号/起降时刻/托运额度均来自该报价">
+        {label}·Booking精确
+      </span>
+    );
+  }
+  if (src === "booking-x") {
+    return (
+      <span class="badge amber ts-badge" title="价格行仍是权威数据源; 时刻取自Booking.com同日最低报价行程(航班号可能不同), 仅供参考">
+        {label}·Booking同日参考
+      </span>
+    );
+  }
   if (src === "amadeus") return <span class="badge sky ts-badge">{label}·Amadeus</span>;
   return null;
 }
@@ -210,7 +224,9 @@ export default function DayDetail({ route, date }) {
     if (depSrc && depSrc === arrSrc) {
       const lab = depSrc === "amadeus" ? "计划时刻"
         : (depSrc === "airport-board-x" ? (borrowLabel(d) + "班期")
-          : (depSrc === "alt-ref" ? "参考班次" : "计划时刻"));
+          : (depSrc === "alt-ref" ? "参考班次"
+            : ((depSrc === "booking" || depSrc === "booking-x")
+              ? "当日行程" : "计划时刻")));
       midBadges = timeSrcBadge(lab, depSrc, d);
     } else {
       midBadges = (
