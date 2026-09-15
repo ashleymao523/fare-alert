@@ -703,6 +703,15 @@ checks["v0.89 当日实测班次+systemd部署"] = (
     and os.path.exists(os.path.join("deploy", "systemd", "install.sh"))
     and os.path.exists(os.path.join("deploy", "README.md")))
 
+_t90_src = open(os.path.join("tests", "test_booking_fill.py"),
+                encoding="utf-8").read()
+checks["v0.90 遗留缓存实测班次升级轮转"] = (
+    ("legacy positive quote" in _bkf89_src)
+   and ('and (e.get("offers") or [])):' in _bkf89_src)
+    and ("has_booking" in _bkf89_src)
+    and ("offers and not has_booking" in _bkf89_src)
+    and ("test_legacy_positive_reprobed_for_offers" in _t90_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

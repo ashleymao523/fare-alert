@@ -278,7 +278,14 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
     (attach_times consumes it later) - they never produce rows here,
     the qunar price stays authoritative. v0.87 cache entries without
     itinerary fields are re-probed once so rows upgrade to exact times
-    organically."""
+    organically.
+
+    v0.90: fresh positive entries WITHOUT an offers list are legacy
+    (pre-v0.89 single-itinerary quotes). They now re-enter the probe
+    rotation so every cached date upgrades to the full same-day
+    timetable; a failed upgrade probe KEEPS the legacy quote (it only
+    loses the timetable, never the reference price) and retries next
+    round - the cache cursor therefore never stalls again."""
     from .alerts import tax_amount
     from .models import FlightDeal
 
@@ -305,7 +312,8 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
         e = bucket.get(d)
         if (e and _fresh(e, now, POS_TTL)
                 and float(e.get("cny") or 0) > 0
-                and e.get("dep") is not None):
+                and e.get("dep") is not None
+                and (e.get("offers") or [])):
             if d in gap_set:
                 out.append(_deal_from(e, d, tax))
             continue
@@ -344,6 +352,11 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
             if d in gap_set:
                 out.append(_deal_from(bucket[d], d, tax))
         else:
+            if e and float(e.get("cny") or 0) > 0:
+                # legacy positive quote: a failed timetable upgrade
+                # must not destroy the cached reference price
+                deferred += 1
+                continue
             bucket[d] = {"ts": now, "cny": 0,
                          "kind": "nodata" if (got and got.get("no_data"))
                          else "err"}
@@ -435,13 +448,20 @@ def attach_times(deals, data_dir, route_id, stats=None):
         if dur and (not getattr(d, "duration_text", "")
                    or "(估)" in (getattr(d, "duration_text", "") or "")):
             d.duration_text = dur
-        if not (getattr(d, "alt_times", None) or []):
+        # v0.90: a full same-day Booking timetable also replaces
+        # unsourced board-reference alts (they never carry src); rows
+        # that already show a booking timetable keep theirs.
+        cur_alts = getattr(d, "alt_times", None) or []
+        has_booking = any((a.get("src") or "") == "booking"
+                          for a in cur_alts if isinstance(a, dict))
+        offers = e.get("offers") or []
+        if offers and not has_booking:
             d.alt_times = [{"no": o.get("no"), "dep": o.get("dep"),
-                           "arr": o.get("arr"), "airline": o.get("airline"),
-                           "craft": o.get("craft"), "via": o.get("via"),
-                           "dur": o.get("dur") or "",
-                           "exact": True, "src": "booking"}
-                          for o in (e.get("offers") or [])]
+                            "arr": o.get("arr"), "airline": o.get("airline"),
+                            "craft": o.get("craft"), "via": o.get("via"),
+                            "dur": o.get("dur") or "",
+                            "exact": True, "src": "booking"}
+                           for o in offers]
         n += 1
     if stats is not None:
         stats["attached"] = n

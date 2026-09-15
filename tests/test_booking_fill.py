@@ -301,3 +301,81 @@ class TestBookingExact(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestBookingUpgrade(unittest.TestCase):
+    """v0.90 legacy-quote timetable upgrade rotation."""
+
+    def _dd(self):
+        dd = self.id() + str(int(time.time()))
+        os.makedirs(dd, exist_ok=True)
+        return dd
+
+    def _legacy_cache(self, dd):
+        from core.booking_fill import _save
+        _save(dd, {"rt1": {"2026-10-13": {
+            "ts": time.time(), "cny": 1273.0, "dep": "18:40",
+            "arr": "21:15", "dur": "2h35m", "fno": "3U2583"}}})
+
+    def test_legacy_positive_reprobed_for_offers(self):
+        dd = self._dd()
+        self._legacy_cache(dd)
+        s = _Session(_payload())
+        cfg = {"booking_fill": {"fx_eur_cny": 8.0,
+                                "max_per_cycle": 3, "call_interval": 0}}
+        st = {}
+        out = fill_gaps(s, {}, cfg, "HGH", "CKG", ["2026-10-13"],
+                        120, dd, "rt1", stats=st,
+                        sleeper=lambda x: None)
+        self.assertEqual(st["probed"], 1)
+        self.assertEqual(len(out), 1)
+        self.assertTrue(out[0].alt_times)
+        self.assertTrue(all(a.get("src") == "booking"
+                            for a in out[0].alt_times))
+        with open(cache_path(dd), encoding="utf-8") as f:
+            e = json.load(f)["rt1"]["2026-10-13"]
+        self.assertTrue(e.get("offers"))
+        import shutil
+        shutil.rmtree(dd, ignore_errors=True)
+
+    def test_upgrade_failure_keeps_legacy_quote(self):
+        dd = self._dd()
+        self._legacy_cache(dd)
+        s = _ErrSession({})
+        cfg = {"booking_fill": {"fx_eur_cny": 8.0,
+                                "max_per_cycle": 3, "call_interval": 0}}
+        st = {}
+        out = fill_gaps(s, {}, cfg, "HGH", "CKG", ["2026-10-13"],
+                        120, dd, "rt1", stats=st,
+                        sleeper=lambda x: None)
+        self.assertEqual(out, [])
+        self.assertEqual(st["probed"], 1)
+        self.assertEqual(st["deferred"], 1)
+        with open(cache_path(dd), encoding="utf-8") as f:
+            e = json.load(f)["rt1"]["2026-10-13"]
+        self.assertEqual(e["cny"], 1273.0)
+        self.assertEqual(e["dep"], "18:40")
+        import shutil
+        shutil.rmtree(dd, ignore_errors=True)
+
+    def test_attach_replaces_unsourced_alts(self):
+        dd = self._dd()
+        from core.booking_fill import _save
+        _save(dd, {"rt1": {"2026-10-13": {
+            "ts": time.time(), "cny": 1273.0, "dep": "18:40",
+            "arr": "21:15",
+            "offers": [{"no": "GJ8827", "dep": "07:05",
+                        "arr": "09:45", "dur": "2h40m"}]}}})
+        d = FlightDeal(date="2026-10-13", bare_price=400.0,
+                       flight_no="GJ8127",
+                       alt_times=[{"no": "XX123", "dep": "12:00",
+                                  "exact": False}])
+        attach_times([d], dd, "rt1")
+        self.assertEqual(len(d.alt_times), 1)
+        self.assertEqual(d.alt_times[0]["no"], "GJ8827")
+        self.assertEqual(d.alt_times[0]["src"], "booking")
+        import shutil
+        shutil.rmtree(dd, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    unittest.main()
