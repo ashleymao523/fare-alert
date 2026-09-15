@@ -776,6 +776,32 @@ checks["v0.97 周报亮点带起降时刻"] = (
     and ("test_route_metrics_archives_schedule" in _t97_src)
     and ("test_sharp_drop_carries_dep_time" in _t97_src))
 
+_rev98_src = open(os.path.join("core", "revive.py"),
+                  encoding="utf-8").read()
+_wd98_src = open(os.path.join("tools", "watchdog.py"),
+                 encoding="utf-8").read()
+_wdreg98 = open(os.path.join("tools", "register_watchdog_task.ps1"),
+                encoding="utf-8").read()
+_revreg98 = open(os.path.join("tools", "register_revive_task.ps1"),
+                 encoding="utf-8-sig").read()
+_web98_src = open("webui.py", encoding="utf-8").read()
+_tw98_src = open(os.path.join("tests", "test_watchdog.py"),
+                 encoding="utf-8").read()
+_tr98_src = open(os.path.join("tests", "test_revive.py"),
+                 encoding="utf-8").read()
+checks["v0.98 运行时看门狗: 90min复活+外部webui守护"] = (
+    ("RUNTIME_DEAD_S" in _rev98_src)
+    and ('"started-runtime"' in _rev98_src)
+    and ("_runtime_restart_cooldown_ok" in _rev98_src)
+    and ("def decide" in _wd98_src)
+    and ("FAILS_BEFORE_RESTART = 2" in _wd98_src)
+    and ("FareAlertWatchdog" in _wdreg98)
+    and ("tools/watchdog.py" in _wdreg98)
+    and ("tools/autostart_worker.ps1" in _revreg98)
+    and ("watchdog_state.json" in _web98_src)
+    and ("test_healthy_resets_fail_counter" in _tw98_src)
+    and ("test_runtime_revive_midday_dead_worker" in _tr98_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

@@ -6,7 +6,7 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools/register_revive_task.ps1
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
-$wrapper = Join-Path $repo 'toolsautostart_worker.ps1'
+$wrapper = Join-Path $repo 'tools/autostart_worker.ps1'
 try {
   $existing = Get-ScheduledTask -TaskName 'FareAlertWorkerRevive' -ErrorAction SilentlyContinue
   if ($existing) { Unregister-ScheduledTask -TaskName 'FareAlertWorkerRevive' -Confirm:$false }

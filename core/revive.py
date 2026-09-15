@@ -39,6 +39,9 @@ TASK_NAME = "FareAlertWorkerRevive"
 REVIVE_HOUR = 7          # launch window = 07:00-07:59 local time
 PATROL_HOUR = 9          # patrol window = 09:00-09:59 local time
 CHECK_INTERVAL_S = 300   # supervisor probe cadence
+RUNTIME_DEAD_S = 5400    # v0.98: heartbeat age declaring the worker
+                         # dead mid-day (2x the 45-min fetch cadence)
+RUNTIME_RESTART_COOLDOWN_S = 3600  # anti-storm: <=1 runtime revive/hour
 
 _PS_TASK_QUERY = (
     "try { $t = Get-ScheduledTask -TaskName '" + TASK_NAME + "' -ErrorAction Stop; "
@@ -60,7 +63,8 @@ _state = {"enabled": False, "thread": None, "last_check": None,
           "last_error": None, "last_stale_restart": None,
           "patrol_enabled": False, "patrol_done_day": None,
           "patrol_last": None, "patrol_last_error": None,
-          "catchup_done_day": None}
+          "catchup_done_day": None,
+          "last_runtime_restart": None, "last_runtime_note": None}
 
 
 def _query_task():
@@ -153,6 +157,20 @@ def _stale_cooldown_ok():
     ts = ((_state.get("last_stale_restart") or {}).get("ts"))
     try:
         return (not ts) or (time.time() - float(ts)) >= 1800.0
+    except (TypeError, ValueError):
+        return True
+
+
+def _runtime_restart_cooldown_ok():
+    """v0.98: True when >=1h passed since the last runtime revive.
+
+    A crash-looping worker (bad deploy, dying transport) must not turn
+    the 5-min supervisor pass into a fetch storm - one revive per hour
+    caps the damage while still recovering within the hour."""
+    ts = ((_state.get("last_runtime_restart") or {}).get("ts"))
+    try:
+        return ((not ts) or
+                (time.time() - float(ts)) >= RUNTIME_RESTART_COOLDOWN_S)
     except (TypeError, ValueError):
         return True
 
@@ -258,6 +276,34 @@ def supervise_once(repo_dir, now=None):
             return "restarted-stale-code"
         except Exception as e:
             _state["last_error"] = str(e)  # next pass retries the swap
+    # v0.98 runtime watchdog: a worker dying MIDDAY used to wait for the
+    # >6h once-per-day catchup - freezing the 45-min cadence for hours.
+    # A heartbeat older than RUNTIME_DEAD_S (2x the fetch interval)
+    # now probes + revives immediately, rate-limited to once/hour.
+    if not in_window and _runtime_restart_cooldown_ok():
+        _now = now or datetime.datetime.now()
+        age = _worker_heartbeat_age_s(
+            repo_dir, now=_now.timestamp() if now else None)
+        if age is not None and age >= RUNTIME_DEAD_S:
+            try:
+                running = loop_running()
+            except Exception as e:
+                _state["last_probe"] = "error"
+                _state["last_error"] = str(e)
+                return "probe-error"
+            _state["last_probe"] = "ok"
+            if not running:
+                _state["started_pid"] = start_loop(repo_dir)
+                _state["last_start"] = time.time()
+                _state["last_runtime_restart"] = {
+                    "ts": time.time(), "age_min": round(age / 60.0, 1)}
+                _state["catchup_done_day"] = _now.date().isoformat()
+                return "started-runtime"
+            # Running but the heartbeat is stale: mid-pass hang or a
+            # long backfill - note it, never kill what we cannot prove.
+            _state["last_runtime_note"] = {
+                "ts": time.time(), "age_min": round(age / 60.0, 1),
+                "running": True}
     if not in_window:
         day = (now or datetime.datetime.now()).date().isoformat()
         if _state.get("catchup_done_day") == day:
@@ -388,6 +434,10 @@ def supervisor_snapshot():
             "last_probe": _state["last_probe"],
             "started_pid": _state["started_pid"],
             "last_stale_restart": _state.get("last_stale_restart"),
+            "runtime": {"dead_after_min": RUNTIME_DEAD_S // 60,
+                        "cooldown_min": RUNTIME_RESTART_COOLDOWN_S // 60,
+                        "last_restart": _state.get("last_runtime_restart"),
+                        "last_note": _state.get("last_runtime_note")},
             "patrol": {"enabled": bool(_state.get("patrol_enabled")),
                        "window": "09:00-09:59",
                        "last": _state.get("patrol_last"),

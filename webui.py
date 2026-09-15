@@ -1246,6 +1246,12 @@ def api_health():
     try:
         from core.revive import task_status, supervisor_snapshot
         revive = {"supervisor": supervisor_snapshot(), "task": task_status()}
+        # v0.98: layer-4 external watchdog state file (tools/watchdog.py,
+        # scheduled every 15 min) - one glance shows the last action and
+        # whether it is still inside a restart cooldown.
+        revive["watchdog"] = _read_json(
+            os.path.join(DATA_DIR, "watchdog_state.json"),
+            None) or {"last_action": "never-run"}
     except Exception:
         revive = None
     backup = None

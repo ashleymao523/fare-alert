@@ -22,8 +22,61 @@ class ReviveSupervisorTests(unittest.TestCase):
                   "started_pid", "last_error",
                   "last_stale_restart",
                   "patrol_enabled", "patrol_done_day", "patrol_last",
-                  "patrol_last_error", "catchup_done_day"):
+                  "patrol_last_error", "catchup_done_day",
+                  "last_runtime_restart", "last_runtime_note"):
             revive._state[k] = None
+
+    def test_runtime_revive_midday_dead_worker(self):
+        """v0.98: a >90min heartbeat + no process revives immediately
+        (previously waited for the >6h once-per-day catchup)."""
+        p0 = mock.patch.object(revive, "_worker_heartbeat_age_s",
+                               return_value=7200.0)
+        p1 = mock.patch.object(revive, "loop_running", return_value=False)
+        p2 = mock.patch.object(revive, "start_loop")
+        with p0, p1, p2 as sl:
+            sl.return_value = 9010
+            rv = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 15, 0))
+        self.assertEqual(rv, "started-runtime")
+        sl.assert_called_once_with("/repo")
+        rr = revive.supervisor_snapshot()["runtime"]["last_restart"]
+        self.assertEqual(rr["age_min"], 120.0)
+
+    def test_runtime_revive_respects_hourly_cooldown(self):
+        revive._state["last_runtime_restart"] = {
+            "ts": time.time(), "age_min": 95.0}
+        p0 = mock.patch.object(revive, "_worker_heartbeat_age_s",
+                               return_value=7200.0)
+        p1 = mock.patch.object(revive, "start_loop")
+        with p0, p1 as sl:
+            rv = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 15, 5))
+        self.assertEqual(rv, "out-of-window")  # fell through, no restart
+        sl.assert_not_called()
+
+    def test_runtime_fresh_heartbeat_ignored(self):
+        p0 = mock.patch.object(revive, "_worker_heartbeat_age_s",
+                               return_value=300.0)
+        p1 = mock.patch.object(revive, "loop_running", return_value=False)
+        p2 = mock.patch.object(revive, "start_loop")
+        with p0, p1, p2 as sl:
+            rv = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 15, 0))
+        self.assertEqual(rv, "out-of-window")
+        sl.assert_not_called()
+
+    def test_runtime_stale_heartbeat_but_running_notes_only(self):
+        p0 = mock.patch.object(revive, "_worker_heartbeat_age_s",
+                               return_value=7200.0)
+        p1 = mock.patch.object(revive, "loop_running", return_value=True)
+        p2 = mock.patch.object(revive, "start_loop")
+        with p0, p1, p2 as sl:
+            rv = revive.supervise_once(
+                "/repo", now=datetime.datetime(2026, 9, 14, 15, 0))
+        self.assertEqual(rv, "out-of-window")
+        sl.assert_not_called()  # never kill what we cannot prove dead
+        note = revive.supervisor_snapshot()["runtime"]["last_note"]
+        self.assertTrue(note["running"])
 
     def test_stale_worker_hot_swapped_in_window(self):
         """v0.51: a worker heartbeat stamped with older code gets
@@ -162,9 +215,10 @@ class ReviveSupervisorTests(unittest.TestCase):
         sl.assert_not_called()
 
     def test_catchup_revives_stale_heartbeat_out_of_window(self):
-        """v0.41: a desktop that boots AFTER the 07:00 window still
-        revives a >6h-stale worker once per day, so board dow coverage
-        keeps growing on any boot schedule (observed freeze: 2/7)."""
+        """v0.41+v0.98: a desktop that boots AFTER the 07:00 window
+        still revives a stale worker the same day - and since v0.98
+        the runtime watchdog (>=90min heartbeat) catches it in the
+        first 5-min pass instead of waiting out the 6h gate."""
         p0 = mock.patch.object(revive, "_worker_heartbeat_age_s")
         p1 = mock.patch.object(revive, "loop_running")
         p2 = mock.patch.object(revive, "start_loop")
@@ -174,7 +228,7 @@ class ReviveSupervisorTests(unittest.TestCase):
             sl.return_value = 4321
             rv = revive.supervise_once(
                 "/repo", now=datetime.datetime(2026, 9, 14, 15, 0))
-        self.assertEqual(rv, "started-catchup")
+        self.assertEqual(rv, "started-runtime")
         sl.assert_called_once_with("/repo")
         self.assertEqual(revive._state["catchup_done_day"], "2026-09-14")
 
@@ -193,8 +247,8 @@ class ReviveSupervisorTests(unittest.TestCase):
         sl.assert_not_called()
 
     def test_catchup_runs_once_per_day(self):
-        """After a catch-up revive the day is marked done: later passes
-        never re-probe/re-start, even with the heartbeat still stale."""
+        """After a runtime revive the hour cooldown + day marker keep
+        later passes from re-starting, even with the heartbeat stale."""
         p0 = mock.patch.object(revive, "_worker_heartbeat_age_s")
         p1 = mock.patch.object(revive, "loop_running")
         p2 = mock.patch.object(revive, "start_loop")
@@ -206,7 +260,7 @@ class ReviveSupervisorTests(unittest.TestCase):
                 "/repo", now=datetime.datetime(2026, 9, 14, 15, 0))
             rv2 = revive.supervise_once(
                 "/repo", now=datetime.datetime(2026, 9, 14, 15, 5))
-        self.assertEqual(rv1, "started-catchup")
+        self.assertEqual(rv1, "started-runtime")
         self.assertEqual(rv2, "out-of-window")
         sl.assert_called_once()
 
