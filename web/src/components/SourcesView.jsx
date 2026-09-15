@@ -239,14 +239,27 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
           <h3>🫀 调度心跳</h3>
           <span class="sub">worker 每轮抓取后写入 /api/health</span>
         </div>
-        <div class="hb-row">
-          <span class={"hb-dot" + (alive ? " on" : "")}></span>
-          <span class="hb-meta">
-            <b>{hbState}</b>
-            {wk ? <span> · 最近轮次 {wk.ok ? "成功" : "失败"} · {Math.round(wk.age_min)} 分钟前</span> : null}
-          </span>
-        </div>
-        {(wk && wk.code_synced === false) ? (
+       <div class="hb-row">
+         <span class={"hb-dot" + (alive ? " on" : "")}></span>
+         <span class="hb-meta">
+           <b>{hbState}</b>
+           {wk ? <span> · 最近轮次 {wk.ok ? "成功" : "失败"} · {Math.round(wk.age_min)} 分钟前</span> : null}
+         </span>
+       </div>
+        {(hb.timetable && hb.timetable.pos) ? (
+          <div class="tt-cov">
+            <div class="tc-row">
+              <span class="tc-k">班次实测覆盖</span>
+              <div class="tc-bar"><div class="tc-fill ok" style={"width:" + hb.timetable.pct + "%"} /></div>
+              <span class="tc-v">{hb.timetable.pct}%</span>
+            </div>
+            <div class="muted">
+              当日实测班次 {hb.timetable.offers}/{hb.timetable.pos} 天
+              {hb.timetable.pending ? " · 剩余 " + hb.timetable.pending + " 天逐轮升级中(点开日期精查即时可见)" : " · 已全量覆盖 ✅"}
+            </div>
+          </div>
+        ) : null}
+       {(wk && wk.code_synced === false) ? (
           <div class="warn-box">
             ⚠ Worker 代码落后（心跳 v{wk.code_ver || "旧版"}）：守护线程将自动热替换为最新代码，或运行 tools/restart_all.ps1 立即生效。
           </div>

@@ -710,7 +710,18 @@ checks["v0.90 遗留缓存实测班次升级轮转"] = (
    and ('and (e.get("offers") or [])):' in _bkf89_src)
     and ("has_booking" in _bkf89_src)
     and ("offers and not has_booking" in _bkf89_src)
-    and ("test_legacy_positive_reprobed_for_offers" in _t90_src))
+   and ("test_legacy_positive_reprobed_for_offers" in _t90_src))
+
+_webui91_src = open(os.path.join("webui.py"), encoding="utf-8").read()
+_src91_src = open(os.path.join("web", "src", "components",
+                             "SourcesView.jsx"), encoding="utf-8").read()
+checks["v0.91 实测班次覆盖监控可见化"] = (
+    ("def coverage_stats" in _bkf89_src)
+    and ('"timetable": timetable' in _webui91_src)
+    and ("coverage_stats(DATA_DIR)" in _webui91_src)
+    and ("班次实测覆盖" in _src91_src)
+    and ("hb.timetable.pending" in _src91_src)
+    and ("test_mixed_cache_counts" in _t90_src))
 
 bad = 0
 for k, v in checks.items():

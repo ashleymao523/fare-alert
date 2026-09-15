@@ -271,6 +271,8 @@ python tools/acceptance.py
 - [x] **v0.89 当日实测班次时刻表 + systemd 裸机部署**: 用户核心痛点「页面总是无法显示航班班次的具体起飞时间」的第三层根治——v0.88 只取 Booking 最便宜一班, 但响应本带 ~15 个完整报价(不同航班各带精确时刻)。① core/booking_fill.offer_list: 全班次解析(航班号去重、按起飞排序、含历时/机型/经停), 缓存条目新增 offers 键; ② 灰点行(booking-ref)的 alt_times 直接挂当日实测班次列表(exact+src=booking), 详情卡新增「当日实测班次·N班」区——该日真实可购航班的精确起飞→落地, 非星期推断; ③ 真实价行被钉 booking-x 参考时刻的同时也挂上实测班次列表(alt_times 原为空时), _attach_alt_times 不覆盖已有值所以口径稳定; ④ webui /api/day-schedule 叠加 Booking 实测: 同号航班的当日实测时刻优先于板库星期推断, 板库没有的航班补充进列表, 24小时时间线的 tip 标注「Booking当日实测」; ⑤ 部署升级: 新增 deploy/systemd/(fare-alert.service + install.sh 一键装, 崩溃15s自动拉起)与 deploy/README.md(Docker/NAS/树莓派/Windows 三形态部署指南)。单测 10→12(offer_list 解析去重排序/offers 优先挂载+attach 班次列表断言)。
 - [x] **v0.90 遗留缓存实测班次升级轮转**: v0.89 的实测班次覆盖停在 48/240 不再增长——根因是 v0.89 之前写入的 159 个旧正缓存日期只带单班次时刻(dep 有、offers 无), fill_gaps 视为“完整”永久跳过。① 跳过条件收紧为 dep+offers 双全, 无 offers 的旧正缓存重新进入探测轮转(仍受 max_per_cycle 预算节流), 逐轮升级为当日全班次时刻表; ② 升级探测失败保留原参考价(deferred 下轮重试), 绝不把已有正缓存覆盖成负缓存; ③ attach_times 用缓存实测 offers 覆盖无来源标记的板库参考 alts(同日实测 > 星期推断), 已带 booking src 的不重复覆盖。单测 12→15(旧正缓存重探升级/升级失败保价/无源 alts 覆盖)。
 
+- [x] **v0.91 实测班次覆盖监控可见化**: v0.90 的升级轮转在后台静默跑, 用户只能等覆盖慢慢变多。本版把进度变成指标: ① core/booking_fill.coverage_stats 统计新鲜正缓存/已带实测班次/待升级天数/百分比(负缓存与过期条目剔除, 异常桶不崩); ② /api/health 新增 timetable 块, 部署盒子/外部 uptime 监控可直接拉取; ③ 前端“数据源”页调度心跳卡新增覆盖进度条(百分比 + 剩余天数提示, 覆盖完成显示✔)。单测 15→16(混合缓存计数)。
+
 ## 免责声明
 
 本项目仅聚合公开接口数据做个人出行比价提醒,不保证价格实时准确,不构成购票建议;购票请以航司/12306/平台下单页为准。请遵守各数据源服务条款,合理控制查询频率。

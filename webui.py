@@ -1259,9 +1259,16 @@ def api_health():
                   "last": os.path.basename(zips[-1]) if zips else None,
                   "last_ts": (datetime.datetime.fromtimestamp(
                       os.path.getmtime(zips[-1])).strftime("%Y-%m-%d %H:%M:%S")
-                      if zips else None)}
+                  if zips else None)}
     except Exception:
         backup = None
+    timetable = None
+    try:
+        # v0.91: same-day timetable upgrade progress (v0.90 rotation)
+        from core.booking_fill import coverage_stats
+        timetable = coverage_stats(DATA_DIR)
+    except Exception:
+        timetable = None
     return jsonify({
         "ok": True,
         "snapshot": {"updated_at": updated, "age_min": age_min},
@@ -1270,9 +1277,10 @@ def api_health():
                   "dows": dows},
         "worker": worker,
         "revive": revive,
-        "push_pending": _push_pending(),
-        "backup": backup,
-    })
+       "timetable": timetable,
+       "push_pending": _push_pending(),
+       "backup": backup,
+   })
 
 
 def _lan_ip():

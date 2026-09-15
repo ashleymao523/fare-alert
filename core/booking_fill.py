@@ -68,6 +68,31 @@ def _save(data_dir, cache):
     os.replace(tmp, path)
 
 
+def coverage_stats(data_dir):
+    """v0.91: same-day timetable upgrade observability.
+
+    Counts fresh positive cache entries (the reference quotes) and
+    how many already carry a full Booking offers list. The gap is the
+    legacy backlog the v0.90 rotation upgrades at max_per_cycle per
+    route per round - surfaced in /api/health so deploy progress is
+    visible without reading the cache by hand."""
+    cache = _load(data_dir)
+    now = time.time()
+    pos = offers = 0
+    for bucket in cache.values():
+        if not isinstance(bucket, dict):
+            continue
+        for e in bucket.values():
+            if not isinstance(e, dict):
+                continue
+            if float(e.get("cny") or 0) <= 0 or not _fresh(e, now, POS_TTL):
+                continue
+            pos += 1
+            if e.get("offers"):
+                offers += 1
+    return {"pos": pos, "offers": offers,
+            "pending": max(0, pos - offers),
+            "pct": int(round(offers * 100.0 / pos)) if pos else 0}
 def fetch_lowest(session, net_cfg, fi, ti, date):
     """One keyless LOWEST_PRICE call -> dict or None (no exception).
 

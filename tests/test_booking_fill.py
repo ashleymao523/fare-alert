@@ -11,9 +11,10 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from core.booking_fill import (BOOKING_REF, fill_gaps, fetch_lowest,
                                merge_booking_deals, attach_times,
-                               _deal_from, cache_path,
-                               offer_list,
-                               NEG_TTL_ERR, NEG_TTL_NODATA)
+                              _deal_from, cache_path,
+                              offer_list,
+                              coverage_stats,
+                              NEG_TTL_ERR, NEG_TTL_NODATA)
 from core.flights import NON_REAL_SOURCES, window_dates
 from core.models import FlightDeal
 from core.point_fill import gap_dates, patch_snapshot_deals
@@ -379,3 +380,34 @@ class TestBookingUpgrade(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestCoverageStats(unittest.TestCase):
+    """v0.91 timetable upgrade observability."""
+
+    def test_mixed_cache_counts(self):
+        dd = self.id() + str(int(time.time()))
+        os.makedirs(dd, exist_ok=True)
+        from core.booking_fill import _save, POS_TTL
+        now = time.time()
+        _save(dd, {
+            "rt1": {
+                # fresh positive WITH offers -> counted as covered
+                "2026-10-01": {"ts": now, "cny": 900,
+                               "offers": [{"no": "3U2583"}]},
+                # fresh positive WITHOUT offers -> backlog
+                "2026-10-02": {"ts": now, "cny": 800},
+                # negative / expired -> ignored entirely
+                "2026-10-03": {"ts": now, "cny": 0, "kind": "err"},
+                "2026-10-04": {"ts": now - POS_TTL - 60, "cny": 700,
+                               "offers": [{"no": "GJ8827"}]},
+            },
+            # malformed bucket must not crash the counter
+            "rt2": "junk",
+        })
+        st = coverage_stats(dd)
+        self.assertEqual(st["pos"], 2)
+        self.assertEqual(st["offers"], 1)
+        self.assertEqual(st["pending"], 1)
+        self.assertEqual(st["pct"], 50)
+        import shutil
+        shutil.rmtree(dd, ignore_errors=True)
