@@ -9,6 +9,11 @@
 #   gated: plain POSTs, headless dumps and an embedded real browser all
 #   get the same uniform 1999 rejection -> no keyless automated point
 #   query today.
+# - 2026-09-16 live check: the in-app embedded browser loading the
+#   per-date list page gets the soft-block empty result too -
+#   "没有查询到符合条件的航班" - same fingerprint family as headless.
+#   Only a real user browser (desktop Chrome / phone) returns live
+#   prices, so the bookmarklet stays the only capture path for now.
 #
 # Gap dates therefore fill via two tracks:
 #   track A (auto):  Amadeus per-date offers (_cached_fill_offers).
@@ -285,8 +290,15 @@ def patch_snapshot_deals(deals, cache, route_id, now=None):
 def gap_dates(deals, window):
     """Dates still carrying reference-only prices -> capture targets.
     window is [date_from, date_to]; deals are raw snapshot dicts."""
+    # v1.01: booking-ref is reference-only too (NON_REAL_SOURCES) - a
+    # gray booking-ref date IS a precise-query target. Pre-v1.01 this
+    # list only knew interp/nearby-ref, so once the Booking cross-fill
+    # covered a date the capture panel went quiet even though the UI
+    # still showed that date gray - exactly the dates users confirmed
+    # searchable by hand on the OTA.
+    from .flights import NON_REAL_SOURCES
     have_real = {str(d.get("date")) for d in deals or []
-                 if d.get("source") not in ("interp", "nearby-ref")}
+                 if d.get("source") not in NON_REAL_SOURCES}
     out = []
     try:
         cur = _dt.date.fromisoformat(window[0])

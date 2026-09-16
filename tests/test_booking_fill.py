@@ -148,7 +148,8 @@ class TestBookingFill(unittest.TestCase):
         gaps = gap_dates([{"date": "2026-10-15", "source": "booking-ref"},
                           {"date": "2026-10-16", "source": "interp"}],
                          ["2026-10-15", "2026-10-16"])
-        self.assertEqual(gaps, ["2026-10-16"])
+        # v1.01: booking-ref is reference-only, hence a capture target
+        self.assertEqual(gaps, ["2026-10-15", "2026-10-16"])
         import shutil
         shutil.rmtree(dd, ignore_errors=True)
 

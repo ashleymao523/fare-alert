@@ -837,6 +837,21 @@ checks["v1.00 推送参考班次: 缺时刻OTA行补具体起飞时间 + watchdo
     and ("test_no_reference_line_without_booking_alts" in _tal100_src)
     and ("test_alt_without_window_is_skipped" in _tal100_src))
 
+_pf101_src = open(os.path.join("core", "point_fill.py"),
+                  encoding="utf-8").read()
+_tb101_src = open(os.path.join("tests", "test_booking_fill.py"),
+                  encoding="utf-8").read()
+_crawl101_src = open(os.path.join("web", "src", "components",
+                    "CrawlView.jsx"), encoding="utf-8").read()
+checks["v1.01 灰点作战清单: booking-ref 日也算精点靶子"] = (
+    ("from .flights import NON_REAL_SOURCES" in _pf101_src)
+    and ("v1.01: booking-ref is reference-only too" in _pf101_src)
+    and ("2026-09-16 live check" in _pf101_src)
+    and ('self.assertEqual(gaps, ["2026-10-15", "2026-10-16"])'
+         in _tb101_src)
+    and ("没有查询到符合条件的航班" in _pf101_src)
+    and ("qunarPointUrl" in _crawl101_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:
