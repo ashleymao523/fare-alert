@@ -891,8 +891,24 @@ checks["v1.03 时刻口径修正: time_kind 统一分类 + 参考行计数 + 图
     and ("当日真实时刻" in _dist_js)
     and ("tc-refline" in _crawl102_src)
     and ("tc-refline" in _dist_js)
-    and (".tc-refline {" in _css102_src)
-    and ("Chrome 136" in _pf103_src))
+   and (".tc-refline {" in _css102_src)
+   and ("Chrome 136" in _pf103_src))
+
+_main104_src = open("main.py", encoding="utf-8").read()
+_sb104_src = open(os.path.join("core", "sched_board.py"),
+                  encoding="utf-8").read()
+_t104_src = open(os.path.join("tests", "test_v104.py"),
+                 encoding="utf-8").read()
+_ver104_src = open(os.path.join("core", "version.py"),
+                   encoding="utf-8").read()
+checks["v1.04 真价行时刻升级: 精确板期压过 Booking 借用钉"] = (
+    ("def apply_board_upgrade" in _sb104_src)
+    and ("apply_board_upgrade" in _main104_src)
+    and ("bk_borrowed" in _main104_src)
+    and ("bk-upgrade" in _main104_src)
+    and ("test_exact_vs_crossdow_policy_chain" in _t104_src)
+    and ("test_no_pingpong_with_booking_attach" in _t104_src)
+    and ('CODE_VERSION = "1.04"' in _ver104_src))
 
 bad = 0
 for k, v in checks.items():

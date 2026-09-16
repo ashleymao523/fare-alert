@@ -510,6 +510,35 @@ def board_lookup(db, flight_no, date_iso, from_city, to_city):
     return ent
 
 
+def apply_board_upgrade(deal, ent):
+    """v1.04: overwrite booking-x (borrowed) times with the row's OWN
+    flight on an exact-dow board hit.
+
+    booking-x pins Booking's cheapest same-date itinerary onto a real
+    OTA row - real minute, possibly ANOTHER flight. A board hit on the
+    row's own flight_no + own weekday (airport-scoped unique) is the
+    same physical flight, so it strictly outranks the pin. Only the
+    caller decides exactness (board_lookup_x exact=True); cross-dow
+    board rows must NOT call this (same-date other-flight beats
+    same-flight wrong-weekday). Price/flight identity never touched.
+    Returns True when the row was upgraded."""
+    if (getattr(deal, 'dep_src', '') or
+            getattr(deal, 'time_src', '')) != 'booking-x':
+        return False
+    if not (ent.get('dep') or '').strip():
+        return False
+    deal.dep_time = ent['dep']
+    deal.dep_src = 'airport-board'
+    deal.time_src = 'airport-board'
+    if (ent.get('arr') or '').strip():
+        deal.arr_time = ent['arr']
+        deal.arr_src = 'airport-board'
+    deal.borrow_dow = ''
+    deal.borrow_votes = 0
+    deal.borrow_unstable = False
+    return True
+
+
 def board_lookup_x(db, flight_no, date_iso, from_city, to_city):
     """v0.19 跨日班期回退: 日历价已证明该航班号在该日期执飞, 而班期板只
     返回当日 -> 时刻库尚未沉淀该 dow 属常态. 同航班号时刻按航季排班,

@@ -43,7 +43,8 @@ from core.models import FlightDeal
 from core.version import CODE_VERSION
 from core.notify import has_channel, push_all
 from core.report import write_report
-from core.sched_board import (board_lookup_x, build_route_priors,
+from core.sched_board import (apply_board_upgrade, board_lookup_x,
+                              build_route_priors,
                               flight_duration,
                               city_dep_times, city_return_dep_times,
                               load_sched_db,
@@ -702,6 +703,7 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
     t0b = time.time()
     n_board = 0
     n_x = 0
+    n_up = 0
     n_prior = 0
     # v0.25: real-leg duration priors from the arrive board (reverse leg
     # CITY->HGH minutes) make outbound arr_est/duration far closer to
@@ -797,20 +799,32 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                 d.time_src = "amadeus"
                 d.dep_src = "amadeus" if d.dep_time else d.dep_src
                 d.arr_src = "amadeus" if d.arr_time else d.arr_src
-        if no and not (d.dep_time and d.arr_time):
+        # v1.04: booking-x rows (Booking cheapest pinned, possibly
+        # another flight) upgrade to the row's OWN flight on an exact
+        # dow board hit - same-flight airport-board provenance beats
+        # same-date other-flight. Cross-dow board rows never override
+        # booking-x (same-date wrong-flight still beats wrong-weekday).
+        bk_borrowed = (getattr(d, "dep_src", "") or
+                       getattr(d, "time_src", "")) == "booking-x"
+        if no and (not (d.dep_time and d.arr_time) or bk_borrowed):
             hit = board_lookup_x(bdb, no, d.date, leg_from, leg_to)
             if hit:
                 ent, exact = hit
                 got = False
-                if not d.dep_time and ent.get("dep"):
-                    d.dep_time = ent["dep"]
-                    got = True
-                    _mark_borrow(d, ent, exact)
-                    _mark_dep_src(d, exact)
-                if not d.arr_time and ent.get("arr"):
-                    d.arr_time = ent["arr"]
-                    got = True
-                    _mark_arr_src(d, exact)
+                if exact and bk_borrowed:
+                    if apply_board_upgrade(d, ent):
+                        got = True
+                        n_up += 1
+                else:
+                    if not d.dep_time and ent.get("dep"):
+                        d.dep_time = ent["dep"]
+                        got = True
+                        _mark_borrow(d, ent, exact)
+                        _mark_dep_src(d, exact)
+                    if not d.arr_time and ent.get("arr"):
+                        d.arr_time = ent["arr"]
+                        got = True
+                        _mark_arr_src(d, exact)
                 if got:
                     n_board += 1
                     _mark_time_src(d, exact)
@@ -855,6 +869,8 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
         action = "board time fallback"
         if n_x:
             action += " (cross-dow x%d)" % n_x  # keep error field for errors
+        if n_up:
+            action += " (bk-upgrade x%d)" % n_up
         rec.step("hgh-board-times", route_id, action, "ok",
                  (time.time() - t0b) * 1000, count=n_board)
     if rec and n_prior:
