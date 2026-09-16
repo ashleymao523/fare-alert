@@ -38,6 +38,7 @@ from core.cabin_monitor import (
     absorb_point_cabin as cabin_absorb_point,
     evaluate_alert as cabin_evaluate_alert, cooldown_ok as cabin_cooldown_ok,
     record_alert_candidate as cabin_record_candidate,
+    push_time_suffix as cabin_push_ts,
     _atomic_write as cabin_atomic_write,
     patrol_legs as cabin_patrol_legs,
     probe_dates as cabin_probe_dates,
@@ -934,6 +935,13 @@ def _cabin_absorb(cw, leg, hid, biz_rows, cfg, state, log, push_enabled):
             new_records, st.setdefault("alerted_low", {}).get(hid))
     if ((rec_hit or hits) and push_enabled
             and cabin_cooldown_ok(prev, cw)):
+        # v1.17: pushes carry dep-arr times; a timeless observation
+        # borrows from the schedule DB under the same precision
+        # contract as the timetable (borrow only on triple match).
+        try:
+            sched_db = load_sched_db(DATA_DIR)
+        except Exception:
+            sched_db = {}
         if rec_hit is not None:
             under = (" · 已低于阈值 ¥{t}".format(
                 t=int(cw.get("threshold_total") or 0))
@@ -942,10 +950,13 @@ def _cabin_absorb(cw, leg, hid, biz_rows, cfg, state, log, push_enabled):
             push_all(cfg, log,
                      "公务舱历史新低 {fc}到{tc}".format(
                          fc=leg["from_city"], tc=leg["to_city"]),
-                     "{d} 公务舱 ¥{p} 历史新低(前低 ¥{q}){x}".format(
+                     "{d} 公务舱 ¥{p} 历史新低(前低 ¥{q}){x}{t}".format(
                          d=rec_hit["date"], p=int(rec_hit["price"]),
                          q=int(rec_hit.get("record_prev")
-                               or rec_hit["price"]), x=under),
+                               or rec_hit["price"]), x=under,
+                         t=cabin_push_ts(rec_hit, sched_db,
+                                         leg["from_city"],
+                                         leg["to_city"])),
                      route_id=hid, kind="cabin-record")
             st.setdefault("alerted_low", {})[hid] = rec_hit["price"]
             st["last_hit"] = {
@@ -960,9 +971,11 @@ def _cabin_absorb(cw, leg, hid, biz_rows, cfg, state, log, push_enabled):
             push_all(cfg, log,
                      "公务舱低价 {fn}{fc}到{tc}".format(
                          fn="", fc=h["from_city"], tc=h["to_city"]),
-                     "{d} 公务舱 ¥{p} (阈值 ¥{t})".format(
+                     "{d} 公务舱 ¥{p} (阈值 ¥{t}){s}".format(
                          d=h["date"], p=int(h["price"]),
-                         t=int(cw.get("threshold_total") or 0)),
+                         t=int(cw.get("threshold_total") or 0),
+                         s=cabin_push_ts(h, sched_db,
+                                         h["from_city"], h["to_city"])),
                      route_id=h["route_id"], kind="cabin")
             st["last_hit"] = h
         st["last_alert_ts"] = dt.datetime.now().isoformat()

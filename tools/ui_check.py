@@ -1190,6 +1190,24 @@ checks["v1.16 cabin sched time borrow"] = (
     and ("test_city_mismatch_refuses_borrow" in _t116_src)
     and ("test_codeshare_first_segment_borrows" in _t116_src))
 
+# --- v1.17: cabin alert pushes carry dep-arr times ---
+_cm117_src = _cm116_src  # same file, already loaded
+_t117_src = open(os.path.join("tests", "test_v117.py"),
+                 encoding="utf-8").read()
+_main117_src = open("main.py", encoding="utf-8").read()
+checks["v1.17 cabin push dep-arr times"] = (
+    ("def push_time_suffix(" in _cm117_src)
+    and ('"fno": best.get("fno", "")' in _cm117_src)
+    and ("push_time_suffix as cabin_push_ts" in _main117_src)
+    and ("历史新低(前低 ¥{q}){x}{t}" in _main117_src)
+    and ("(阈值 ¥{t}){s}" in _main117_src)
+    and ("cabin_push_ts(rec_hit, sched_db" in _main117_src)
+    and ("cabin_push_ts(h, sched_db" in _main117_src)
+    and ("test_timed_row_uses_own_times_with_fno" in _t117_src)
+    and ("test_timeless_row_borrows_under_triple_match" in _t117_src)
+    and ("test_threshold_hit_carries_fno_dep_arr" in _t117_src)
+    and ("test_cabin_absorb_appends_suffix_on_both_paths" in _t117_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

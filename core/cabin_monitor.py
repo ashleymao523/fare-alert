@@ -503,6 +503,12 @@ def evaluate_alert(history, cw, now=None):
                 "date": best.get("date", ""),
                 "cabin": best.get("cabin", "business"),
                 "price": price,
+                # v1.17: carry the winning flight + times so the
+                # notify layer can push "fno dep-arr" without a
+                # history re-lookup.
+                "fno": best.get("fno", ""),
+                "dep": best.get("dep", ""),
+                "arr": best.get("arr", ""),
             })
     return hits
 
@@ -544,6 +550,33 @@ def borrow_sched_time(row, sched, from_city="", to_city=""):
     row["arr"] = str(ent.get("arr"))
     row["tsrc"] = "sched-borrow"
     return True
+
+
+def push_time_suffix(row, sched=None, from_city="", to_city=""):
+    """v1.17: '· HO1254 20:00–22:30' tail for a cabin push message.
+
+    Uses the observation's own dep/arr first; a timeless row borrows
+    from the schedule DB under borrow_sched_time's precision
+    contract (in-place, never overwriting real times). Returns ''
+    when no trustworthy pair exists, so the push stays clean."""
+    if not isinstance(row, dict):
+        return ""
+    if not ((row.get("dep") or "") and (row.get("arr") or "")):
+        if not borrow_sched_time(row, sched or {}, from_city, to_city):
+            return ""
+
+    def _hm(v):
+        s = str(v or "").strip()
+        if len(s) == 4 and ":" not in s:
+            s = s[:2] + ":" + s[2:]
+        return s[:5]
+
+    dep, arr = _hm(row.get("dep")), _hm(row.get("arr"))
+    if not (dep and arr):
+        return ""
+    fno = str(row.get("fno") or "").split("/")[0].strip().upper()
+    return " · {f}{dep}–{arr}".format(
+        f=fno + " " if fno else "", dep=dep, arr=arr)
 
 
 def history_board(history, sched=None):
