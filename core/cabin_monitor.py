@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from .booking_fill import DEFAULT_FX
 from .models import FlightDeal
 
-HISTORY_CAP = 120
+HISTORY_CAP = 300
 
 
 def default_config():
@@ -25,7 +25,7 @@ def default_config():
         "refresh_minutes": 30,
         # v1.09: keyless BUSINESS probes per leg per patrol round -
         # the whole 60d window rotates over successive rounds.
-        "probe_dates_per_round": 6,
+        "probe_dates_per_round": 12,
         "watch_from_cities": [],
         # v0.52: a fresh all-time low alerts even ABOVE the threshold -
         # "collect + remind on historical lowest business fares" needs
@@ -132,9 +132,14 @@ def absorb_point_cabin(cache, cw, now=None):
     return out
 
 
-def record_low(history, route_id, from_city, to_city, cabin, date, price_total):
+def record_low(history, route_id, from_city, to_city, cabin, date,
+               price_total, fno=""):
     """Insert one business-cabin observation; ring-cap per route.
-    Same-date same-cabin observations replace (latest wins).
+    v1.10 precision: the dedup key is (date, cabin, FLIGHT) - the
+    booking timetable feeds several business flights per date now,
+    so different flights coexist while a same-flight re-observation
+    replaces (latest wins). Legacy fno-less callers share the ""
+    slot, which reproduces the old same-date semantics exactly.
     Returns the inserted observation, tagged record=True when it
     undercuts the leg's previous all-time low (first sample is never
     a record - otherwise bootstrap would alert on everything)."""
@@ -149,9 +154,12 @@ def record_low(history, route_id, from_city, to_city, cabin, date, price_total):
     lows = [o["price"] for o in obs
             if isinstance(o.get("price"), (int, float))]
     prior = min(lows) if lows else None
+    fno = str(fno or "")
     obs[:] = [o for o in obs
-              if not (o.get("date") == date and o.get("cabin") == cabin)]
+              if not (o.get("date") == date and o.get("cabin") == cabin
+                      and (o.get("fno") or "") == fno)]
     entry = {"date": date, "cabin": cabin, "price": price_total,
+             "fno": fno,
              "ts": datetime.now().strftime("%Y-%m-%dT%H:%M")}
     if (prior is not None and isinstance(price_total, (int, float))
             and price_total < prior):
@@ -199,22 +207,48 @@ def probe_dates(history, route_id, date_from, date_to, k=6):
 
 
 def booking_cabin_rows(date, got, tax_amt, fx):
-    """v1.09: one booking LOWEST_PRICE BUSINESS answer -> [FlightDeal].
+    """v1.10 precision: one booking LOWEST_PRICE BUSINESS answer ->
+    [FlightDeal], one row PER BUSINESS FLIGHT.
+
+    The answer carries a full same-day flightOffers timetable (~15
+    offers, each with its OWN tax-inclusive EUR total and exact
+    timestamps). v1.09 kept only aggregation.minPrice - one
+    anonymous floor row per date; the history could say "this date
+    has a business seat around X" but never WHICH flight, WHEN it
+    departs or whether the cheap one is a red-eye. Now every offer
+    becomes its own observation (fno/dep/arr preserved), minPrice
+    stays as the no-offers fallback.
 
     bare = eur * fx - tax, so total_price() adds the tax back and
-    reproduces the tax-inclusive pay-total exactly (same convention
-    as point-cabin rows). Empty/garbage input yields [] - the caller
-    filters no_data/transient None before we get here."""
+    reproduces the tax-inclusive pay-total exactly."""
+    try:
+        rate = float(fx or DEFAULT_FX)
+    except (TypeError, ValueError):
+        rate = DEFAULT_FX
+    out = []
+    for of in (got or {}).get("offers") or []:
+        try:
+            eur = float(of.get("price_eur") or 0)
+        except (TypeError, ValueError):
+            continue
+        if eur <= 0 or not (of.get("no") and of.get("dep")):
+            continue
+        total = round(eur * rate, 1)
+        out.append(FlightDeal(
+            date=str(date),
+            bare_price=round(total - float(tax_amt or 0), 1),
+            flight_no=str(of.get("no") or ""),
+            dep_time=str(of.get("dep") or ""),
+            arr_time=str(of.get("arr") or ""),
+            source="booking-cabin", cabin="business"))
+    if out:
+        return out
     try:
         eur = float((got or {}).get("total_eur") or 0)
     except (TypeError, ValueError):
         return []
     if eur <= 0:
         return []
-    try:
-        rate = float(fx or DEFAULT_FX)
-    except (TypeError, ValueError):
-        rate = DEFAULT_FX
     total = round(eur * rate, 1)
     return [FlightDeal(
         date=str(date),
@@ -389,6 +423,7 @@ def history_board(history):
             "to_city": r.get("to_city", ""),
             "low": low["price"],
             "low_date": low.get("date", ""),
+            "low_fno": low.get("fno", ""),
             "latest": latest["price"],
             "latest_date": latest.get("date", ""),
             "gap": round(float(latest["price"]) - float(low["price"]), 2),

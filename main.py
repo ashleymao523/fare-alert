@@ -910,7 +910,8 @@ def _cabin_absorb(cw, leg, hid, biz_rows, cfg, state, log, push_enabled):
     for d in biz:
         ob = cabin_record_low(
             ch, hid, leg["from_city"], leg["to_city"], "business",
-            d.date, total_price(d.bare_price, tax_cfg))
+            d.date, total_price(d.bare_price, tax_cfg),
+            fno=d.flight_no or "")
         if ob.get("record"):
             new_records.append(ob)
     if biz:
@@ -1049,7 +1050,7 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
                 try:
                     got = booking_fetch_lowest(
                         session, cfg.get("network", {}), fi, ti, d,
-                        offer_limit=3, cabin_class="BUSINESS")
+                        offer_limit=8, cabin_class="BUSINESS")
                 except Exception:
                     got = None
                 if not got or got.get("no_data"):

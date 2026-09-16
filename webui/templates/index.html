@@ -19,7 +19,7 @@
   <div class="brand">
     <span class="logo">✈️</span>
     <span class="brand-name">FareAlert</span>
-        <span class="ver">v1.09</span>
+        <span class="ver">v1.10</span>
     <a id="pushBadge" class="push-badge" href="#push" style="display:none"
        title="未检测到 Bark/ServerChan 密钥，点击前往推送设置">提醒未配置</a>
   </div>
@@ -36,6 +36,7 @@
   <nav class="tabs" id="mainTabs">
     <button data-tab="dash" class="active">📊 仪表盘</button>
     <button data-tab="crawl">🕸 爬虫监控</button>
+    <button data-tab="agents">🤖 任务中心</button>
     <button data-tab="routes">🛫 线路管理</button>
     <button data-tab="reverse">🧭 预算找目的地</button>
     <button data-tab="weekly">📈 洞察周报</button>
@@ -91,6 +92,17 @@
         <button id="btnRefreshCrawl" class="btn small">刷新</button>
       </div>
       <div id="crawlPanel"></div>
+    </div>
+  </section>
+
+  <section id="tab-agents" class="tab-panel">
+    <div class="card">
+      <div class="card-head">
+        <h3>🤖 任务中心</h3>
+        <span class="muted">后台每一类采集/维护任务都是一个 agent · 状态/节奏/下次执行时间一目了然</span>
+        <button id="btnRefreshAgents" class="btn small">刷新</button>
+      </div>
+      <div id="agentsPanel"></div>
     </div>
   </section>
 

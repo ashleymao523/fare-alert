@@ -2057,6 +2057,79 @@
     if (crawlTimer) { clearInterval(crawlTimer); crawlTimer = null; }
   }
 
+  /* ---------- 任务中心 (v1.10 agent ledger) ---------- */
+
+  function fmtAge(min) {
+    if (min < 60) return Math.round(min) + " 分钟";
+    if (min < 1440) return (min / 60).toFixed(1) + " 小时";
+    return (min / 1440).toFixed(1) + " 天";
+  }
+  function fmtCadence(min) {
+    if (min < 60) return min + " 分钟";
+    if (min < 1440) return Math.round(min / 60) + " 小时";
+    return Math.round(min / 1440) + " 天";
+  }
+
+  function agentStatusBadge(a) {
+    if (a.status === "ok") return el("span", "agent-st g", "正常");
+    if (a.status === "late") return el("span", "agent-st r", "滞后");
+    return el("span", "agent-st gr", "待首次运行");
+  }
+
+  function agentCard(a) {
+    var cls = "agent-card" + (a.status === "late" ? " late" : (a.status === "idle" ? " idle" : ""));
+    var c = el("div", cls);
+    var head = el("div", "agent-head");
+    head.appendChild(el("span", "agent-ico", a.icon || "🤖"));
+    head.appendChild(el("span", "agent-name", a.name || a.id));
+    head.appendChild(agentStatusBadge(a));
+    if (a.manual_trigger) {
+      var b = el("button", "btn small", a.id === "scan-all" ? "立即扫描" : "立即执行");
+      b.addEventListener("click", function () { runAgentTask(a, b); });
+      head.appendChild(b);
+    }
+    c.appendChild(head);
+    c.appendChild(el("div", "agent-detail", a.detail || ""));
+    var meta = el("div", "agent-meta");
+    meta.appendChild(el("span", "", "上次 " + (a.last_run || "—") +
+      (a.age_min != null ? " (" + fmtAge(a.age_min) + "前)" : "")));
+    meta.appendChild(el("span", "", "节奏 " + fmtCadence(a.cadence_minutes || 0)));
+    meta.appendChild(el("span", "", "下次 " + (a.next_due || "—")));
+    c.appendChild(meta);
+    return c;
+  }
+
+  function runAgentTask(a, btn) {
+    btn.disabled = true;
+    btn.textContent = "执行中…";
+    var isScan = a.id === "scan-all";
+    var done = function (msg) {
+      btn.disabled = false;
+      btn.textContent = isScan ? "立即扫描" : "立即执行";
+      toast(msg);
+      loadAgents();
+    };
+    post(isScan ? "/api/run" : a.manual_trigger,
+         isScan ? { push: true } : {})
+      .then(function () { done((a.name || a.id) + " 完成 ✓"); })
+      .catch(function (e) { done("执行失败: " + e.message); });
+  }
+
+  function renderAgents(doc) {
+    var box = $("agentsPanel");
+    box.textContent = "";
+    var list = (doc && doc.ledger && doc.ledger.agents) || [];
+    if (!list.length) {
+      box.appendChild(el("div", "muted", "账本为空: 首次运行后这里会出现全部后台 agent"));
+      return;
+    }
+    list.forEach(function (a) { box.appendChild(agentCard(a)); });
+  }
+
+  function loadAgents() {
+    api("/api/tasks").then(renderAgents).catch(function () {});
+  }
+
   /* ---------- 预算找目的地 (M3 反向搜索) ---------- */
 
   function initReverse() {
@@ -2299,6 +2372,7 @@
   function refreshTab(name) {
     if (name === "dash") renderDash();
     if (name === "crawl") loadCrawl();
+    if (name === "agents") loadAgents();
     if (name === "reverse") initReverse();
     if (name === "weekly") initWeekly();
     if (name === "routes") renderRoutesEditor();
@@ -2419,6 +2493,7 @@
     });
     $("btnRefreshLog").addEventListener("click", loadLog);
     $("btnRefreshCrawl").addEventListener("click", loadCrawl);
+    $("btnRefreshAgents").addEventListener("click", loadAgents);
     $("btnViewCal").addEventListener("click", function () {
       S.calView = "cal";
       renderCalendarView(curRoute());

@@ -488,6 +488,34 @@ def api_run():
                     "push_pending": _push_pending()})
 
 
+@app.get("/api/tasks")
+def api_tasks():
+    """v1.10: agent task ledger - every background job as a first-class
+    agent with status, cadence, next_due and manual trigger surface."""
+    from core.agent_tasks import build_ledger
+    cfg = load_config(CONFIG_PATH) if CONFIG_PATH else {}
+    return jsonify({"ok": True, "ledger": build_ledger(DATA_DIR, cfg)})
+
+
+@app.post("/api/tasks/cabin-patrol/run")
+def api_tasks_cabin_run():
+    """v1.10: manual cabin-patrol fire (same code path as the loop,
+    push suppressed - the button exists to watch collection happen,
+    not to spam channels)."""
+    from core.state import load_state, save_state
+    with _lock:
+        cfg = load_config(CONFIG_PATH)
+        state = load_state(os.path.join(DATA_DIR, "state.json"))
+        try:
+            info = runner.cabin_patrol_once(
+                cfg, state, _log, push_enabled=False)
+            save_state(os.path.join(DATA_DIR, "state.json"), state)
+        except Exception as e:
+            _log.error("manual cabin patrol failed: %s", e)
+            return jsonify({"ok": False, "error": str(e)}), 500
+    return jsonify({"ok": True, "patrol": info})
+
+
 @app.get("/api/point-gaps")
 def api_point_gaps():
     """v0.76: reference-only dates per route - the precise-query

@@ -1005,6 +1005,37 @@ checks["v1.09 keyless business-cabin patrol"] = (
     and ("roundtrip_tax_inclusive" in _t109_src)
     and ("booking_cabin_is_real_source" in _t109_src))
 
+# --- v1.10: agent task center + per-flight cabin timetable ---
+_at110_src = open(os.path.join("core", "agent_tasks.py"),
+                  encoding="utf-8").read()
+_webui110_src = open(os.path.join("webui.py"),
+                     encoding="utf-8").read()
+_app110_src = open(os.path.join("webui", "static", "app.js"),
+                   encoding="utf-8").read()
+_idx110_src = open(os.path.join("webui", "templates", "index.html"),
+                   encoding="utf-8").read()
+_t110_src = open(os.path.join("tests", "test_v110.py"),
+                 encoding="utf-8").read()
+_tcp_src = open(os.path.join("tests", "test_cabin_precision.py"),
+                encoding="utf-8").read()
+checks["v1.10 agent task center"] = (
+    ("build_ledger" in _at110_src)
+    and ('"/api/tasks"' in _webui110_src)
+    and ("cabin-patrol/run" in _webui110_src)
+    and ("renderAgents" in _app110_src)
+    and ('data-tab="agents"' in _idx110_src)
+    and ("test_projection_from_real_files" in _t110_src))
+checks["v1.10 per-flight cabin timetable"] = (
+    ("price_eur" in _cm109_src)
+    and ("fno=\"\"" in _cm109_src)
+    and ("low_fno" in _cm109_src)
+    and ("HISTORY_CAP = 300" in _cm109_src)
+    and ('"probe_dates_per_round": 12' in _cm109_src)
+    and ("fno=d.flight_no" in _main109_src)
+    and ("offer_limit=8" in _main109_src)
+    and ("test_offers_become_per_flight_rows" in _tcp_src)
+    and ("test_flights_coexist_same_date" in _tcp_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

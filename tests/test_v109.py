@@ -131,7 +131,9 @@ class BookingCabinRowsTests(unittest.TestCase):
 
 class ConfigAndSemanticsTests(unittest.TestCase):
     def test_probe_dates_per_round_default(self):
-        self.assertEqual(default_config()["probe_dates_per_round"], 6)
+        # v1.10 doubled the default (timetable probes are per-flight
+        # now, so rotation needs the extra budget to stay "soon")
+        self.assertEqual(default_config()["probe_dates_per_round"], 12)
 
     def test_booking_cabin_is_real_source(self):
         # _cabin_absorb only keeps business rows whose source is NOT a
