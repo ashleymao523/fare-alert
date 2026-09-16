@@ -1099,6 +1099,26 @@ checks["v1.13 v2 agents + cabin timetable"] = (
     and os.path.exists(os.path.join(
         "web", "src", "components", "AgentsView.jsx")))
 
+# --- v1.14: time-gap-first probing + coverage chip ---
+_t114_src = open(os.path.join("tests", "test_v114.py"),
+                 encoding="utf-8").read()
+_cm114_src = open(os.path.join("core", "cabin_monitor.py"),
+                  encoding="utf-8").read()
+_main114_src = open("main.py", encoding="utf-8").read()
+_css114_src = open(os.path.join("web", "src", "styles", "app.css"),
+                   encoding="utf-8").read()
+checks["v1.14 time-gap-first + cov chip"] = (
+    ("def time_gap_dates(" in _cm114_src)
+    and ("time_first=True" in _cm114_src)
+    and ("n_gap = min(len(gap_days)" in _cm114_src)
+    and ("best[key] = o" in _cm114_src)
+    and ('"timed": timed' in _cm114_src)
+    and ("cabin_time_gaps" in _main114_src)
+    and ('info["time_refill"]' in _main114_src)
+    and ("cab-tt-cov" in _cabin_tt113_src)
+    and (".cab-tt-cov" in _css114_src)
+    and ("test_timeless_date_jumps_queue" in _t114_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

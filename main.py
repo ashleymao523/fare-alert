@@ -39,6 +39,7 @@ from core.cabin_monitor import (
     _atomic_write as cabin_atomic_write,
     patrol_legs as cabin_patrol_legs,
     probe_dates as cabin_probe_dates,
+    time_gap_dates as cabin_time_gaps,
     booking_cabin_rows as cabin_bk_rows,
 )
 from core.point_fill import load_cache as load_point_cache
@@ -1031,6 +1032,7 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
         "call_interval", 4.0) or 4.0)
     hist = cabin_history_load(DATA_DIR)
     n_biz = 0
+    n_refill = 0
     errs = 0
     for leg in legs:
         hid = "patrol-{fc}-{tc}".format(
@@ -1044,8 +1046,11 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
                     leg["from_city"], leg["to_city"]))
                 continue
             fx = booking_resolve_fx(session, cfg, DATA_DIR)
+            gaps = set(cabin_time_gaps(hist, hid, date_from, date_to))
             for i, d in enumerate(cabin_probe_dates(
                     hist, hid, date_from, date_to, k_probe)):
+                if d in gaps:
+                    n_refill += 1
                 if i:
                     time.sleep(gap)
                 try:
@@ -1065,6 +1070,10 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
             log.warning("cabin booking probe failed [{}->{}]: {}".format(
                 leg["from_city"], leg["to_city"], e))
     info["booking_rows"] = n_biz
+    # v1.14: time-gap-first refill visibility - how many of this
+    # round's probe dates were picked BECAUSE their newest obs lacks
+    # dep/arr (the empty-time-cell repair strategy).
+    info["time_refill"] = n_refill
 
     # v1.09 C: keyed Amadeus overlay still stacks on top when present.
     n_ama = 0
@@ -1101,6 +1110,10 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
         if (n_biz or n_point or n_ama) else
         ("standby: 本轮探测未返回公务舱报价 - 下一轮自动换测其他日期"
          if not errs else "error: 采集全部失败"))
+    if n_refill:
+        info["last_status"] = "{s} · 时刻回查 {n} 日".format(
+            s=info.get("last_status") or "", n=n_refill)
+
     state["_cabin_patrol"] = info
     return info
 

@@ -176,14 +176,71 @@ def record_low(history, route_id, from_city, to_city, cabin, date,
     return entry
 
 
-def probe_dates(history, route_id, date_from, date_to, k=6):
+def _newest_timed(route):
+    """v1.14: per date -> (newest obs ts, timed flag).
+
+    timed = the newest-obs batch for that date carries at least one
+    dep+arr pair (rows captured by the same probe share one ts)."""
+    latest = {}
+    for o in route.get("obs") or []:
+        d = str(o.get("date") or "")
+        if not d:
+            continue
+        ts = str(o.get("ts") or "")
+        timed = bool((o.get("dep") or "") and (o.get("arr") or ""))
+        if d not in latest or ts > latest[d][0]:
+            latest[d] = (ts, timed)
+        elif ts == latest[d][0] and timed:
+            latest[d] = (ts, True)
+    return latest
+
+
+def _gap_map(route):
+    """v1.14: per date -> deserves a precise re-probe?
+
+    Two gap kinds, both leaving the UI unable to show a departure
+    time: (a) the newest obs batch carries NO dep/arr at all (an
+    anonymous minPrice floor row); (b) the date's CHEAPEST
+    fno-carrying row is timeless - a legacy point-fill row that
+    outranks every newer timed obs of the same flight by price
+    forever unless re-probed and upgraded."""
+    latest = _newest_timed(route)
+    cheap = {}
+    for o in route.get("obs") or []:
+        d = str(o.get("date") or "")
+        if not d or not (o.get("fno") or ""):
+            continue
+        p = o.get("price")
+        if not isinstance(p, (int, float)):
+            continue
+        if d not in cheap or p < cheap[d]["price"]:
+            cheap[d] = o
+    gaps = {}
+    for d, (ts, timed) in latest.items():
+        if not timed:
+            gaps[d] = True
+    for d, o in cheap.items():
+        if not ((o.get("dep") or "") and (o.get("arr") or "")):
+            gaps[d] = True
+    return gaps
+
+
+def probe_dates(history, route_id, date_from, date_to, k=6,
+                time_first=True):
     """v1.09: which dates deserve the next keyless BUSINESS probe.
 
     Every date in the window sorts by its last observation ts -
     never-probed ('') first, then stalest; ties break on the earlier
     date. Taking the head rotates the whole window over successive
     rounds with zero extra state: a restart simply resumes from
-    whatever the history ring says. Pure function."""
+    whatever the history ring says. Pure function.
+
+    v1.14: time-gap-first. A date whose newest observation batch has
+    NO dep/arr (an anonymous minPrice floor row) looks "fresh" by ts
+    yet can never render a departure time - it now jumps the queue
+    right after never-probed dates, so precise re-probes refill the
+    empty time cells first instead of waiting for the full window
+    rotation. time_first=False keeps the pure v1.09 ordering."""
     try:
         d0 = datetime.strptime(str(date_from), "%Y-%m-%d").date()
         d1 = datetime.strptime(str(date_to), "%Y-%m-%d").date()
@@ -196,15 +253,54 @@ def probe_dates(history, route_id, date_from, date_to, k=6):
     while cur <= d1 and len(days) < 400:
         days.append(cur.isoformat())
         cur += timedelta(days=1)
-    seen = {}
     route = ((history or {}).get("routes") or {}).get(route_id) or {}
-    for o in route.get("obs") or []:
-        d = str(o.get("date") or "")
-        ts = str(o.get("ts") or "")
-        if d and (d not in seen or ts > seen[d]):
-            seen[d] = ts
-    days.sort(key=lambda d: (seen.get(d, ""), d))
-    return days[:k]
+    latest = _newest_timed(route)
+    gaps = _gap_map(route) if time_first else {}
+
+    def _key(d):
+        if d not in latest:
+            pri = 0
+        elif d in gaps:
+            pri = 1
+        else:
+            pri = 2
+        return (pri, latest.get(d, ("",))[0], d)
+
+    days.sort(key=_key)
+    if not (time_first and gaps):
+        return days[:k]
+    # v1.14: budget split. A fresh 60d window starts with dozens of
+    # never-probed dates that would hog the whole k budget, starving
+    # the gap repair for days. Up to half the slots go to gaps first
+    # (repair what the UI shows), the rest keeps the rotation moving.
+    gap_days = [d for d in days if d in gaps]
+    norm_days = [d for d in days if d not in gaps]
+    n_gap = min(len(gap_days), max(1, k // 2))
+    out = gap_days[:n_gap]
+    out.extend(d for d in norm_days if len(out) < k)
+    return out[:k]
+
+
+def time_gap_dates(history, route_id, date_from, date_to):
+    """v1.14: window dates whose newest observation batch lacks
+    dep/arr - the exact precise-re-probe targets. Pure."""
+    try:
+        d0 = datetime.strptime(str(date_from), "%Y-%m-%d").date()
+        d1 = datetime.strptime(str(date_to), "%Y-%m-%d").date()
+    except Exception:
+        return []
+    if d1 < d0:
+        return []
+    route = ((history or {}).get("routes") or {}).get(route_id) or {}
+    gaps = _gap_map(route)
+    out = []
+    cur = d0
+    while cur <= d1:
+        iso = cur.isoformat()
+        if iso in gaps:
+            out.append(iso)
+        cur += timedelta(days=1)
+    return out
 
 
 def booking_cabin_rows(date, got, tax_amt, fx):
@@ -448,7 +544,27 @@ def history_timetable(history, per_leg=8):
         obs = [o for o in (r.get("obs") or [])
                if isinstance(o.get("price"), (int, float))]
         rows = [o for o in obs if (o.get("fno") or "")]
-        rows.sort(key=lambda o: (o["price"], o.get("date") or ""))
+        # v1.14: per (date, fno) dedup - a timed observation UPGRADES
+        # its timeless twin of the same flight. Without this a cheap
+        # timeless legacy row outranks every newer timed obs of the
+        # same flight by price forever, so the refill never becomes
+        # visible in the top-N table.
+        best = {}
+        for o in rows:
+            key = (o.get("date") or "", o.get("fno") or "")
+            timed = bool((o.get("dep") or "") and (o.get("arr") or ""))
+            cur = best.get(key)
+            if cur is None:
+                best[key] = o
+                continue
+            cur_timed = bool((cur.get("dep") or "")
+                             and (cur.get("arr") or ""))
+            if timed and not cur_timed:
+                best[key] = o
+            elif timed == cur_timed and o["price"] < cur["price"]:
+                best[key] = o
+        rows = sorted(best.values(),
+                      key=lambda o: (o["price"], o.get("date") or ""))
         # v1.12: per-date lowest price series for the leg sparkline -
         # any observation qualifies (fno-less legacy rows still carry
         # a real price), dates ascending, newest N=30 points.
@@ -460,16 +576,23 @@ def history_timetable(history, per_leg=8):
                 by_date[d] = o["price"]
         spark = [{"d": d, "p": by_date[d]}
                  for d in sorted(by_date)][-30:]
+        top = rows[:per_leg]
+        # v1.14: time coverage of the shown rows - the UI renders a
+        # "timed x/y" chip so the refill progress is visible.
+        timed = sum(1 for o in top
+                    if (o.get("dep") or "") and (o.get("arr") or ""))
         groups.append({
             "route_id": rid,
             "from_city": r.get("from_city", ""),
             "to_city": r.get("to_city", ""),
             "spark": spark,
+            "timed": timed,
+            "total": len(top),
             "rows": [{"date": o.get("date") or "",
                       "fno": o.get("fno") or "",
                       "dep": o.get("dep") or "",
                       "arr": o.get("arr") or "",
-                      "price": o["price"]} for o in rows[:per_leg]],
+                      "price": o["price"]} for o in top],
         })
     groups.sort(key=lambda g: (g["rows"][0]["price"]
                                if g["rows"] else 1e18))

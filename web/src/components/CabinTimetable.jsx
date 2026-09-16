@@ -41,6 +41,15 @@ export default function CabinTimetable({ timetable }) {
         <div class="cab-tt-leg" key={g.route_id}>
           <div class="cab-tt-head">
             <span class="cab-tt-name">{g.from_city} → {g.to_city}</span>
+            {g.total ? (
+              <span class={"cab-tt-cov" + (g.timed >= g.total ? " full" : "")}
+                title={g.timed >= g.total
+                  ? "全部班次已带精确起降时刻"
+                  : "时刻覆盖 " + g.timed + "/" + g.total
+                    + " · 巡检按时刻缺口优先回查"}>
+                时刻 {g.timed}/{g.total}
+              </span>
+            ) : null}
             <SparkPts pts={g.spark} />
           </div>
           <div class="tbl-scroll">

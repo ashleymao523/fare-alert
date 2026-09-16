@@ -83,9 +83,11 @@ class ProbeDatesTests(unittest.TestCase):
     def _hist(self):
         return {"routes": {self.RID: {"obs": [
             {"date": "2026-09-20", "cabin": "business",
-             "price": 100, "ts": "2026-09-10T08:00"},
+             "price": 100, "ts": "2026-09-10T08:00",
+             "fno": "HO1254", "dep": "19:35", "arr": "22:00"},
             {"date": "2026-09-25", "cabin": "business",
-             "price": 90, "ts": "2026-09-12T08:00"},
+             "price": 90, "ts": "2026-09-12T08:00",
+             "fno": "HO1258", "dep": "21:20", "arr": "23:30"},
         ]}}}
 
     def test_never_probed_first_then_stalest(self):
