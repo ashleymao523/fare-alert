@@ -951,6 +951,10 @@ def api_cabin():
         "last_run": pstate.get("last_run"),
         "last_status": pstate.get("last_status"),
         "offers": pstate.get("offers"),
+        # v1.15: numeric breaker/repair visibility for the UI badge -
+        # last_status carries the text, the numbers ride here.
+        "time_refill": pstate.get("time_refill"),
+        "throttle": pstate.get("throttle"),
     }
     return jsonify({"config": cw, "history": ch,
                     "board": cw_board(ch),
