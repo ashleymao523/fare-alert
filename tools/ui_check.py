@@ -325,7 +325,7 @@ _sources_src = open(os.path.join("web", "src", "components",
                                  "SourcesView.jsx"),
                     encoding="utf-8").read()
 checks["v0.51+ version stamp"] = (
-    bool(re.search(r'CODE_VERSION = "\d+\.\d+"', _ver_src))
+    bool(re.search(r'CODE_VERSION = "\d+\.\d+(\.\d+)?"', _ver_src))
     and ("code_ver" in _main_src))
 checks["v0.51 stale hot-swap core"] = (("restarted-stale-code" in _revive_src)
     and ("stale_code_running" in _revive_src))
@@ -1118,6 +1118,18 @@ checks["v1.14 time-gap-first + cov chip"] = (
     and ("cab-tt-cov" in _cabin_tt113_src)
     and (".cab-tt-cov" in _css114_src)
     and ("test_timeless_date_jumps_queue" in _t114_src))
+
+# --- v1.14.1: one-shot cabin gap refill ops tool ---
+_refill141_src = open(os.path.join("tools", "cabin_refill.py"),
+                      encoding="utf-8").read()
+checks["v1.14.1 cabin_refill ops tool"] = (
+    os.path.exists(os.path.join("tools", "cabin_refill.py"))
+    and ("--dry" in _refill141_src)
+    and ("--max" in _refill141_src)
+    and ("cabin_class=\"BUSINESS\"" in _refill141_src)
+    and ("_SilentLog(), False" in _refill141_src)
+    and ("server-confirmed" in _refill141_src)
+    and ("transient (throttled?)" in _refill141_src))
 
 bad = 0
 for k, v in checks.items():
