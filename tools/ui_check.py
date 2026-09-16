@@ -1169,6 +1169,27 @@ checks["v1.15.1 adaptive 429 patrol backoff"] = (
     and ("test_third_throttle_caps_at_six" in _t151_src)
     and ("test_backoff_wired_end_to_end" in _t151_src))
 
+# --- v1.16: cabin timetable time borrow from schedule DB ---
+_cm116_src = _cm151_src  # same file, already loaded
+_t116_src = open(os.path.join("tests", "test_v116.py"),
+                 encoding="utf-8").read()
+_appjs116 = appjs
+checks["v1.16 cabin sched time borrow"] = (
+    ("def borrow_sched_time(" in _cm116_src)
+    and ("sched-borrow" in _cm116_src)
+    and ("def history_timetable(history, per_leg=8, sched=None)"
+         in _cm116_src)
+    and ("def history_board(history, sched=None)" in _cm116_src)
+    and ("load_sched_db(DATA_DIR)" in _w151_src)
+    and ("cw_timetable(ch, sched=sched_flights)" in _w151_src)
+    and ("cw_board(ch, sched=sched_flights)" in _w151_src)
+    and ('row.tsrc === "sched-borrow"' in _appjs116)
+    and ("cabin-tt-borrow" in _appjs116)
+    and ("cabin-timed-chip" in _appjs116)
+    and ("test_triple_match_fills_dep_arr" in _t116_src)
+    and ("test_city_mismatch_refuses_borrow" in _t116_src)
+    and ("test_codeshare_first_segment_borrows" in _t116_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import date as _date, datetime, timedelta
 
 from .booking_fill import DEFAULT_FX
 from .models import FlightDeal
@@ -507,7 +507,46 @@ def evaluate_alert(history, cw, now=None):
     return hits
 
 
-def history_board(history):
+def borrow_sched_time(row, sched, from_city="", to_city=""):
+    """v1.16: fill a timeless row's dep/arr from the zero-key schedule
+    library (the same flights[fno][dow] store the economy board uses).
+
+    Precision contract (the user asked for exact times, not guesses):
+    borrow ONLY when flight no + departure weekday + both cities all
+    match a schedule entry. Codeshares like 'CZ3502/CZ2326' try their
+    first segment. A hit mutates the row in place (dep/arr/tsrc);
+    returns True when the row was upgraded. Pure aside from the
+    in-place row edit the caller owns."""
+    if not sched or not isinstance(row, dict):
+        return False
+    if (row.get("dep") or "") and (row.get("arr") or ""):
+        return False  # already timed - never overwrite real data
+    fno = str(row.get("fno") or "").strip().upper()
+    if "/" in fno:  # Booking codeshare string: first leg carries times
+        fno = fno.split("/")[0].strip()
+    if not fno:
+        return False
+    try:
+        dow = str(_date.fromisoformat(
+            str(row.get("date") or "")[:10]).weekday())
+    except ValueError:
+        return False
+    ent = ((sched.get(fno) or {}).get("dows") or {}).get(dow)
+    if not ent or not (ent.get("dep") and ent.get("arr")):
+        return False
+    sf, st = str(ent.get("from") or "").strip(), str(ent.get("to") or "").strip()
+    cf, ct = str(from_city or "").strip(), str(to_city or "").strip()
+    if sf and cf and sf != cf:
+        return False  # same fno, different city pair - do not borrow
+    if st and ct and st != ct:
+        return False
+    row["dep"] = str(ent.get("dep"))
+    row["arr"] = str(ent.get("arr"))
+    row["tsrc"] = "sched-borrow"
+    return True
+
+
+def history_board(history, sched=None):
     """v0.62: leaderboard rows for the cabin UI - one per watched leg.
 
     The ring history already stores every observation, but the card
@@ -539,11 +578,20 @@ def history_board(history):
             "gap": round(float(latest["price"]) - float(low["price"]), 2),
             "samples": len(obs),
         })
+        if sched:
+            low_row = {"date": rows[-1]["low_date"],
+                       "fno": rows[-1]["low_fno"]}
+            if borrow_sched_time(low_row, sched,
+                                 rows[-1]["from_city"],
+                                 rows[-1]["to_city"]):
+                rows[-1]["low_dep"] = low_row["dep"]
+                rows[-1]["low_arr"] = low_row["arr"]
+                rows[-1]["low_tsrc"] = low_row["tsrc"]
     rows.sort(key=lambda x: x["low"])
     return rows
 
 
-def history_timetable(history, per_leg=8):
+def history_timetable(history, per_leg=8, sched=None):
     """v1.11: cheapest per-flight rows per leg for the new cabin tab.
 
     Each leg's ring history contributes its N cheapest fno-carrying
@@ -594,6 +642,17 @@ def history_timetable(history, per_leg=8):
         # "timed x/y" chip so the refill progress is visible.
         timed = sum(1 for o in top
                     if (o.get("dep") or "") and (o.get("arr") or ""))
+        borrowed = 0
+        if sched:
+            for o in top:
+                if borrow_sched_time(o, sched,
+                                     r.get("from_city", ""),
+                                     r.get("to_city", "")):
+                    borrowed += 1
+            if borrowed:
+                timed = sum(1 for o in top
+                            if (o.get("dep") or "")
+                            and (o.get("arr") or ""))
         groups.append({
             "route_id": rid,
             "from_city": r.get("from_city", ""),
@@ -601,10 +660,12 @@ def history_timetable(history, per_leg=8):
             "spark": spark,
             "timed": timed,
             "total": len(top),
+            "borrowed": borrowed,
             "rows": [{"date": o.get("date") or "",
                       "fno": o.get("fno") or "",
                       "dep": o.get("dep") or "",
                       "arr": o.get("arr") or "",
+                      "tsrc": o.get("tsrc") or "",
                       "price": o["price"]} for o in top],
         })
     groups.sort(key=lambda g: (g["rows"][0]["price"]

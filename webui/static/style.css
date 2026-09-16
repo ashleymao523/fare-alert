@@ -487,6 +487,30 @@ input::placeholder { color: var(--faint); }
   background: var(--green, var(--accent));
   padding: 2px var(--sp-sm); border-radius: var(--r-pill);
 }
+
+.cabin-timed-chip {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--card2);
+  border-radius: var(--r-pill);
+  padding: 2px 10px;
+  margin-left: var(--sp-2);
+  white-space: nowrap;
+}
+
+.cabin-tt-time em.cabin-tt-borrow {
+  font-style: normal;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--r-1);
+  padding: 1px 4px;
+  margin-left: 5px;
+  vertical-align: 1px;
+  cursor: help;
+}
 .cabin-leg-meta {
   display: flex; gap: var(--sp-md); flex-wrap: wrap;
   color: var(--muted); font-size: var(--fs-sm);

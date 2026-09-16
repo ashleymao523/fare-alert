@@ -2246,7 +2246,12 @@
     var time = (dep || arr) ? (dep + "–" + arr) : "时刻待采";
     r.appendChild(el("span", "cabin-tt-date", row.date || ""));
     r.appendChild(el("span", "cabin-tt-fno", row.fno || "—"));
-    r.appendChild(el("span", "cabin-tt-time", time));
+    var timeBox = el("span", "cabin-tt-time", time);
+    if (row.tsrc === "sched-borrow") {
+      timeBox.appendChild(el("em", "cabin-tt-borrow", "借用"));
+      timeBox.title = "时刻来自排班库同航班同星期实测，非当日专查；购票页为准";
+    }
+    r.appendChild(timeBox);
     r.appendChild(el("span", "cabin-tt-price", fmtCny(row.price)));
     if (row.url) {
       r.title = "直达 Booking 公务舱搜索页";
@@ -2262,6 +2267,11 @@
     var head = el("div", "cabin-leg-head");
     head.appendChild(el("span", "cabin-leg-name",
       (g.from_city || "?") + " → " + (g.to_city || "?")));
+    if (g.rows && g.rows.length) {
+      head.appendChild(el("span", "cabin-timed-chip",
+        "时刻 " + (g.timed || 0) + "/" + (g.total || g.rows.length) +
+        ((g.borrowed || 0) ? " · 借用" + g.borrowed : "")));
+    }
     if (b) {
       var badge = el("span", "cabin-low-badge",
         "历史最低 " + fmtCny(b.low) +
