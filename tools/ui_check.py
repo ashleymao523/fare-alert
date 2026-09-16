@@ -1149,6 +1149,26 @@ checks["v1.15 429 breaker + fp rotation"] = (
     and ("test_two_strikes_stop_the_batch" in _t115_src)
     and ("test_429_returns_throttled_marker" in _t115_src))
 
+# --- v1.15.1: adaptive 429 patrol backoff ---
+_cm151_src = open(os.path.join("core", "cabin_monitor.py"),
+                   encoding="utf-8").read()
+_t151_src = open(os.path.join("tests", "test_v1151.py"),
+                 encoding="utf-8").read()
+_at151_src = open(os.path.join("core", "agent_tasks.py"),
+                  encoding="utf-8").read()
+_w151_src = open("webui.py", encoding="utf-8").read()
+checks["v1.15.1 adaptive 429 patrol backoff"] = (
+    ("def patrol_gap(" in _cm151_src)
+    and ("cabin_patrol_gap" in _main115_src)
+    and ('info["throttle_streak"]' in _main115_src)
+    and ('info["interval_effective_minutes"]' in _main115_src)
+    and ("interval_effective_minutes" in _at151_src)
+    and ('"throttle_streak":' in _w151_src)
+    and ('"interval_effective_minutes":' in _w151_src)
+    and ("test_clean_round_resets_to_base" in _t151_src)
+    and ("test_third_throttle_caps_at_six" in _t151_src)
+    and ("test_backoff_wired_end_to_end" in _t151_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

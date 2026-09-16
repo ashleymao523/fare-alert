@@ -43,6 +43,7 @@ from core.cabin_monitor import (
     probe_dates as cabin_probe_dates,
     time_gap_dates as cabin_time_gaps,
     booking_cabin_rows as cabin_bk_rows,
+    patrol_gap as cabin_patrol_gap,
 )
 from core.point_fill import load_cache as load_point_cache
 from core.point_fill import merge_point_fill
@@ -1037,6 +1038,10 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
     n_refill = 0
     errs = 0
     n_thr = 0
+    # v1.15.1: streak persists across rounds (and manual fires) via
+    # the previous _cabin_patrol block in the same state dict.
+    prev_streak = int(((state.get("_cabin_patrol") or {})
+                       .get("throttle_streak")) or 0)
     for leg in legs:
         hid = "patrol-{fc}-{tc}".format(
             fc=leg["from_city"], tc=leg["to_city"])
@@ -1139,6 +1144,15 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
     if n_thr:
         info["last_status"] = "{s} · 网关限流熔断x{n}".format(
             s=info.get("last_status") or "", n=n_thr)
+    # v1.15.1: adaptive backoff - a throttled round stretches the
+    # NEXT gap (2x/4x/6x capped), a clean round snaps back to base.
+    base_s = int(cw.get("refresh_minutes") or 30) * 60
+    eff_s, streak = cabin_patrol_gap(base_s, prev_streak, n_thr)
+    info["throttle_streak"] = streak
+    info["interval_effective_minutes"] = int(eff_s // 60)
+    if streak:
+        info["last_status"] = "{s} · 限流退避下轮+{m}分".format(
+            s=info.get("last_status") or "", m=int(eff_s // 60))
 
     state["_cabin_patrol"] = info
     return info
@@ -1607,7 +1621,16 @@ def main():
                             os.path.join(DATA_DIR, "state.json"), st)
                     except Exception:
                         log.exception("cabin patrol cycle failed")
-                    next_patrol = time.time() + patrol_gap
+                    # v1.15.1: backoff-aware clock - the round just
+                    # stamped interval_effective_minutes (2x/4x/6x
+                    # while throttled, base when clean) into state.
+                    try:
+                        eff = int(((st.get("_cabin_patrol") or {})
+                                   .get("interval_effective_minutes"))
+                                  or (patrol_gap // 60))
+                        next_patrol = time.time() + eff * 60
+                    except Exception:
+                        next_patrol = time.time() + patrol_gap
         return
     run_once(cfg, log)
     _write_heartbeat(True)

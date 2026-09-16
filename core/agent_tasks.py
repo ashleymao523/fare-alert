@@ -108,9 +108,13 @@ def build_ledger(data_dir, cfg=None, now=None):
     state = _load(os.path.join(data_dir, "state.json"))
     cp = (state.get("_cabin_patrol") or {})
     cw = (cfg.get("cabin_watch") or {})
+    # v1.15.1: during throttle backoff the effective cadence IS the
+    # stretched interval - the card counts down to the real next fire
+    # instead of flagging the agent late mid-backoff.
+    cp_eff = int(cp.get("interval_effective_minutes") or 0)
     agents.append(_agent(
         "cabin-patrol", "公务舱巡检", "👔", _iso(cp.get("last_run")),
-        int(cw.get("refresh_minutes", 30) or 30), now,
+        cp_eff or int(cw.get("refresh_minutes", 30) or 30), now,
         str(cp.get("last_status") or "尚未巡检"),
         manual="/api/tasks/cabin-patrol/run"))
 

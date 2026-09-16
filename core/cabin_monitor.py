@@ -303,6 +303,19 @@ def time_gap_dates(history, route_id, date_from, date_to):
     return out
 
 
+def patrol_gap(base_seconds, prev_streak, throttle_hits):
+    """v1.15.1: adaptive 429 backoff for the patrol clock.
+
+    A round with ANY throttle hit escalates the consecutive-broken
+    streak: 2x base the first time, 4x the second, 6x capped after;
+    a clean round (zero hits) resets to base. Pure - the worker loop
+    and the manual trigger share it through state['_cabin_patrol'].
+    Returns (effective_gap_seconds, streak)."""
+    thr = int(throttle_hits or 0)
+    streak = (int(prev_streak or 0) + 1) if thr else 0
+    mult = min(2 ** streak, 6) if thr else 1
+    return int(base_seconds) * mult, streak
+
 def booking_cabin_rows(date, got, tax_amt, fx):
     """v1.10 precision: one booking LOWEST_PRICE BUSINESS answer ->
     [FlightDeal], one row PER BUSINESS FLIGHT.

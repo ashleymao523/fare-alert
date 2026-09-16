@@ -955,6 +955,11 @@ def api_cabin():
         # last_status carries the text, the numbers ride here.
         "time_refill": pstate.get("time_refill"),
         "throttle": pstate.get("throttle"),
+        # v1.15.1: adaptive backoff state - streak escalates 2x/4x/6x,
+        # a clean round resets; effective minutes is the live cadence.
+        "throttle_streak": pstate.get("throttle_streak"),
+        "interval_effective_minutes":
+            pstate.get("interval_effective_minutes"),
     }
     return jsonify({"config": cw, "history": ch,
                     "board": cw_board(ch),
