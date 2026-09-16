@@ -99,6 +99,50 @@ class BuildMessageTimes(unittest.TestCase):
         self.assertIn("07:45(⚠)", body2)
 
 
+class ReferenceFlightLine(unittest.TestCase):
+    """v1.00: push names the same-day cheapest booking-verified
+    reference flight with its exact window - a concrete departure
+    for dates whose OTA cheapest row still lacks one."""
+    CFG = {"tax": {"airport_fee": 50, "fuel_surcharge": 70},
+           "baggage_policy": {}}
+
+    def _msg(self, d):
+        route = {"from_city": "杭州", "to_city": "重庆",
+                 "threshold_total": 500}
+        return build_message(route, [(500.0, d)], [(500.0, d)], None,
+                             self.CFG)
+
+    def _alts(self):
+        return [
+            {"no": "HU7421", "dep": "13:10", "arr": "15:45",
+             "src": "booking", "price": 2101, "exact": True},
+            {"no": "3U2579", "dep": "06:50", "arr": "09:25",
+             "src": "booking", "price": 1296, "exact": True},
+            {"no": "GJ8827", "dep": "07:05", "arr": "09:45",
+             "src": "booking", "price": 0, "exact": True},
+            {"no": "SC4774", "dep": "23:05", "arr": "02:30",
+             "src": "board", "price": 990, "exact": True},
+        ]
+
+    def test_reference_line_names_cheapest_booking_alt(self):
+        d = _deal(alt_times=self._alts())   # OTA row: no dep at all
+        _, body = self._msg(d)
+        self.assertIn("当日班次参考: 3U2579 06:50-09:25 参考¥1296", body)
+        self.assertNotIn("HU7421 13:10", body)
+
+    def test_no_reference_line_without_booking_alts(self):
+        d = _deal(dep_time="07:45", arr_time="10:20",
+                  time_src="airport-board")
+        _, body = self._msg(d)
+        self.assertNotIn("当日班次参考", body)
+
+    def test_alt_without_window_is_skipped(self):
+        d = _deal(alt_times=[{"no": "3U2579", "dep": "", "arr": "",
+                              "src": "booking", "price": 1296}])
+        _, body = self._msg(d)
+        self.assertNotIn("当日班次参考", body)
+
+
 class WeeklyGlobalBestMarks(unittest.TestCase):
     def _gb(self, **extra):
         d = {"date": "2026-09-20", "total_price": 380,

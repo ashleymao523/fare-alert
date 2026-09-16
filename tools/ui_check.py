@@ -822,6 +822,21 @@ checks["v0.99 ECB daily fx: precise backfill accuracy"] = (
     and ("test_ecb_official_fallback" in _tfx99_src)
     and ("test_reprice_eur" in _tfx99_src))
 
+_al100_src = open(os.path.join("core", "alerts.py"),
+                  encoding="utf-8").read()
+_wdreg100 = open(os.path.join("tools", "register_watchdog_task.ps1"),
+                  encoding="utf-8-sig").read()
+_tal100_src = open(os.path.join("tests", "test_alert_msg.py"),
+                   encoding="utf-8").read()
+checks["v1.00 推送参考班次: 缺时刻OTA行补具体起飞时间 + watchdog绝对路径"] = (
+    ("def best_ref_alt" in _al100_src)
+    and ("当日班次参考" in _al100_src)
+    and ("sys.executable" in _wdreg100)
+    and ("Test-Path" in _wdreg100)
+    and ("test_reference_line_names_cheapest_booking_alt" in _tal100_src)
+    and ("test_no_reference_line_without_booking_alts" in _tal100_src)
+    and ("test_alt_without_window_is_skipped" in _tal100_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

@@ -59,6 +59,26 @@ def conf_mark(deal):
     return "参考"
 
 
+def best_ref_alt(deal):
+    """v1.00: same-day cheapest booking-verified reference flight.
+
+    Mirrors main._alt_times_with_best_ref semantics: among alt_times
+    rows with src=="booking" and a positive price, the lowest wins
+    (first among ties). Push text uses it to name a concrete flight
+    + exact time for dates whose OTA cheapest row still lacks a
+    trustworthy departure."""
+    alts = _fld(deal, "alt_times") or []
+    try:
+        cands = [a for a in alts
+                 if isinstance(a, dict)
+                 and a.get("src") == "booking"
+                 and float(a.get("price") or 0) > 0]
+        return min(cands, key=lambda a: float(a.get("price"))) \
+            if cands else None
+    except (TypeError, ValueError):
+        return None
+
+
 def evaluate(route_cfg, deals, state, cfg, now_ts, record=True):
     """Return (alert_list, below_list). alert_list = [(total, deal)] to push now."""
     threshold = route_cfg.get("threshold_total", 500)
@@ -191,6 +211,18 @@ def build_message(route_cfg, to_alert, below, train_info, cfg):
         body.append("{} {} {}{} 裸价¥{}+税¥{}=¥{} {}{}".format(
             _fmt_date(d.date), d.flight_no, name, times,
             int(d.bare_price), int(tax), int(total), warn, bag_note))
+    # v1.00: same-day cheapest booking-verified reference flight -
+    # names a concrete flight + exact window even when the OTA
+    # cheapest row above still lacks a trustworthy departure.
+    ref = best_ref_alt(top_deal)
+    if ref:
+        rdep = str(ref.get("dep") or "")
+        rarr = str(ref.get("arr") or "")
+        rwin = "{0}-{1}".format(rdep, rarr) if (rdep and rarr) else rdep
+        if rwin:
+            body.append("当日班次参考: {0} {1} 参考¥{2}".format(
+                ref.get("no") or "", rwin,
+                int(float(ref.get("price") or 0))))
     body.append("")
     body.append("60天窗口内共{}天低于¥{}".format(len(below), int(threshold)))
     body.append("")
