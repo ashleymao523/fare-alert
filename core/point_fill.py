@@ -102,10 +102,16 @@ def put_rows(data_dir, route_id, rows, tax=0.0, now=None):
     dep_time?, arr_time?}; total is the pay price (tax included).
     Stored as bare (total - tax) to keep total_price() semantics.
     Returns (cache, n_stored); invalid rows are skipped, not fatal."""
+    # v1.05: a capture may carry MANY rows for one date (bookmarklet
+    # v2 posts the whole visible list). The cache keys by date, so the
+    # LOWEST total wins the slot - later/higher rows never clobber a
+    # cheaper capture. The full row set still feeds the schedule
+    # deposit separately (queue_sched_deposit reads all rows).
     now = now if now is not None else time.time()
     cache = load_cache(data_dir)
     bucket = cache.setdefault(route_id, {}) if isinstance(cache, dict) else {}
     n = 0
+    best = {}
     for r in rows or []:
         if not isinstance(r, dict):
             continue
@@ -117,6 +123,11 @@ def put_rows(data_dir, route_id, rows, tax=0.0, now=None):
             continue
         if total <= 0:
             continue
+        prev = best.get(d)
+        if prev is None or total < prev[0]:
+            best[d] = (total, r)
+    for d in sorted(best):
+        total, r = best[d]
         bucket[d] = {
             "bare": round(total - float(tax or 0), 1),
             "total": round(total, 1),
@@ -182,11 +193,16 @@ def queue_sched_deposit(data_dir, rows):
     return len(want)
 
 
-# v0.79: bookmarklet that runs ON the qunar flight-list page, mines the
-# cheapest price straight out of the rendered DOM and fires a no-cors
-# POST back to the panel. __FA_ORIGIN__ is swapped at generation time
+# v0.79: bookmarklet that runs ON the qunar flight-list page, mines
+# prices straight out of the rendered DOM and fires a no-cors POST
+# back to the panel. __FA_ORIGIN__ is swapped at generation time
 # (request.host_url), so a phone Safari copying it from the LAN URL
 # posts to the desktop box, not to 127.0.0.1.
+# v1.05: card-level capture. Every visible flight card on the list
+# page (flight no + dep/arr times + price) rides the same POST: the
+# cheapest row backfills the snapshot while the rest feed the board
+# schedule deposit, so ONE tap on a real-browser per-date query
+# teaches exact times for the whole route-day, not just the floor.
 _BOOKMARKLET_TEMPLATE = r"""(function(){
 var ORIGIN="__FA_ORIGIN__";
 var CABIN="__FA_CABIN__";
@@ -201,9 +217,41 @@ document.body.appendChild(t);
 setTimeout(function(){t.remove();},3500);
 }
 if(!from||!to||!date){toast("这不是去哪儿航班列表页(缺城市/日期参数)",false);return;}
+var FNO=/([A-Z][A-Z0-9])\s?(\d{3,4})/;
+function times(s){
+var out=[],re=/(\d{1,2}:\d{2})/,m;
+while(out.length<2&&s&&(m=re.exec(s))){out.push(m[1]);s=s.slice(m.index+m[1].length);}
+return out;
+}
+function cardOf(el){
+for(var up=0,a=el;up<7&&a;a=a.parentElement,up++){
+var t=a.innerText||"";
+if(FNO.test(t)&&/\d{1,2}:\d{2}/.test(t)){return a;}
+}
+return null;
+}
+var cards={},pnodes=document.querySelectorAll("[class*=price]");
+for(var i=0;i<pnodes.length;i++){
+var pd=(pnodes[i].textContent||"").replace(/[^\d]/g,"");
+if(!pd){continue;}
+var pp=parseInt(pd,10);
+if(!(pp>=50&&pp<=99999)){continue;}
+var card=cardOf(pnodes[i]);
+if(!card){continue;}
+var ct=card.innerText||"";
+var fm=ct.match(FNO);
+if(!fm){continue;}
+var ts=times(ct);
+var f=fm[1]+fm[2];
+if(!cards[f]||pp<cards[f].p){cards[f]={p:pp,dep:ts[0]||"",arr:ts[1]||""};}
+}
+var rows=[];
+for(var k in cards){rows.push({date:date,total:cards[k].p,flight_no:k,dep_time:cards[k].dep,arr_time:cards[k].arr});}
+rows.sort(function(a,b){return a.total-b.total;});
+if(!rows.length){
 var prices=[],nodes=document.querySelectorAll("[class*=price]");
-for(var i=0;i<nodes.length;i++){
-var m=(nodes[i].textContent||"").replace(/[,\uFF0C\s]/g,"").match(/(?:\u00A5|\uFFE5)?(\d{2,5})/);
+for(var j=0;j<nodes.length;j++){
+var m=(nodes[j].textContent||"").replace(/[,\uFF0C\s]/g,"").match(/(?:\u00A5|\uFFE5)?(\d{2,5})/);
 if(m){var p=parseInt(m[1],10);if(p>=50&&p<=99999)prices.push(p);}
 }
 var best=prices.length?Math.min.apply(null,prices):0;
@@ -214,14 +262,13 @@ best=parseInt(inp.replace(/[^\d]/g,""),10);
 if(!best){toast("无效价格",false);return;}
 }
 var txt=document.body.innerText||"";
-var fm=txt.match(/([A-Z][A-Z0-9])\s?(\d{3,4})/);
-var fno=fm?fm[1]+fm[2]:"";
-var tm=txt.match(/(?:^|[^\d])(\d{1,2}:\d{2})(?=[^\d]|$)/g)||[];
-var dep=tm.length?tm[0].match(/\d{1,2}:\d{2}/)[0]:"";
-var arr=tm.length>1?tm[1].match(/\d{1,2}:\d{2}/)[0]:"";
-var body=JSON.stringify({from_city:from,to_city:to,cabin:CABIN,rows:[{date:date,total:best,flight_no:fno,dep_time:dep,arr_time:arr}]});
+var fm2=txt.match(FNO);
+rows=[{date:date,total:best,flight_no:fm2?fm2[1]+fm2[2]:"",dep_time:times(txt)[0]||"",arr_time:times(txt)[1]||""}];
+}
+rows=rows.slice(0,12);
+var body=JSON.stringify({from_city:from,to_city:to,cabin:CABIN,rows:rows});
 fetch(ORIGIN+"/api/point-fill",{method:"POST",headers:{"Content-Type":"text/plain"},body:body,mode:"no-cors"})
-.then(function(){toast("已回填 "+from+"-"+to+" "+date+" \u00A5"+best+" (含航班号/时刻则一并带上, 面板已热更新)",true);})
+.then(function(){toast("已抓当日 "+rows.length+" 班 · 最低 \u00A5"+rows[0].total+" 回填"+(rows.length>1?" · 另 "+(rows.length-1)+" 班时刻喂入班期库":""),true);})
 .catch(function(){toast("回填失败: 面板不可达 "+ORIGIN,false);});
 })();"""
 

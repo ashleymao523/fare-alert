@@ -907,8 +907,30 @@ checks["v1.04 真价行时刻升级: 精确板期压过 Booking 借用钉"] = (
     and ("bk_borrowed" in _main104_src)
     and ("bk-upgrade" in _main104_src)
     and ("test_exact_vs_crossdow_policy_chain" in _t104_src)
-    and ("test_no_pingpong_with_booking_attach" in _t104_src)
-    and ('CODE_VERSION = "1.04"' in _ver104_src))
+    and ("test_no_pingpong_with_booking_attach" in _t104_src))
+    # v1.05: dropped the CODE_VERSION=="1.04" pin - feature markers
+    # stay green across version bumps; current version is pinned by
+    # the v1.05 block instead.
+
+
+_pf105_src = open(os.path.join("core", "point_fill.py"),
+                  encoding="utf-8").read()
+_dd105_src = open(os.path.join("web", "src", "components", "DayDetail.jsx"),
+                  encoding="utf-8").read()
+_cv105_src = open(os.path.join("web", "src", "components", "CrawlView.jsx"),
+                  encoding="utf-8").read()
+_t105_src = open(os.path.join("tests", "test_v105.py"),
+                 encoding="utf-8").read()
+_ver105_src = open(os.path.join("core", "version.py"),
+                   encoding="utf-8").read()
+checks["v1.05 point-fill v2: full-list bookmarklet + lowest-wins cache + inline form"] = (
+    ("cardOf" in _pf105_src)
+    and ("LOWEST total wins the slot" in _pf105_src)
+    and ("pf-inline" in _dd105_src)
+    and ("postPointFill" in _dd105_src)
+    and (chr(20840)+chr(37096)+chr(33322)+chr(29677) in _cv105_src)
+    and ("cardOf" in _t105_src)
+    and ('CODE_VERSION = "1.05"' in _ver105_src))
 
 bad = 0
 for k, v in checks.items():

@@ -224,15 +224,17 @@ function PointFillCard() {
       ) : null}
       <div class="bm-box">
         <div class="bm-head">
-          <b>半自动 · 精点回填书签</b>
+          <b>半自动 · 精点回填书签 v2</b>
           <button class="btn" onClick={genBm}>{bm ? "重新生成" : "生成书签脚本"}</button>
           {bm ? <button class="btn primary" onClick={copyBm}>复制</button> : null}
           {bmMsg ? <span class="muted push-msg">{bmMsg}</span> : null}
         </div>
         <div class="muted">
           ① 在本面板(手机用局域网地址打开)点生成+复制 → ② 浏览器收藏栏「新建书签」
-          把代码粘为网址 → ③ 在去哪儿精查页点这本书签, 自动抓最低价回填,
-          抓不到会弹窗让你手输。脚本自动指向当前面板地址, 换设备重新生成即可。
+          把代码粘为网址 → ③ 在去哪儿精查页点这本书签: 一次抓取当日全部航班
+          (每班航班号+起降时刻+价格), 最低价热更新到日历, 其余班次时刻自动
+          沉淀进班期库; 抓不到会弹窗让你手输。脚本自动指向当前面板地址,
+          换设备重新生成即可。
         </div>
         {bm ? <textarea class="bm-code" readonly rows="4"
           onFocus={(e) => e.target.select()} value={bm} /> : null}

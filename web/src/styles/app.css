@@ -745,6 +745,17 @@ a.gap-chip.link:visited { color: inherit; }
 .pf-box { border: 1px solid var(--line); border-radius: var(--r-xs); padding: var(--sp-md) var(--sp-md) var(--sp-sm); margin: var(--sp-md) 0; background: var(--card2); }
 .pf-head { display: flex; align-items: center; gap: var(--sp-md); flex-wrap: wrap; margin-bottom: var(--sp-2); }
 .pf-link { font-size: var(--fs-sm); }
+/* v1.05: in-place point-fill form inside DayDetail (reference days) */
+.pf-inline { border: 1px solid var(--line); border-radius: var(--r-xs); padding: var(--sp-2) var(--sp-md); margin: var(--sp-2) 0; background: var(--card2); }
+.pf-inline-head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-2); }
+.pf-inline-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: var(--sp-2); }
+.pf-inline-grid label { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-xs); color: var(--muted); }
+.pf-inline-grid input {
+  border: 1px solid var(--line); border-radius: var(--r-xs); background: var(--card);
+  padding: 4px 8px; font-size: var(--fs-sm); color: var(--text); width: 100%;
+}
+.pf-inline-grid input:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+.pf-inline-btns { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
 .sed-bar { flex: 1; height: var(--sp-md); background: var(--card2); border-radius: var(--r-pill); overflow: hidden; display: flex; }
 .tc-refline { font-size: var(--fs-xs); color: var(--muted); margin: -2px 0 4px calc(8.5em + var(--sp-md)); }
 .sed-dows { margin-top: var(--sp-md); }

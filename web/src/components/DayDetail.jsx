@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { fmtMoney, fmtMD, weekday, trainSeats, trainBest, dealForDate } from "../lib/data.js";
-import { fetchDaySchedule } from "../lib/api.js";
+import { fetchDaySchedule, postPointFill } from "../lib/api.js";
 
 function srcBadge(d) {
   if (d.source === "qunar-intl") return <span class="badge sky">国际特价</span>;
@@ -89,6 +89,13 @@ function dayListUrl(route, date) {
 
 export default function DayDetail({ route, date }) {
   const [sched, setSched] = useState(null);
+  // v1.05: in-place point-fill form state (reference-price days)
+  const [pfT, setPfT] = useState("");
+  const [pfF, setPfF] = useState("");
+  const [pfD, setPfD] = useState("");
+  const [pfA, setPfA] = useState("");
+  const [pfBusy, setPfBusy] = useState(false);
+  const [pfMsg, setPfMsg] = useState("");
   useEffect(() => {
     // v0.69: per-date timetable strip - every flight the schedule
     // library knows for this route's weekday, zero extra key needed
@@ -199,6 +206,23 @@ export default function DayDetail({ route, date }) {
   if (!route || !date) return null;
   const d = dealForDate(route, date);
   const tr = trainBest(route);
+  const isRefPrice = d.source === "booking-ref" || d.source === "interp"
+    || d.source === "nearby-ref";
+  const submitPf = () => {
+    const t = parseFloat(pfT);
+    if (!(t > 0)) { setPfMsg("请填选中乘机人后的最终付款价"); return; }
+    setPfBusy(true); setPfMsg("");
+    postPointFill({
+      route_id: route.id, from_city: route.from_city, to_city: route.to_city,
+      rows: [{ date, total: t, flight_no: pfF.trim(),
+        dep_time: pfD.trim(), arr_time: pfA.trim() }],
+    }).then((x) => {
+      setPfBusy(false);
+      setPfMsg(x && x.ok
+        ? "已回填 \u2713 快照热更新, 下轮抓取沿用(48h)"
+        : "失败: " + ((x && x.error) || "未知错误"));
+    }).catch(() => { setPfBusy(false); setPfMsg("面板不可达"); });
+  };
   if (!d) {
     return (
       <div class="card">
@@ -372,6 +396,39 @@ export default function DayDetail({ route, date }) {
               ? "该日期源端无缓存价, 显示" + (d.ref_offset ? "距此 " + d.ref_offset + " 天的最近有价日参考" : "最近有价日的参考价") + " · 点击下方按钮直达查当日实际价格"
               : "该日期源端无缓存价, 价格为两侧真实价插值估算" + (d.flight_no ? " · 参考航班 " + d.flight_no + "(时刻以购票页为准)" : "") + " · 点击下方按钮直达查当日实际价格"}
           </span>
+        </div>
+      )}
+      {isRefPrice && (
+        <div class="pf-inline">
+          <div class="pf-inline-head">
+            <b>🎯 精点回填</b>
+            <span class="muted">该日聚合源无缓存价(非售罄) · 查到实价就地回填</span>
+            <a class="pf-link" href={dayListUrl(route, date)}
+              target="_blank" rel="noopener"
+              title="打开去哪儿当日列表 → 查到价后回来填付款价(或用书签一键抓全部航班)">
+              先去单日精查 ↗
+            </a>
+          </div>
+          <div class="pf-inline-grid">
+            <label><span>付款价 ¥ 必填</span>
+              <input type="number" min="1" step="0.1" placeholder="如 480"
+                value={pfT} onInput={(e) => setPfT(e.target.value)} /></label>
+            <label><span>航班号 选填</span>
+              <input type="text" placeholder="GJ5401" maxlength="8"
+                value={pfF} onInput={(e) => setPfF(e.target.value)} /></label>
+            <label><span>起飞 选填</span>
+              <input type="text" placeholder="07:45" maxlength="5"
+                value={pfD} onInput={(e) => setPfD(e.target.value)} /></label>
+            <label><span>落地 选填</span>
+              <input type="text" placeholder="10:30" maxlength="5"
+                value={pfA} onInput={(e) => setPfA(e.target.value)} /></label>
+          </div>
+          <div class="pf-inline-btns">
+            <button class="btn primary small" disabled={pfBusy} onClick={submitPf}>
+              回填并热更新
+            </button>
+            {pfMsg ? <span class="muted">{pfMsg}</span> : null}
+          </div>
         </div>
       )}
       {tr.second && (
