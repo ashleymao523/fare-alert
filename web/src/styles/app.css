@@ -950,3 +950,50 @@ a.gap-chip.link:visited { color: inherit; }
 .tstrip-track .cell.borrow { background: var(--accent); }
 .tstrip-track .cell.alt { background: var(--gold); }
 .tstrip-track .cell.noref { background: var(--line); }
+/* ---- v1.13: 任务中心账本 + 公务舱逐班时刻表 ---- */
+.agents-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--sp-3); margin-top: var(--sp-3);
+}
+.agent-card {
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: var(--sp-3); background: var(--card);
+  box-shadow: var(--sh-1);
+}
+.agent-card.late { border-color: var(--gold-bg); background: var(--amber-bg); }
+.agent-card.idle { opacity: 0.75; }
+.agent-head {
+  display: flex; align-items: center; gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.agent-ico { font-size: var(--fs-3xl); line-height: 1; }
+.agent-name { font-weight: 700; font-size: var(--fs-lg); }
+.agent-head .btn { margin-left: auto; }
+.agent-detail {
+  color: var(--muted); font-size: var(--fs-sm);
+  margin-top: var(--sp-2); word-break: break-all;
+}
+.agent-meta {
+  display: flex; gap: var(--sp-3); flex-wrap: wrap;
+  color: var(--muted); font-size: var(--fs-xs); margin-top: var(--sp-2);
+}
+.cab-tt-wrap { margin-top: var(--sp-3); }
+.cab-tt-leg {
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: var(--sp-3); margin-top: var(--sp-3); background: var(--card2);
+}
+.cab-tt-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-2);
+}
+.cab-tt-name { font-weight: 700; font-size: var(--fs-lg); }
+.cab-sp { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.cab-sp-svg { display: block; }
+.cab-sp-line {
+  fill: none; stroke: var(--accent); stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.cab-sp-dot { fill: var(--green); }
+.cab-sp-lab { color: var(--muted); font-size: var(--fs-sm); }
+.cab-tt-table .cab-tt-row.link { cursor: pointer; }
+.cab-tt-table .cab-tt-row.link:hover { background: var(--accent-soft); }

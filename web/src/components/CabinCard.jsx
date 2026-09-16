@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { saveConfig, fetchCities, runNow } from "../lib/api.js";
 import { filterAC } from "./AcField.jsx";
+import CabinTimetable from "./CabinTimetable.jsx";
 
 const fmt = (n) => (typeof n === "number" ? "¥" + Math.round(n) : "-");
 
@@ -381,6 +382,7 @@ export default function CabinCard({ cfg, setCfg }) {
               {data.last_alert.kind === "record" ? " · 历史新低" : ""}
             </div>
           ) : null}
+          <CabinTimetable timetable={data.timetable} />
           {msg && !editing ? <div class="muted push-msg">{msg}</div> : null}
         </div>
       )}

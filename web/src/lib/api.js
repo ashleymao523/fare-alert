@@ -100,3 +100,7 @@ export function fetchReverseLatest() {
 }
 
 export function fetchLog() { return fetch("/api/log").then(j); }
+
+export function fetchTasks() { return fetch("/api/tasks").then(j); }
+
+export function runAgentPath(path, body) { return post(path, body); }

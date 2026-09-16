@@ -1073,6 +1073,32 @@ checks["v1.12 time heat + cabin spark"] = (
     and (".th-cell.exact" in _css112_src)
     and ("test_spark_projection" in _t112_src))
 
+# --- v1.13: v2 main entry - agents tab + cabin timetable ---
+_t113_src = open(os.path.join("tests", "test_v113.py"),
+                 encoding="utf-8").read()
+_app113_src = open(os.path.join("web", "src", "app.jsx"),
+                   encoding="utf-8").read()
+_agents113_src = open(os.path.join(
+    "web", "src", "components", "AgentsView.jsx"),
+    encoding="utf-8").read()
+_cabin_tt113_src = open(os.path.join(
+    "web", "src", "components", "CabinTimetable.jsx"),
+    encoding="utf-8").read()
+_card113_src = open(os.path.join(
+    "web", "src", "components", "CabinCard.jsx"),
+    encoding="utf-8").read()
+checks["v1.13 v2 agents + cabin timetable"] = (
+    ('["agents", "🤖 任务中心"]' in _app113_src)
+    and ('{tab === "agents" ? <AgentsView /> : null}' in _app113_src)
+    and ("fetchTasks" in _agents113_src)
+    and ("runAgentPath" in _agents113_src)
+    and ("g.spark" in _cabin_tt113_src)
+    and ("window.open(row.url" in _cabin_tt113_src)
+    and ("<CabinTimetable timetable={data.timetable} />" in _card113_src)
+    and ("test_agents_view_wired" in _t113_src)
+    and os.path.exists(os.path.join(
+        "web", "src", "components", "AgentsView.jsx")))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

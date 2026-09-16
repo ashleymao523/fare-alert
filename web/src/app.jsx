@@ -20,12 +20,14 @@ import PushView from "./components/PushView.jsx";
 import RoutesView from "./components/RoutesView.jsx";
 import ReverseView from "./components/ReverseView.jsx";
 import LogsView from "./components/LogsView.jsx";
+import AgentsView from "./components/AgentsView.jsx";
 
 const TABS = [
   ["dash", "📊 仪表盘"],
   ["routes", "🧭 线路"],
   ["reverse", "🧭 预算找目的地"],
   ["crawl", "🕷 爬虫监控"],
+  ["agents", "🤖 任务中心"],
   ["weekly", "📈 周报"],
   ["sources", "🔌 数据源"],
   ["push", "🔔 推送"],
@@ -111,6 +113,7 @@ export function App() {
         {tab === "reverse" ? <ReverseView /> : null}
         {tab === "logs" ? <LogsView /> : null}
         {tab === "crawl" ? <CrawlView /> : null}
+        {tab === "agents" ? <AgentsView /> : null}
         {tab === "weekly" ? <WeeklyView /> : null}
         {tab === "sources" ? (
           <SourcesView snap={snap} cfg={cfg} setCfg={setCfg} meta={cfgMeta} setMeta={setCfgMeta} cfgErr={cfgErr} />
