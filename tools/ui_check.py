@@ -852,6 +852,29 @@ checks["v1.01 灰点作战清单: booking-ref 日也算精点靶子"] = (
     and ("没有查询到符合条件的航班" in _pf101_src)
     and ("qunarPointUrl" in _crawl101_src))
 
+_webui102_src = open("webui.py", encoding="utf-8").read()
+_crawl102_src = open(os.path.join("web", "src", "components",
+                    "CrawlView.jsx"), encoding="utf-8").read()
+_src102_src = open(os.path.join("web", "src", "components",
+                   "SourcesView.jsx"), encoding="utf-8").read()
+_css102_src = open(os.path.join("web", "src", "styles", "app.css"),
+                  encoding="utf-8").read()
+_weekly102_src = open(os.path.join("core", "weekly.py"),
+                     encoding="utf-8").read()
+checks["v1.02 自动精点引导: point-gaps auto_fill + 面板横幅 + 密钥测试"] = (
+    ("v1.02: response carries an auto_fill block" in _webui102_src)
+    and ("amadeus_ready" in _webui102_src)
+    and ("https://developer.amadeus.com/register" in _webui102_src)
+    and ("auto_fill" in _webui102_src)
+    and ("gap-af on" in _crawl102_src)
+    and ("Amadeus 免费测试密钥" in _crawl102_src)
+    and ("amadeusTest" in _src102_src)
+    and ("developer.amadeus.com/register" in _src102_src)
+    and ("测试密钥" in _src102_src)
+    and (".gap-af {" in _css102_src)
+    and ("班期库已沉淀" in _weekly102_src)
+    and ("自动补齐" in _weekly102_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

@@ -103,8 +103,9 @@ function PointFillCard() {
   const [msg, setMsg] = useState("");
   const [bm, setBm] = useState("");
   const [bmMsg, setBmMsg] = useState("");
+  const [af, setAf] = useState(null);
   const load = () => fetchPointGaps()
-    .then((d) => { setGaps(d.routes || []); setErr(""); })
+    .then((d) => { setGaps(d.routes || []); setAf(d.auto_fill || null); setErr(""); })
     .catch((e) => setErr(String(e.message || e)));
   // v0.82: bookmarklet posts are fire-and-forget (no-cors), so the
   // panel cannot be notified - it re-polls the gap list instead.
@@ -152,6 +153,11 @@ function PointFillCard() {
         <span class="sub">聚合日历未出价 ≠ 售罄 · 点日期直达精查, 再点书签自动回填</span>
       </div>
       {err ? <div class="muted">加载失败: {err}</div> : null}
+      {af && gaps && gaps.length ? (
+        af.amadeus_ready
+          ? <div class="gap-af on">⚡ Amadeus 自动精点已激活 · 每轮自动补 {af.per_round} 日 · 缺口最多的路线约 {af.eta_rounds} 轮（≈{af.eta_rounds * af.interval_min} 分钟）补齐</div>
+          : <div class="gap-af">💡 共 {gaps.reduce((s, r) => s + (r.gaps || []).length, 0)} 个缺价日可全自动补齐：注册 <a href={af.register_url} target="_blank" rel="noopener noreferrer">Amadeus 免费测试密钥 ↗</a>（个人邮箱即可）→ 在「数据源」页粘贴保存 · 配好后每轮自动精点 {af.per_round} 日</div>
+      ) : null}
       {gaps === null ? <div class="muted">加载中…</div>
         : !gaps.length
           ? <div class="muted">✅ 各路线当前无缺价日期, 或已全部回填。</div>

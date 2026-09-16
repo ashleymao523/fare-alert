@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { saveConfig, fetchSchedStats, fetchHealth, fetchAmaUsage,
-  fetchCovTrend, searchBoard } from "../lib/api.js";
+  fetchCovTrend, searchBoard, amadeusTest } from "../lib/api.js";
 
 const DOW_NAMES = ["一", "二", "三", "四", "五", "六", "日"]; // /api/sched-stats: 0=周一
 
@@ -139,6 +139,7 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
   const [hb, setHb] = useState(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [amaMsg, setAmaMsg] = useState("");
   useEffect(() => {
     fetchSchedStats().then(setStats).catch(() => {});
     fetchHealth().then(setHb).catch(() => {});
@@ -223,7 +224,15 @@ export default function SourcesView({ snap, cfg, setCfg, meta, setMeta, cfgErr }
               <input type="password" value={ama.client_secret || ""} onInput={(e) => setAma("client_secret", e.target.value)} />
             </label>
           </div>
-          <div class="muted">配置后国际线获得真实起降时刻与缺价补全; 注册入口见经典版数据源页。</div>
+          <div class="muted">
+            密钥三步: ① <a href="https://developer.amadeus.com/register" target="_blank" rel="noopener noreferrer">developer.amadeus.com/register ↗</a> 注册（个人邮箱即可, 无需公司信息）→ ② 控制台 Get Started 新建免费测试 App, 复制 API Key/Secret → ③ 粘到上方保存。配好后国际线获得真实起降时刻, 国内缺口日期由 worker 每轮自动精点 6 日。
+          </div>
+          <div class="row-btns">
+            <button class="btn" onClick={() => amadeusTest()
+              .then((r) => setAmaMsg("✅ " + (r.message || "密钥有效")))
+              .catch((e) => setAmaMsg("❌ " + (e.message || e)))}>测试密钥</button>
+            {amaMsg ? <span class="muted push-msg">{amaMsg}</span> : null}
+          </div>
           {(usage && usage.today != null) ? (
             <div class="muted">Amadeus 今日调用 {usage.today} 次(14 天滚动计数, 含缓存命中前的真实请求)。</div>
           ) : null}

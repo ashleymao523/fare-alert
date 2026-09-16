@@ -1371,7 +1371,7 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 log.warning("weekly push skipped: no push channel configured "
                             "(timer not consumed)")
             else:
-                report = build_weekly(hist_path)
+                report = build_weekly(hist_path, data_dir=DATA_DIR)
                 try:  # v0.65: same global-best merge as the manual push
                     with open(os.path.join(DATA_DIR, "snapshot.json"),
                               encoding="utf-8") as f:

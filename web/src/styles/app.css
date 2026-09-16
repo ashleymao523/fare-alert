@@ -729,6 +729,18 @@ a.ft-alt:hover { border-color: var(--accent); }
 .gap-chip.cached { cursor: default; color: var(--green-d); border-color: var(--green); background: var(--green-bg); }
 .gap-chip.sel { border-color: var(--accent); color: var(--accent-ink); box-shadow: var(--ring); }
 a.gap-chip { text-decoration: none; }
+
+/* v1.02: auto point-fill status banner (register nudge / armed ETA) */
+.gap-af {
+  background: var(--amber-bg); color: var(--amber-d);
+  border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-md);
+  font-size: var(--fs-sm); margin: var(--sp-2) 0 var(--sp-md);
+  line-height: 1.7;
+}
+.gap-af a { color: inherit; font-weight: 600; }
+.gap-af.on {
+  background: var(--green-bg); color: var(--green-d);
+}
 a.gap-chip.link:visited { color: inherit; }
 .pf-box { border: 1px solid var(--line); border-radius: var(--r-xs); padding: var(--sp-md) var(--sp-md) var(--sp-sm); margin: var(--sp-md) 0; background: var(--card2); }
 .pf-head { display: flex; align-items: center; gap: var(--sp-md); flex-wrap: wrap; margin-bottom: var(--sp-2); }

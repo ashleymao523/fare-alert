@@ -493,7 +493,12 @@ def api_point_gaps():
     """v0.76: reference-only dates per route - the precise-query
     capture targets. A bookmarklet / agent / human that CAN run the
     per-date OTA search (real browser) posts results to
-    /api/point-fill; this lists which dates still need that."""
+    /api/point-fill; this lists which dates still need that.
+    v1.02: response carries an auto_fill block - whether the Amadeus
+    per-date automatic offer fill is armed, plus how many poll rounds
+    the worst route needs (6 dates/round). The UI turns this into a
+    register-key nudge with a real ETA, so grey dates stop reading as
+    sold out when a free key would auto-fill them."""
     from core.point_fill import fresh_entries, gap_dates, load_cache
     snap = _read_json(SNAPSHOT_PATH, None) or {}
     cache = load_cache(DATA_DIR)
@@ -511,7 +516,20 @@ def api_point_gaps():
             "window": r.get("window"),
             "gaps": [{"date": g, "cached": g in cached} for g in gaps],
         })
-    return jsonify({"ok": True, "routes": out})
+    full_cfg = load_config(CONFIG_PATH)
+    ama = ((full_cfg.get("sources") or {}).get("amadeus")) or {}
+    ready = bool((ama.get("client_id") or "").strip()
+                 and (ama.get("client_secret") or "").strip())
+    interval = int(full_cfg.get("refresh_minutes") or 30)
+    maxg = max((len(r["gaps"]) for r in out), default=0)
+    auto_fill = {
+        "amadeus_ready": ready,
+        "per_round": 6,
+        "interval_min": interval,
+        "eta_rounds": (maxg + 5) // 6 if maxg else 0,
+        "register_url": "https://developer.amadeus.com/register",
+    }
+    return jsonify({"ok": True, "routes": out, "auto_fill": auto_fill})
 
 
 @app.post("/api/point-fill")
@@ -908,7 +926,8 @@ def api_weekly_report():
     """M4: weekly digest preview (no push, numbers recomputable from history)."""
     from core.weekly import build_weekly, should_push
     cfg = load_config(CONFIG_PATH)
-    report = build_weekly(os.path.join(DATA_DIR, "history.json"))
+    report = build_weekly(os.path.join(DATA_DIR, "history.json"),
+                          data_dir=DATA_DIR)
     # v0.65: preview carries the same global-best line the push sends.
     from core.weekly import attach_global_best
     attach_global_best(report, _read_json(SNAPSHOT_PATH, {}) or {})
@@ -949,7 +968,8 @@ def api_weekly_push():
     """M4: send the current weekly digest now (also resets the 7d timer)."""
     from core.weekly import build_weekly, mark_failed, mark_pushed, push_text
     cfg = load_config(CONFIG_PATH)
-    report = build_weekly(os.path.join(DATA_DIR, "history.json"))
+    report = build_weekly(os.path.join(DATA_DIR, "history.json"),
+                          data_dir=DATA_DIR)
     # v0.65: manual push walks the exact same merge as the scheduler.
     from core.weekly import attach_global_best
     attach_global_best(report, _read_json(SNAPSHOT_PATH, {}) or {})

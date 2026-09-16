@@ -40,7 +40,7 @@ def _stats_for(seg):
     }
 
 
-def build_weekly(path, today=None):
+def build_weekly(path, today=None, data_dir=None):
     """Build the weekly report dict from history.json.
 
     Returns {ok, period, routes:[{id, name, stats, text}], highlights, text}.
@@ -90,6 +90,7 @@ def build_weekly(path, today=None):
         "routes": routes_out,
     }
     doc["highlights"] = week_highlights(history)
+    doc["sched_dows"] = _sched_dow_line(data_dir)
     doc["text"] = _summary_text(doc)
     doc["push_text"] = push_text(doc)
     return doc
@@ -98,6 +99,39 @@ def build_weekly(path, today=None):
 def _fmt(v):
     n = round(float(v), 1)
     return str(int(n)) if n % 1 == 0 else str(n)
+
+
+def _sched_dow_line(data_dir):
+    '''v1.02: one line about board-library weekday coverage.
+    Grey "borrowed time" flights trace back to weekdays the board
+    API never deposited (Sunday historically). The weekly push now
+    says which weekdays are still holes and when each self-heals -
+    a run on day D deposits dow(D) AND dow(D+1), so a missing
+    weekday heals on the next calendar date bearing it while the
+    machine stays on.'''
+    if not data_dir:
+        return ""
+    try:
+        from core.sched_board import load_sched_db, sched_stats
+        dows = sched_stats(load_sched_db(data_dir)).get("dows") or {}
+    except Exception:
+        return ""
+    names = ["一", "二", "三", "四", "五", "六", "日"]
+    miss = [i for i in range(7) if not int(dows.get(str(i), 0) or 0)]
+    if not miss:
+        return ""
+    import datetime as _dt
+    today = _dt.date.today()
+    heal = []
+    for i in miss:
+        d = today
+        for _ in range(7):
+            d += _dt.timedelta(days=1)
+            if d.weekday() == i:
+                break
+        heal.append("周{} {}自动补齐".format(names[i], d.strftime("%m/%d")))
+    return "🛫 班期库已沉淀 {}/7 个星期（缺周{}）；常驻运行下 {}".format(
+        7 - len(miss), "、".join(names[i] for i in miss), "、".join(heal[:2]))
 
 
 def _route_text(r):
@@ -261,7 +295,8 @@ def _summary_text(doc):
         return "暂无历史数据，跑一次查询后每天自动归档指标；积累 8 天起周报带环比。"
     head = "📊 价格周报（{}）".format(doc.get("period") or "")
     body = "\n".join(r["text"] for r in doc["routes"])
-    return head + "\n" + body
+    tail = (doc.get("sched_dows") or "").strip()
+    return head + "\n" + body + ("\n" + tail if tail else "")
 
 
 def global_best(snapshot):
