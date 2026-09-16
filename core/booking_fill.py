@@ -37,6 +37,59 @@ import time
 
 BOOKING_REF = "booking-ref"
 ENDPOINT = "https://flights.booking.com/api/flights/LOWEST_PRICE"
+
+# v1.15: fingerprint pool for 429 recovery. The gateway rate-limits
+# per IP+cookie+UA combo; a pinned stale UA (config Chrome/126 by
+# 2026) makes every call share one identity, so one 429 window kills
+# whole rounds. bump_fingerprint() rotates through the pool (config
+# UA rides first, so idx=0 before any bump keeps legacy behavior).
+_UA_POOL = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132.0.0.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) "
+    "Gecko/20100101 Firefox/133.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+    "(KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+]
+_ua_idx = 0
+
+
+def bump_fingerprint():
+    """v1.15: rotate to the next pool UA (module state, no I/O).
+    Callers rebuild the session (drops cookies) after bumping so the
+    gateway sees a genuinely fresh identity."""
+    global _ua_idx
+    _ua_idx += 1
+    return current_fingerprint()
+
+
+def current_fingerprint(net_cfg=None):
+    """Effective UA: config pin first (pool head when provided), then
+    the pool by rotation index. idx=0 + pinned config == legacy
+    behavior byte-for-byte."""
+    pinned = ""
+    if net_cfg:
+        pinned = (net_cfg.get("user_agent_desktop")
+                  or net_cfg.get("user_agent") or "")
+    pool = ([pinned] if pinned else []) + _UA_POOL
+    return pool[_ua_idx % len(pool)]
+
+
+def warm_session(session, net_cfg=None):
+    """v1.15: one GET to the human search page so the session picks
+    up booking.com cookies before hitting the JSON API - a warm
+    cookie jar reads far less bot-like. Status ignored (even a 4xx
+    sets the consent/bkng cookies we want); returns the code."""
+    try:
+        r = session.get("https://flights.booking.com/", timeout=(
+            net_cfg or {}).get("timeout_seconds", 25))
+        return r.status_code
+    except Exception:
+        return 0
 CACHE_NAME = "booking_fill_cache.json"
 POS_TTL = 48 * 3600
 NEG_TTL_ERR = 90 * 60        # transient failure: retry fast
@@ -120,15 +173,17 @@ def fetch_lowest(session, net_cfg, fi, ti, date, offer_limit=8,
         "market": "zh-CN", "locale": "zh-CN",
     }
     headers = {
-        "User-Agent": net_cfg.get(
-            "user_agent_desktop",
-            net_cfg.get("user_agent",
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")),
+        "User-Agent": current_fingerprint(net_cfg),
         "Accept": "application/json",
         "Referer": "https://flights.booking.com/",
     }
     r = session.get(ENDPOINT, params=params, headers=headers,
                     timeout=net_cfg.get("timeout_seconds", 25))
+    if r.status_code == 429:
+        # v1.15: explicit throttle marker - distinct from generic
+        # transient None so callers can circuit-break instead of
+        # hammering the limiter for the rest of the round.
+        return {"throttled": True}
     if r.status_code != 200:
         return None
     j = r.json()
@@ -396,7 +451,7 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
     cache = _load(data_dir)
     bucket = cache.setdefault(route_id, {}) if isinstance(cache, dict) else {}
     now = time.time()
-    out, probed, deferred, last_call = [], 0, 0, 0.0
+    out, probed, deferred, last_call, n429 = [], 0, 0, 0.0, 0
     for d in targets:
         try:
             _dt.date.fromisoformat(str(d))
@@ -440,6 +495,16 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
             got = fetch_lowest(session, net_cfg, fi, ti, d)
         except Exception:
             got = None
+        if got and got.get("throttled"):
+            # v1.15: 429 circuit breaker - stop feeding the limiter.
+            # No negative-cache write (throttle is not "no data"),
+            # bump the fingerprint so the next probe wears a fresh
+            # identity, two strikes end this route's batch early.
+            n429 += 1
+            bump_fingerprint()
+            if n429 >= 2:
+                break
+            continue
         if got and got.get("total_eur", 0) > 0:
             cny = round(got["total_eur"] * fx, 0)
             bucket[d] = {"ts": now, "cny": cny,
@@ -477,7 +542,8 @@ def fill_gaps(session, net_cfg, cfg, fi, ti, gap_dates, tax, data_dir,
                          else "err"}
     if probed:
         _save(data_dir, cache)
-    stats.update({"probed": probed, "deferred": deferred, "filled": len(out)})
+    stats.update({"probed": probed, "deferred": deferred,
+                  "filled": len(out), "throttled": n429})
     return out
 
 

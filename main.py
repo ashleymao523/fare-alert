@@ -26,6 +26,8 @@ from core.booking_fill import attach_times as booking_attach_times
 from core.booking_fill import DEFAULT_FX as _BK_FX
 from core.booking_fill import fetch_lowest as booking_fetch_lowest
 from core.booking_fill import _resolve_fx as booking_resolve_fx
+from core.booking_fill import bump_fingerprint as booking_bump_fp
+from core.booking_fill import warm_session as booking_warm
 from core.booking_fill import merge_booking_deals
 from core.intl import city_iata, fetch_intl_calendar, fetch_schedule_times
 from core.intl import fetch_cabin_offers, fetch_fill_offers
@@ -1034,6 +1036,7 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
     n_biz = 0
     n_refill = 0
     errs = 0
+    n_thr = 0
     for leg in legs:
         hid = "patrol-{fc}-{tc}".format(
             fc=leg["from_city"], tc=leg["to_city"])
@@ -1059,6 +1062,23 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
                         offer_limit=8, cabin_class="BUSINESS")
                 except Exception:
                     got = None
+                if got and got.get("throttled"):
+                    # v1.15: 429 circuit breaker - two strikes end
+                    # this leg's batch; every strike rotates the
+                    # fingerprint and rewarms a cookie-jar-less
+                    # session so the next probe wears a fresh
+                    # identity instead of feeding the limiter.
+                    n_thr += 1
+                    booking_bump_fp()
+                    session = make_session(cfg)
+                    booking_warm(session, cfg.get("network", {}))
+                    log.warning("cabin booking 429 [{0}->{1}] strike {2}"
+                                .format(leg["from_city"],
+                                        leg["to_city"], n_thr))
+                    if n_thr >= 2:
+                        break
+                    time.sleep(30)
+                    continue
                 if not got or got.get("no_data"):
                     continue
                 rows = cabin_bk_rows(d, got, tax_amt, fx)
@@ -1074,6 +1094,9 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
     # round's probe dates were picked BECAUSE their newest obs lacks
     # dep/arr (the empty-time-cell repair strategy).
     info["time_refill"] = n_refill
+    # v1.15: throttle visibility - the agents card explains an empty
+    # round as gateway 429 (cooldown), not "no business seats".
+    info["throttle"] = n_thr
 
     # v1.09 C: keyed Amadeus overlay still stacks on top when present.
     n_ama = 0
@@ -1113,6 +1136,9 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
     if n_refill:
         info["last_status"] = "{s} · 时刻回查 {n} 日".format(
             s=info.get("last_status") or "", n=n_refill)
+    if n_thr:
+        info["last_status"] = "{s} · 网关限流熔断x{n}".format(
+            s=info.get("last_status") or "", n=n_thr)
 
     state["_cabin_patrol"] = info
     return info

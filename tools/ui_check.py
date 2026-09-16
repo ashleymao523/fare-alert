@@ -1131,6 +1131,24 @@ checks["v1.14.1 cabin_refill ops tool"] = (
     and ("server-confirmed" in _refill141_src)
     and ("transient (throttled?)" in _refill141_src))
 
+# --- v1.15: 429 circuit breaker + fingerprint rotation ---
+_bf115_src = open(os.path.join("core", "booking_fill.py"),
+                  encoding="utf-8").read()
+_t115_src = open(os.path.join("tests", "test_v115.py"),
+                 encoding="utf-8").read()
+_main115_src = open("main.py", encoding="utf-8").read()
+checks["v1.15 429 breaker + fp rotation"] = (
+    ('return {"throttled": True}' in _bf115_src)
+    and ("def bump_fingerprint(" in _bf115_src)
+    and ("def current_fingerprint(" in _bf115_src)
+    and ("def warm_session(" in _bf115_src)
+    and ('"throttled": n429' in _bf115_src)
+    and ("got.get(\"throttled\")" in _main115_src)
+    and ("booking_bump_fp()" in _main115_src)
+    and ('info["throttle"] = n_thr' in _main115_src)
+    and ("test_two_strikes_stop_the_batch" in _t115_src)
+    and ("test_429_returns_throttled_marker" in _t115_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

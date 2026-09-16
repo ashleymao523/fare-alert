@@ -22,6 +22,7 @@ sys.path.insert(0, ".")
 
 from core.alerts import tax_amount
 from core.booking_fill import _resolve_fx, fetch_lowest
+from core.booking_fill import bump_fingerprint, warm_session
 from core.cabin_monitor import booking_cabin_rows
 from core.cabin_monitor import load_config as cabin_cfg_load
 from core.cabin_monitor import load_history as cabin_history_load
@@ -111,6 +112,18 @@ def main() -> int:
                 n_trans += 1
                 print("  {d} transient (throttled?)".format(d=d))
                 continue
+            if got.get("throttled"):
+                # v1.15: explicit 429 - circuit-break this leg (the
+                # limiter stays fed while we keep calling) and leave
+                # the rest for a later rerun; fingerprint rotated so
+                # the next run wears a fresh identity.
+                n_trans += 1
+                print("  {d} 429 throttled - circuit break, "
+                      "rerun later for the rest".format(d=d))
+                bump_fingerprint()
+                session = make_session(cfg)
+                warm_session(session, net)
+                break
             if got.get("no_data"):
                 print("  {d} no offers (server-confirmed)".format(d=d))
                 continue
