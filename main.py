@@ -43,7 +43,8 @@ from core.models import FlightDeal
 from core.version import CODE_VERSION
 from core.notify import has_channel, push_all
 from core.report import write_report
-from core.sched_board import (apply_board_upgrade, board_lookup_x,
+from core.sched_board import (apply_board_upgrade,
+                              apply_board_upgrade_first_leg, board_lookup_x,
                               build_route_priors,
                               flight_duration,
                               city_dep_times, city_return_dep_times,
@@ -744,6 +745,15 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
                         n_board += 1
                         if not exact:
                             n_x += 1
+                    elif exact:
+                        # v1.06: connecting rows keep a booking-x pin
+                        # the fill above cannot touch; an exact-dow,
+                        # from-side-matched hit on the FIRST segment is
+                        # the same physical flight - upgrade the shown
+                        # departure, keep the final arrival honestly
+                        # borrowed (per-side badges carry the split).
+                        if apply_board_upgrade_first_leg(d, ent):
+                            n_up += 1
                     # v0.33: transfer info regardless of which source gave
                     # the dep -- the board row deliberately overrides an
                     # amadeus-only stop_arr: same flight, but it also

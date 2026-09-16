@@ -539,6 +539,40 @@ def apply_board_upgrade(deal, ent):
     return True
 
 
+def apply_board_upgrade_first_leg(deal, ent):
+    """v1.06: connecting itineraries ('A/B' numbers) upgrade ONLY the
+    first segment's departure on an exact-dow, from-side-matched board
+    hit (apply_board_upgrade keeps refusing half-exact rows).
+
+    The booking-x pin may be an unrelated cheapest itinerary pinned on
+    a connecting row, so both its times can be the wrong flights. The
+    FIRST segment departs the leg's from-airport, where flight_no+dow+
+    airport pins one physical flight - its departure strictly outranks
+    the pin. The final arrival stays borrowed (the last leg lands
+    outside the from-board): time_src keeps the weaker booking-x
+    verdict while dep_src='airport-board' renders the per-side badge
+    and blocks booking_fill re-pinning (EXACT_SOURCES). Returns True
+    when upgraded."""
+    no = (getattr(deal, 'flight_no', '') or '')
+    if '/' not in no:
+        return False
+    if (getattr(deal, 'dep_src', '') or
+            getattr(deal, 'time_src', '')) != 'booking-x':
+        return False
+    if not (ent.get('dep') or '').strip():
+        return False
+    deal.dep_time = ent['dep']
+    deal.dep_src = 'airport-board'
+    arr_exact = ((getattr(deal, 'arr_src', '') or '') in
+                 ('amadeus', 'airport-board', 'booking')
+                 and (getattr(deal, 'arr_time', '') or '').strip())
+    deal.time_src = 'airport-board' if arr_exact else 'booking-x'
+    deal.borrow_dow = ''
+    deal.borrow_votes = 0
+    deal.borrow_unstable = False
+    return True
+
+
 def board_lookup_x(db, flight_no, date_iso, from_city, to_city):
     """v0.19 跨日班期回退: 日历价已证明该航班号在该日期执飞, 而班期板只
     返回当日 -> 时刻库尚未沉淀该 dow 属常态. 同航班号时刻按航季排班,
@@ -597,8 +631,12 @@ def board_lookup_x(db, flight_no, date_iso, from_city, to_city):
         return _tier(ent) <= 1
 
     ent = fdb.get("dows", {}).get(dow)
-    if ent:
-        # 号+dow+机场 唯一确定一班, 城市不匹配只是经停终点不同 -> 仍算精确
+    if ent and (_from_ok(ent)
+                or not (ent.get("from") or "").strip()):
+        # 号+dow+机场 唯一确定一班, 城市不匹配只是经停终点不同 -> 仍算精确.
+        # v1.06: 航班号会被复用(SC2118 周三=华夏 乌鲁木齐->杭州, 其余=山航
+        # 杭州->厦门). 精确 dow 命中但出发机场侧不符 = 另一架共享号的班机,
+        # 不是本旅客的航段 -> 不算精确, 落入下方跨日城市校验借用.
         return _as_dest(ent), True
     cands = []
     for dk, e in (fdb.get("dows") or {}).items():

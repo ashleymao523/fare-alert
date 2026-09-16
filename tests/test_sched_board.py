@@ -283,13 +283,23 @@ class TestLookupX(unittest.TestCase):
     def test_exact_dow_stopover_city_still_exact(self):
         # v0.22: 板按号+dow+机场唯一定位一班, 终点城市不同多为经停
         # 最终点记录差异(杭州->克拉玛依 实际经停郑州), 仍算精确命中
+        # v1.06: 该宽容只限到达侧; 出发机场不同 = 共享航班号的另一
+        # 班机(SC2118 周三=华夏 乌鲁木齐->杭州, 其余=山航 杭州->厦门),
+        # 精确 dow 也不再采信, 落入跨日城市校验借用.
         db = self._db({
             "3": {"dep": "09:00", "arr": "", "from": "北京", "to": "重庆"},
             "1": {"dep": "07:55", "arr": "", "from": "杭州", "to": "重庆"},
         })
         hit = sb.board_lookup_x(db, "GJ8888", "2026-09-10", "杭州", "重庆")
-        self.assertEqual(hit[1], True)
-        self.assertEqual(hit[0]["dep"], "09:00")
+        self.assertEqual(hit[1], False)            # from mismatch: not exact
+        self.assertEqual(hit[0]["dep"], "07:55")   # city-checked cross-dow
+        self.assertEqual(hit[0]["borrow_dow"], "1")
+        # 到达侧差异(经停最终点)且出发侧一致 -> 仍精确
+        db2 = self._db({"3": {"dep": "09:00", "arr": "",
+                              "from": "杭州", "to": "克拉玛依"}})
+        hit2 = sb.board_lookup_x(db2, "GJ8888", "2026-09-10", "杭州", "郑州")
+        self.assertEqual(hit2[1], True)
+        self.assertEqual(hit2[0]["dep"], "09:00")
 
     def test_bad_date_returns_none(self):
         db = self._db({"2": {"dep": "07:55", "arr": "",

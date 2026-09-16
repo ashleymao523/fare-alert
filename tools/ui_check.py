@@ -930,7 +930,23 @@ checks["v1.05 point-fill v2: full-list bookmarklet + lowest-wins cache + inline 
     and ("postPointFill" in _dd105_src)
     and (chr(20840)+chr(37096)+chr(33322)+chr(29677) in _cv105_src)
     and ("cardOf" in _t105_src)
-    and ('CODE_VERSION = "1.05"' in _ver105_src))
+    )
+# v1.06: dropped the v1.05 block's CODE_VERSION pin - feature
+# markers stay green across bumps; the v1.06 block pins the version.
+
+_sb106_src = open(os.path.join("core", "sched_board.py"),
+                  encoding="utf-8").read()
+_main106_src = open("main.py", encoding="utf-8").read()
+_t106_src = open(os.path.join("tests", "test_v106.py"),
+                 encoding="utf-8").read()
+_ver106_src = open(os.path.join("core", "version.py"),
+                   encoding="utf-8").read()
+checks["v1.06 first-leg upgrade + shared-number guard"] = (
+    ("apply_board_upgrade_first_leg" in _sb106_src)
+    and ("v1.06: \u822a\u73ed\u53f7\u4f1a\u88ab\u590d\u7528" in _sb106_src)
+    and ("apply_board_upgrade_first_leg(d, ent)" in _main106_src)
+    and ("shared-number exact dow is downgraded" in _t106_src)
+    and ('CODE_VERSION = "1.06"' in _ver106_src))
 
 bad = 0
 for k, v in checks.items():
