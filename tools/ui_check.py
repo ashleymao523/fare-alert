@@ -981,8 +981,29 @@ checks["v1.08 balance 2.0 severe multi-date"] = (
     and ("offer_limit" in _bf108_src)
     and ("severe dow6 probes 3 dates" in _t108_src)
     and ("offer_limit=30 passed through" in _t108_src)
-    and ("weak-only db: 12h gate blocks +5h" in _t108_src)
-    and ('CODE_VERSION = "1.08"' in _ver108_src))
+    and ("weak-only db: 12h gate blocks +5h" in _t108_src))
+
+# --- v1.09: keyless business-cabin patrol (booking BUSINESS gateway) ---
+_cm109_src = open(os.path.join("core", "cabin_monitor.py"),
+                  encoding="utf-8").read()
+_bf109_src = open(os.path.join("core", "booking_fill.py"),
+                  encoding="utf-8").read()
+_main109_src = open(os.path.join("main.py"),
+                    encoding="utf-8").read()
+_webui109_src = open(os.path.join("webui.py"),
+                     encoding="utf-8").read()
+_t109_src = open(os.path.join("tests", "test_v109.py"),
+                 encoding="utf-8").read()
+checks["v1.09 keyless business-cabin patrol"] = (
+    ("probe_dates" in _cm109_src)
+    and ("booking_cabin_rows" in _cm109_src)
+    and ("probe_dates_per_round" in _cm109_src)
+    and ('cabinClass": cabin_class' in _bf109_src)
+    and ("cabin_bk_rows" in _main109_src)
+    and ('cabin_class="BUSINESS"' in _main109_src)
+    and ("booking_cabin_ready" in _webui109_src)
+    and ("roundtrip_tax_inclusive" in _t109_src)
+    and ("booking_cabin_is_real_source" in _t109_src))
 
 bad = 0
 for k, v in checks.items():

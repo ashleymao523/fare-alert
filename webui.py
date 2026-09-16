@@ -913,6 +913,7 @@ def api_cabin():
                     "last_alert": last.get("last_hit"),
                     "qualifying_routes": qual,
                     "amadeus_ready": ama_ready,
+                    "booking_cabin_ready": True,
                     "patrol": patrol,
                     "refresh": {
                         "interval_minutes": interval,

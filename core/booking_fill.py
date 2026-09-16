@@ -93,7 +93,8 @@ def coverage_stats(data_dir):
     return {"pos": pos, "offers": offers,
             "pending": max(0, pos - offers),
             "pct": int(round(offers * 100.0 / pos)) if pos else 0}
-def fetch_lowest(session, net_cfg, fi, ti, date, offer_limit=8):
+def fetch_lowest(session, net_cfg, fi, ti, date, offer_limit=8,
+                 cabin_class="ECONOMY"):
     """One keyless LOWEST_PRICE call -> dict or None (no exception).
 
     Returns {"total_eur", "airline", "n_offers", ...itinerary};
@@ -108,10 +109,14 @@ def fetch_lowest(session, net_cfg, fi, ti, date, offer_limit=8):
     often prices minutes later, so they only get a short negative
     cache. This split is what kills the grey-date complaint: dates
     a manual precise search CAN find were previously locked out for
-    24h by one unlucky call."""
+    24h by one unlucky call.
+
+    v1.09: cabin_class param (ECONOMY/BUSINESS/...) transparently
+    forwarded as the cabinClass query param. BUSINESS is consumed
+    by cabin patrol for keyless business-fare probing."""
     params = {
         "type": "ONEWAY", "from": fi, "to": ti, "depart": date,
-        "adults": "1", "cabinClass": "ECONOMY",
+        "adults": "1", "cabinClass": cabin_class,
         "market": "zh-CN", "locale": "zh-CN",
     }
     headers = {

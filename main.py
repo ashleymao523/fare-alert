@@ -24,6 +24,8 @@ from core.flights import (airline_name, booking_url, estimate_arrival_time,
 from core.booking_fill import fill_gaps as booking_fill_gaps
 from core.booking_fill import attach_times as booking_attach_times
 from core.booking_fill import DEFAULT_FX as _BK_FX
+from core.booking_fill import fetch_lowest as booking_fetch_lowest
+from core.booking_fill import _resolve_fx as booking_resolve_fx
 from core.booking_fill import merge_booking_deals
 from core.intl import city_iata, fetch_intl_calendar, fetch_schedule_times
 from core.intl import fetch_cabin_offers, fetch_fill_offers
@@ -36,6 +38,8 @@ from core.cabin_monitor import (
     record_alert_candidate as cabin_record_candidate,
     _atomic_write as cabin_atomic_write,
     patrol_legs as cabin_patrol_legs,
+    probe_dates as cabin_probe_dates,
+    booking_cabin_rows as cabin_bk_rows,
 )
 from core.point_fill import load_cache as load_point_cache
 from core.point_fill import merge_point_fill
@@ -966,7 +970,13 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
     fetched directly - a departure city joins the business watch
     without adding a reverse route. Route-covered legs stay with the
     scan (no double fetch). Status lands in state['_cabin_patrol']
-    for /api/cabin; the caller persists state."""
+    for /api/cabin; the caller persists state.
+
+    v1.09: the keyless booking LOWEST_PRICE BUSINESS gateway probes
+    the K stalest window dates per leg every round, so the cabin
+    watch finally COLLECTS without any Amadeus key. Bookmark
+    point-fill absorption moved out of the keyless-only branch and
+    now always runs; a keyed Amadeus pass stacks on top."""
     cw = cabin_cfg_load(cfg)
     legs = cabin_patrol_legs(cw, cfg.get("routes") or [])
     info = {
@@ -980,41 +990,83 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
     if not cw.get("enabled") or not legs:
         info["last_status"] = (
             "skip: 无独立巡检腿 (出发城市未配置或均已由监控路线覆盖)")
-    elif not ready:
-        # v0.83: no Amadeus key no longer means a dead patrol - rows
-        # captured by the cabin bookmarklet (?cabin=business) feed the
-        # same ring history + record-low alerts through the point-fill
-        # cache, so the business watch stays alive keyless.
+        state["_cabin_patrol"] = info
+        return info
+
+    # v1.09 A: bookmark point-fill absorption runs in EVERY round now
+    # (was the keyless-only branch) - keyed setups keep feeding manual
+    # cabin captures too.
+    try:
+        groups = cabin_absorb_point(load_point_cache(DATA_DIR), cw)
+    except Exception:
+        groups = {}
+    tax_amt = tax_amount(cfg.get("tax", {}))
+    n_point = 0
+    for hid, g in groups.items():
+        biz = [FlightDeal(
+                   date=r["date"],
+                   bare_price=round(float(r["total"]) - tax_amt, 1),
+                   flight_no=r.get("flight_no") or "",
+                   dep_time=r.get("dep_time") or "",
+                   arr_time=r.get("arr_time") or "",
+                   source="point-cabin", cabin=r["cabin"])
+               for r in g["rows"]]
+        n_point += _cabin_absorb(cw, g["leg"], hid, biz, cfg,
+                                 state, log, push_enabled)
+    info["point_rows"] = n_point
+
+    # v1.09 B: keyless BUSINESS probes via the booking LOWEST_PRICE
+    # gateway - the cabin watch finally collects on its own, no
+    # Amadeus key needed. Each round re-probes the K stalest window
+    # dates per leg (never-probed first), rotating the whole 60d
+    # window over successive rounds with zero extra state.
+    session = session or make_session(cfg)
+    today = dt.date.today()
+    date_from = (today + dt.timedelta(days=1)).isoformat()
+    date_to = (today + dt.timedelta(days=60)).isoformat()
+    k_probe = int(cw.get("probe_dates_per_round") or 6)
+    gap = float((cfg.get("booking_fill") or {}).get(
+        "call_interval", 4.0) or 4.0)
+    hist = cabin_history_load(DATA_DIR)
+    n_biz = 0
+    errs = 0
+    for leg in legs:
+        hid = "patrol-{fc}-{tc}".format(
+            fc=leg["from_city"], tc=leg["to_city"])
         try:
-            groups = cabin_absorb_point(load_point_cache(DATA_DIR), cw)
-        except Exception:
-            groups = {}
-        tax_amt = tax_amount(cfg.get("tax", {}))
-        n_rows = 0
-        for hid, g in groups.items():
-            biz = [FlightDeal(
-                       date=r["date"],
-                       bare_price=round(float(r["total"]) - tax_amt, 1),
-                       flight_no=r.get("flight_no") or "",
-                       dep_time=r.get("dep_time") or "",
-                       arr_time=r.get("arr_time") or "",
-                       source="point-cabin", cabin=r["cabin"])
-                   for r in g["rows"]]
-            n_rows += _cabin_absorb(cw, g["leg"], hid, biz, cfg,
-                                    state, log, push_enabled)
-        info["offers"] = n_rows
-        info["mode"] = "point-fill"
-        info["last_status"] = (
-            "ok(point-fill): 回填舱位价 {n} 条已入历史 - Amadeus 未配置,"
-            " 舱位书签回填持续喂数".format(n=n_rows) if n_rows else
-            "standby: Amadeus 未配置 - 在舱位筛选页用舱位书签回填,"
-            " 历史最低与告警即可无密钥累积")
-    else:
-        session = session or make_session(cfg)
-        today = dt.date.today()
-        date_from = (today + dt.timedelta(days=1)).isoformat()
-        date_to = (today + dt.timedelta(days=60)).isoformat()
-        errs = 0
+            fi = city_iata(leg["from_city"])
+            ti = city_iata(leg["to_city"])
+            if not (fi and ti):
+                errs += 1
+                log.warning("cabin patrol iata unknown [{}->{}]".format(
+                    leg["from_city"], leg["to_city"]))
+                continue
+            fx = booking_resolve_fx(session, cfg, DATA_DIR)
+            for i, d in enumerate(cabin_probe_dates(
+                    hist, hid, date_from, date_to, k_probe)):
+                if i:
+                    time.sleep(gap)
+                try:
+                    got = booking_fetch_lowest(
+                        session, cfg.get("network", {}), fi, ti, d,
+                        offer_limit=3, cabin_class="BUSINESS")
+                except Exception:
+                    got = None
+                if not got or got.get("no_data"):
+                    continue
+                rows = cabin_bk_rows(d, got, tax_amt, fx)
+                if rows:
+                    n_biz += _cabin_absorb(cw, leg, hid, rows, cfg,
+                                           state, log, push_enabled)
+        except Exception as e:
+            errs += 1
+            log.warning("cabin booking probe failed [{}->{}]: {}".format(
+                leg["from_city"], leg["to_city"], e))
+    info["booking_rows"] = n_biz
+
+    # v1.09 C: keyed Amadeus overlay still stacks on top when present.
+    n_ama = 0
+    if ready:
         for leg in legs:
             hid = "patrol-{fc}-{tc}".format(
                 fc=leg["from_city"], tc=leg["to_city"])
@@ -1031,16 +1083,22 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
                     cfg.get("tax", {}), fi, ti, date_from, date_to,
                     cabin=(cw.get("cabins") or ["business"])[0],
                     data_dir=DATA_DIR)
-                info["offers"] += _cabin_absorb(
+                n_ama += _cabin_absorb(
                     cw, leg, hid, biz, cfg, state, log, push_enabled)
                 info["legs_ok"] += 1
             except Exception as e:
                 errs += 1
                 log.warning("cabin patrol failed [{}->{}]: {}".format(
                     leg["from_city"], leg["to_city"], e))
-        info["last_status"] = (
-            "ok" if not errs and info["legs_ok"]
-            else ("partial" if info["legs_ok"] else "error: 采集全部失败"))
+
+    info["offers"] = n_point + n_biz + n_ama
+    info["mode"] = "booking-cabin+point-fill" + ("+amadeus" if ready else "")
+    info["last_status"] = (
+        "ok({m}): 无密钥公务舱探测 {b} 条 + 书签回填 {p} 条已入历史".format(
+            m=info["mode"], b=n_biz, p=n_point)
+        if (n_biz or n_point or n_ama) else
+        ("standby: 本轮探测未返回公务舱报价 - 下一轮自动换测其他日期"
+         if not errs else "error: 采集全部失败"))
     state["_cabin_patrol"] = info
     return info
 

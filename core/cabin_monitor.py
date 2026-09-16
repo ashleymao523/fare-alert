@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+
+from .booking_fill import DEFAULT_FX
+from .models import FlightDeal
 
 HISTORY_CAP = 120
 
@@ -20,6 +23,9 @@ def default_config():
         # v0.66: standalone patrol cadence - the cabin watch refreshes
         # on its own clock, not only when a full route scan happens.
         "refresh_minutes": 30,
+        # v1.09: keyless BUSINESS probes per leg per patrol round -
+        # the whole 60d window rotates over successive rounds.
+        "probe_dates_per_round": 6,
         "watch_from_cities": [],
         # v0.52: a fresh all-time low alerts even ABOVE the threshold -
         # "collect + remind on historical lowest business fares" needs
@@ -159,6 +165,64 @@ def record_low(history, route_id, from_city, to_city, cabin, date, price_total):
             if isinstance(o.get("price"), (int, float))]
     r["lowest"] = min(lows) if lows else None
     return entry
+
+
+def probe_dates(history, route_id, date_from, date_to, k=6):
+    """v1.09: which dates deserve the next keyless BUSINESS probe.
+
+    Every date in the window sorts by its last observation ts -
+    never-probed ('') first, then stalest; ties break on the earlier
+    date. Taking the head rotates the whole window over successive
+    rounds with zero extra state: a restart simply resumes from
+    whatever the history ring says. Pure function."""
+    try:
+        d0 = datetime.strptime(str(date_from), "%Y-%m-%d").date()
+        d1 = datetime.strptime(str(date_to), "%Y-%m-%d").date()
+    except Exception:
+        return []
+    if k <= 0 or d1 < d0:
+        return []
+    days = []
+    cur = d0
+    while cur <= d1 and len(days) < 400:
+        days.append(cur.isoformat())
+        cur += timedelta(days=1)
+    seen = {}
+    route = ((history or {}).get("routes") or {}).get(route_id) or {}
+    for o in route.get("obs") or []:
+        d = str(o.get("date") or "")
+        ts = str(o.get("ts") or "")
+        if d and (d not in seen or ts > seen[d]):
+            seen[d] = ts
+    days.sort(key=lambda d: (seen.get(d, ""), d))
+    return days[:k]
+
+
+def booking_cabin_rows(date, got, tax_amt, fx):
+    """v1.09: one booking LOWEST_PRICE BUSINESS answer -> [FlightDeal].
+
+    bare = eur * fx - tax, so total_price() adds the tax back and
+    reproduces the tax-inclusive pay-total exactly (same convention
+    as point-cabin rows). Empty/garbage input yields [] - the caller
+    filters no_data/transient None before we get here."""
+    try:
+        eur = float((got or {}).get("total_eur") or 0)
+    except (TypeError, ValueError):
+        return []
+    if eur <= 0:
+        return []
+    try:
+        rate = float(fx or DEFAULT_FX)
+    except (TypeError, ValueError):
+        rate = DEFAULT_FX
+    total = round(eur * rate, 1)
+    return [FlightDeal(
+        date=str(date),
+        bare_price=round(total - float(tax_amt or 0), 1),
+        flight_no=str((got or {}).get("fno") or ""),
+        dep_time=str((got or {}).get("dep") or ""),
+        arr_time=str((got or {}).get("arr") or ""),
+        source="booking-cabin", cabin="business")]
 
 
 def record_alert_candidate(new_records, alerted_low):
