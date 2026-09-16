@@ -939,14 +939,30 @@ _sb106_src = open(os.path.join("core", "sched_board.py"),
 _main106_src = open("main.py", encoding="utf-8").read()
 _t106_src = open(os.path.join("tests", "test_v106.py"),
                  encoding="utf-8").read()
-_ver106_src = open(os.path.join("core", "version.py"),
-                   encoding="utf-8").read()
 checks["v1.06 first-leg upgrade + shared-number guard"] = (
     ("apply_board_upgrade_first_leg" in _sb106_src)
     and ("v1.06: \u822a\u73ed\u53f7\u4f1a\u88ab\u590d\u7528" in _sb106_src)
     and ("apply_board_upgrade_first_leg(d, ent)" in _main106_src)
-    and ("shared-number exact dow is downgraded" in _t106_src)
-    and ('CODE_VERSION = "1.06"' in _ver106_src))
+    and ("shared-number exact dow is downgraded" in _t106_src))
+
+# --- v1.07: starved-dow balance (weekend board holes) ---
+_db107_src = open(os.path.join("core", "dow_balance.py"),
+                  encoding="utf-8").read()
+_main107_src = open("main.py", encoding="utf-8").read()
+_t107_src = open(os.path.join("tests", "test_v107.py"),
+                 encoding="utf-8").read()
+_ver107_src = open(os.path.join("core", "version.py"),
+                   encoding="utf-8").read()
+checks["v1.07 starved-dow balance"] = (
+    ("def balance_once" in _db107_src)
+    and ("def weak_dows" in _db107_src)
+    and ("queue_sched_deposit" in _db107_src)
+    and ("absorb_deposit" in _db107_src)
+    and ("RUN_TTL" in _db107_src)
+    and ("from core.dow_balance import balance_once" in _main107_src)
+    and ("weekend-off db yields weak dows" in _t107_src)
+    and ("re-balance keeps observed dep" in _t107_src)
+    and ('CODE_VERSION = "1.07"' in _ver107_src))
 
 bad = 0
 for k, v in checks.items():

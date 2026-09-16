@@ -1072,9 +1072,23 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                      error="no route touches Hangzhou(HGH) board")
         else:
             try:
-                update_sched_db(session, net, DATA_DIR, log)
+                db = update_sched_db(session, net, DATA_DIR, log)
                 rec.step("hgh-board-times", "sched-db",
                          "update flight time db", "ok", (time.time() - t0b) * 1000)
+                # v1.07: starved-dow balance - weekend-off boxes never
+                # sediment dow 5/6 boards; one throttled probe per weak
+                # dow fills them from the same offer pipeline the user
+                # proves right with manual precise searches.
+                try:
+                    from core.dow_balance import balance_once
+                    bstats = balance_once(session, net, cfg, db,
+                                          DATA_DIR, log)
+                    if bstats.get("absorbed"):
+                        rec.step("hgh-board-times", "dow-balance",
+                                 "starved-dow balance", "ok", 0,
+                                 count=int(bstats["absorbed"]))
+                except Exception as e:
+                    log.warning("dow balance failed: %s" % e)
             except Exception as e:
                 log.warning("airport board update failed: %s" % e)
                 rec.step("hgh-board-times", "sched-db",
