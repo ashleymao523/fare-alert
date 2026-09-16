@@ -93,7 +93,7 @@ def coverage_stats(data_dir):
     return {"pos": pos, "offers": offers,
             "pending": max(0, pos - offers),
             "pct": int(round(offers * 100.0 / pos)) if pos else 0}
-def fetch_lowest(session, net_cfg, fi, ti, date):
+def fetch_lowest(session, net_cfg, fi, ti, date, offer_limit=8):
     """One keyless LOWEST_PRICE call -> dict or None (no exception).
 
     Returns {"total_eur", "airline", "n_offers", ...itinerary};
@@ -143,7 +143,9 @@ def fetch_lowest(session, net_cfg, fi, ti, date):
     got = {"total_eur": round(total, 1), "airline": airline,
            "n_offers": int(agg.get("totalCount") or 0)}
     got.update(offer_itinerary(j))
-    got["offers"] = offer_list(j)
+    # v1.08: dow-balance probes want the WHOLE same-day timetable
+    # (schedule sediment), not just the snapshot's top-8 strip.
+    got["offers"] = offer_list(j, limit=int(offer_limit or 8))
     return got
 
 

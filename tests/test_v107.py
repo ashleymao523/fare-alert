@@ -11,7 +11,7 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from core.dow_balance import (dow_coverage, weak_dows, _next_date,
+from core.dow_balance import (dow_coverage, weak_dows, _next_dates,
                               balance_once)
 
 RESULTS = []
@@ -38,7 +38,7 @@ class _Fetch(object):
         self.offers = offers or []
         self.fail = fail
 
-    def __call__(self, session, net_cfg, fi, ti, date):
+    def __call__(self, session, net_cfg, fi, ti, date, offer_limit=8):
         self.calls.append((fi, ti, date))
         if self.fail:
             raise RuntimeError("boom")
@@ -61,15 +61,17 @@ def main():
     check("even db yields no weak dows", weak_dows(even) == [])
 
     # 2. next probe date: +2..+25 window, right weekday
-    sat = _next_date(5, today=today)
-    sun = _next_date(6, today=today)
+    sat = _next_dates(5, 1, today=today)[0]
+    sun = _next_dates(6, 1, today=today)[0]
     check("next Sat is 2026-09-19", sat == "2026-09-19", sat)
     check("next Sun is 2026-09-20", sun == "2026-09-20", sun)
     d = dt.date.fromisoformat(sat)
     check("probe date weekday == 5", d.weekday() == 5)
-    check("bad dow yields ''", _next_date(9, today=today) == "")
+    check("bad dow yields []", _next_dates(9, 1, today=today) == [])
 
-    # 3. balance round: fake fetch -> queue -> absorb under own dow
+        # 3. balance round: fake fetch -> queue -> absorb under own dow
+        #    (v1.08: db {5:10,6:0} makes BOTH dows severe -> 3 dates
+        #    each -> 6 probes; offer rows map 1:1 into the deposit)
     tmp = tempfile.mkdtemp()
     try:
         cfg = {"routes": [{"from_city": "杭州", "to_city": "重庆",
@@ -83,12 +85,15 @@ def main():
         t0 = time.time()
         st = balance_once(object(), {}, cfg, db, tmp, log=None,
                           fetch=fx, now=t0)
-        check("probed 2 weak dows x 1 route", st["probed"] == 2
-              and len(fx.calls) == 2, str(st))
-        check("queued 2x2 mapped rows", st["queued"] == 4, str(st))
-        check("absorbed into board db", st["absorbed"] == 4, str(st))
-        check("probe dates are Sat+Sun",
-              [c[2] for c in fx.calls] == ["2026-09-19", "2026-09-20"],
+        check("probed 2 severe dows x 3 dates", st["probed"] == 6
+              and len(fx.calls) == 6, str(st))
+        check("queued 6x2 mapped rows", st["queued"] == 12, str(st))
+        check("absorbed counts only new flight+dow pairs",
+              st["absorbed"] == 4, str(st))
+        check("probe dates are 3 Sats + 3 Suns",
+              sorted(c[2] for c in fx.calls) == [
+                  "2026-09-19", "2026-09-20", "2026-09-26",
+                  "2026-09-27", "2026-10-03", "2026-10-04"],
               str(fx.calls))
         out = json.load(open(os.path.join(
             tmp, "flight_sched_db.json"), encoding="utf-8"))
@@ -101,8 +106,9 @@ def main():
         check("flight no uppercased + dep kept",
               f3u["dows"]["5"].get("dep") == "07:15")
 
-        # 4. observed entries win: re-run with a DIFFERENT time must
-        #    not overwrite the absorbed 07:15
+        # 4. observed entries win: +13h round probes the 4th Sat
+        #    (10-10) with a DIFFERENT time; the absorbed 07:15 on
+        #    dow5 must survive absorb's fill-only semantics
         fx2 = _Fetch([{"no": "3U8084", "dep": "23:59", "arr": "01:30"}])
         st2 = balance_once(object(), {}, cfg, out, tmp, log=None,
                            fetch=fx2, now=t0 + 13 * 3600)
@@ -125,7 +131,7 @@ def main():
             stf = balance_once(object(), {}, cfg, db, tmp2, log=None,
                                fetch=fxf, now=t0)
             check("failed probe: no raise, 0 queued",
-                  stf["probed"] == 2 and stf["queued"] == 0, str(stf))
+                  stf["probed"] == 6 and stf["queued"] == 0, str(stf))
         finally:
             shutil.rmtree(tmp2, ignore_errors=True)
     finally:

@@ -1,19 +1,21 @@
 # -*- coding: utf-8 -*-
-"""v1.07 dow balance: the board db sediments one dow per day the
-box is awake (update_sched_db files today's board under today's
+"""v1.07 dow balance: the board db sediments one dow per day the box
+is awake (update_sched_db files today's board under today's
 weekday). A box that sleeps weekends NEVER sees a Saturday/Sunday
 board - the live db shows dow0-4 at 3000+ rows, dow5 at ~900 and
 dow6 at ZERO - so every weekend departure keeps its weak booking-x
 pin forever, even though a precise point query (the user's standing
 observation) answers with a full same-day offer list.
 
-balance_once detects starved dows, probes ONE future date per
-(starved dow x Hangzhou route direction) through the existing
-fetch_lowest pipeline, and queues the returned timetable rows into
-the sched_deposit queue, then absorbs them right away so the same
-cycle's rows already enjoy exact board hits. absorb_deposit files
-each row under its own weekday and existing entries always win, so
-repeated runs can never corrupt observed board data."""
+v1.08 balance 2.0: round 1 proved the pipeline but filled too
+slowly - one date per (dow x route), top-8 offers, 12h gate. Now a
+SEVERELY starved dow (<20% of peak) probes up to 3 future dates per
+round with the full ~30-offer day timetable, and the round gate
+drops to 4h until it recovers; weak-but-not-severe dows keep the
+gentle 1-date/12h cadence. Deposits flow through the existing
+sched_deposit queue; absorb_deposit files each row under its own
+weekday and existing entries always win, so repeated runs can never
+corrupt observed board data."""
 import datetime as _dt
 import json
 import os
@@ -21,10 +23,15 @@ import time
 
 STATE_NAME = "dow_balance.json"
 RUN_TTL = 12 * 3600          # one balance round per 12h max
+SEVERE_TTL = 4 * 3600        # severely starved dow: re-run every 4h
 DONE_TTL = 7 * 86400         # never re-probe the same dow+date+pair
 DOW_RATIO = 0.35             # dow count below peak*35% => starved
+SEVERE_RATIO = 0.20          # ... below peak*20% => severe (3 dates)
 DOW_FLOOR = 60               # ... or below this absolute floor
 WINDOW_LO, WINDOW_HI = 2, 25  # probe dates: +2..+25 days out
+SEVERE_DATES = 3             # future dates probed per severe dow
+DATE_POOL = 6                # window candidate pool per dow
+OFFER_LIMIT = 30             # whole-day timetable per probe (v1.08)
 
 _HGH_KEYS = ("杭州", "hangzhou", "hgh", "xiaoshan")
 
@@ -63,17 +70,20 @@ def weak_dows(db, ratio=DOW_RATIO, floor=DOW_FLOOR):
     return [i for i in range(7) if counts[str(i)] < bar]
 
 
-def _next_date(dow, today=None, lo=WINDOW_LO, hi=WINDOW_HI):
-    """Nearest date (+lo..+hi days out) whose weekday == dow, ISO
-    str, or '' when the window misses (dow out of range)."""
-    if dow not in range(7):
-        return ""
+def _next_dates(dow, n, today=None, lo=WINDOW_LO, hi=WINDOW_HI):
+    """Up to n future dates (+lo..+hi days out) whose weekday == dow,
+    spread across the window. Returns ISO strings (may be short)."""
+    if dow not in range(7) or n <= 0:
+        return []
     today = today or _dt.date.today()
-    for off in range(int(lo), int(hi) + 1):
+    out = []
+    off = int(lo)
+    while off <= int(hi) and len(out) < int(n):
         d = today + _dt.timedelta(days=off)
         if d.weekday() == dow:
-            return d.isoformat()
-    return ""
+            out.append(d.isoformat())
+        off += 1
+    return out
 
 
 def _route_hgh(r):
@@ -125,7 +135,12 @@ def balance_once(session, net_cfg, cfg, db, data_dir, log=None,
                   if isinstance(r, dict) and _route_hgh(r)]
         if not routes:
             return stats
-        # throttle: one round per RUN_TTL
+        cov = dow_coverage(db)
+        peak = max(cov.values()) if cov else 0
+        severe_any = (peak > 0 and any(
+            cov[str(i)] < peak * SEVERE_RATIO for i in weak))
+        # throttle: 12h normally, 4h while a dow is severely starved
+        ttl = SEVERE_TTL if severe_any else RUN_TTL
         state = {}
         try:
             with open(_state_path(data_dir), encoding="utf-8") as f:
@@ -133,7 +148,7 @@ def balance_once(session, net_cfg, cfg, db, data_dir, log=None,
             state = state if isinstance(state, dict) else {}
         except Exception:
             state = {}
-        if now - float(state.get("last_run") or 0) < RUN_TTL:
+        if now - float(state.get("last_run") or 0) < ttl:
             return stats
         done = {k: v for k, v in (state.get("done") or {}).items()
                 if now - float(v or 0) < DONE_TTL}
@@ -142,49 +157,51 @@ def balance_once(session, net_cfg, cfg, db, data_dir, log=None,
         from .point_fill import queue_sched_deposit
         from .sched_board import absorb_deposit, DB_NAME
         state["last_run"] = now
-        touched = False
+        _dow_name = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         for dow in weak:
-            date = _next_date(dow)
-            if not date:
-                continue
+            severe = peak > 0 and cov[str(dow)] < peak * SEVERE_RATIO
+            n_probe = SEVERE_DATES if severe else 1
+            pool = _next_dates(dow, DATE_POOL)
             for r in routes:
                 fi, ti, fc, tc = _route_pair(r)
                 if not (fi and ti):
                     continue
-                key = "%d|%s|%s%s" % (dow, date, fi, ti)
-                if key in done:
-                    continue
-                done[key] = now
-                touched = True
-                stats["probed"] += 1
-                try:
-                    got = fetch(session, net_cfg, fi, ti, date)
-                except Exception as e:
-                    _log("dow-balance probe %s %s->%s failed: %s"
-                         % (date, fi, ti, e))
-                    continue
-                if not got or got.get("no_data"):
-                    _log("dow-balance %s %s->%s: no offers"
-                         % (date, fi, ti))
-                    continue
-                rows = []
-                for of in (got.get("offers") or []):
-                    no = str(of.get("no") or "").strip().upper()
-                    dep = str(of.get("dep") or "").strip()[:5]
-                    arr = str(of.get("arr") or "").strip()[:5]
-                    if no and (dep or arr):
-                        rows.append({
-                            "flight_no": no, "dep_time": dep,
-                            "arr_time": arr, "date": date,
-                            "from_city": fc, "to_city": tc,
-                        })
-                if rows:
-                    stats["queued"] += queue_sched_deposit(
-                        data_dir, rows)
-                    _log("dow-balance %s (%s) %s->%s: %d rows queued"
-                         % (date, ["Mon", "Tue", "Wed", "Thu", "Fri",
-                                   "Sat", "Sun"][dow], fi, ti,
-                            len(rows)))
+                fresh = [d for d in pool
+                         if "%d|%s|%s%s" % (dow, d, fi, ti)
+                         not in done][:n_probe]
+                for date in fresh:
+                    key = "%d|%s|%s%s" % (dow, date, fi, ti)
+                    done[key] = now
+                    stats["probed"] += 1
+                    try:
+                        got = fetch(session, net_cfg, fi, ti, date,
+                                    offer_limit=OFFER_LIMIT)
+                    except Exception as e:
+                        _log("dow-balance probe %s %s->%s failed: %s"
+                             % (date, fi, ti, e))
+                        continue
+                    if not got or got.get("no_data"):
+                        _log("dow-balance %s %s->%s: no offers"
+                             % (date, fi, ti))
+                        continue
+                    rows = []
+                    for of in (got.get("offers") or []):
+                        no = str(of.get("no") or "").strip().upper()
+                        dep = str(of.get("dep") or "").strip()[:5]
+                        arr = str(of.get("arr") or "").strip()[:5]
+                        if no and (dep or arr):
+                            rows.append({
+                                "flight_no": no, "dep_time": dep,
+                                "arr_time": arr, "date": date,
+                                "from_city": fc, "to_city": tc,
+                            })
+                    if rows:
+                        stats["queued"] += queue_sched_deposit(
+                            data_dir, rows)
+                        _log("dow-balance %s (%s) %s->%s: %d rows"
+                             " queued"
+                             % (date, _dow_name[dow], fi, ti,
+                                len(rows)))
         state["done"] = done
         try:
             os.makedirs(data_dir, exist_ok=True)
@@ -201,16 +218,8 @@ def balance_once(session, net_cfg, cfg, db, data_dir, log=None,
                     _atomic_write(os.path.join(data_dir, DB_NAME), db)
                 except Exception as e:
                     _log("dow-balance db write failed: %s" % e)
-                _log("dow-balance absorbed %d rows into starved dows %s"
-                     % (n, weak))
-        elif not touched:
-            # nothing new probed this round: push last_run back so the
-            # next cycle (maybe new routes/dates) is not locked out
-            state["last_run"] = 0
-            try:
-                _atomic_write(_state_path(data_dir), state)
-            except Exception:
-                pass
+                _log("dow-balance absorbed %d rows into starved dows"
+                     " %s" % (n, weak))
         return stats
     except Exception as e:      # never break the scan pipeline
         _log("dow-balance round failed: %s" % e)

@@ -961,8 +961,28 @@ checks["v1.07 starved-dow balance"] = (
     and ("RUN_TTL" in _db107_src)
     and ("from core.dow_balance import balance_once" in _main107_src)
     and ("weekend-off db yields weak dows" in _t107_src)
-    and ("re-balance keeps observed dep" in _t107_src)
-    and ('CODE_VERSION = "1.07"' in _ver107_src))
+    and ("re-balance keeps observed dep" in _t107_src))
+
+# --- v1.08: balance 2.0 (severe multi-date + full-day offers) ---
+_db108_src = open(os.path.join("core", "dow_balance.py"),
+                  encoding="utf-8").read()
+_bf108_src = open(os.path.join("core", "booking_fill.py"),
+                  encoding="utf-8").read()
+_t108_src = open(os.path.join("tests", "test_v108.py"),
+                 encoding="utf-8").read()
+_ver108_src = open(os.path.join("core", "version.py"),
+                   encoding="utf-8").read()
+checks["v1.08 balance 2.0 severe multi-date"] = (
+    ("SEVERE_RATIO" in _db108_src)
+    and ("SEVERE_TTL" in _db108_src)
+    and ("SEVERE_DATES" in _db108_src)
+    and ("DATE_POOL" in _db108_src)
+    and ("OFFER_LIMIT" in _db108_src)
+    and ("offer_limit" in _bf108_src)
+    and ("severe dow6 probes 3 dates" in _t108_src)
+    and ("offer_limit=30 passed through" in _t108_src)
+    and ("weak-only db: 12h gate blocks +5h" in _t108_src)
+    and ('CODE_VERSION = "1.08"' in _ver108_src))
 
 bad = 0
 for k, v in checks.items():
