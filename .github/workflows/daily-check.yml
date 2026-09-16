@@ -25,13 +25,16 @@ jobs:
         run: python -m compileall -q core main.py webui.py tests
       - name: unit tests
         shell: bash
+        # v1.08 fix: YAML block scalars pass bytes through verbatim - a
+        # backslash-escaped dollar reaches bash as a literal "$fail" string
+        # and kills the step with "exit: numeric argument required".
         run: |
           fail=0
           for f in tests/test_*.py; do
-            echo == \$f
-            python -X utf8 \$f || fail=1
+            echo == $f
+            python -X utf8 $f || fail=1
           done
-          exit \$fail
+          exit $fail
       - name: web build
         working-directory: web
         run: |
