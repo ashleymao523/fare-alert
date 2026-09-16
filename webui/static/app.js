@@ -1786,6 +1786,55 @@
     bar("落地 · 缺失", am, "miss");
     box.appendChild(el("div", "muted sched-tip",
       "共 " + tot + " 条真实可购航班(已剔除邻近日参考价); 估算与借用时刻仅作参考标注, 不触发低价提醒。"));
+    loadTimeHeat();  // v1.12: heat matrix refreshes together with bars
+  }
+
+  function renderTimeHeat(doc) {
+    var box = $("timeHeat");
+    if (!box) return;
+    box.textContent = "";
+    var routes = (doc && doc.routes) || [];
+    if (!routes.length) {
+      box.appendChild(el("div", "muted",
+        "逐日时刻质量矩阵: 第一次查询后按天生成(精确/借用/参考/无参考)。"));
+      return;
+    }
+    var kindName = { exact: "精确", borrow: "借用", alt: "参考", noref: "无参考" };
+    routes.forEach(function (r) {
+      var row = el("div", "th-row");
+      var name = el("div", "th-name");
+      name.appendChild(el("span", "th-leg",
+        (r.from_city || "?") + " → " + (r.to_city || "?") +
+        (r.intl ? " · 国际" : "")));
+      var c = r.counts || {};
+      ["exact", "borrow", "alt", "noref"].forEach(function (k) {
+        if (c[k]) name.appendChild(el("span", "th-badge " + k,
+          kindName[k] + " " + c[k]));
+      });
+      row.appendChild(name);
+      var strip = el("div", "th-strip");
+      (r.days || []).forEach(function (d) {
+        var kind = d.kind || "noref";
+        var cell = el("div", "th-cell " + kind,
+          (d.date || "").slice(5).replace("-", "/"));
+        var tip = (d.date || "?") +
+          (d.flight ? " " + d.flight : "") +
+          (d.dep ? " " + d.dep + (d.arr ? "–" + d.arr : "") : " 时刻待采") +
+          " · " + (kindName[kind] || kind) +
+          (kind === "borrow" && d.promote_on
+            ? " → " + d.promote_on + " 自动转正" : "");
+        cell.title = tip;
+        strip.appendChild(cell);
+      });
+      row.appendChild(strip);
+      box.appendChild(row);
+    });
+    box.appendChild(el("div", "muted sched-tip",
+      "每格=一个查询日 · 绿=精确时刻(Booking/机场大屏) 蓝=跨日借用(板库补齐该星期后自动转正, 悬停看转正日) 琥珀=参考价 灰=无参考"));
+  }
+
+  function loadTimeHeat() {
+    api("/api/time-coverage").then(renderTimeHeat).catch(function () {});
   }
 
   function renderSchedStats(s) {
@@ -2136,6 +2185,60 @@
     return (v == null || isNaN(v)) ? "—" : "¥" + Math.round(v);
   }
 
+  // v1.12: per-leg lowest-price sparkline (SVG, ~120x28) from the
+  // backend "spark" projection: per-date min, date-asc, capped 30.
+  function cabinSpark(g) {
+    var wrap = el("div", "cabin-spark");
+    var pts = (g && g.spark) || [];
+    if (pts.length < 2) {
+      wrap.appendChild(el("span", "muted cabin-spark-lab",
+        pts.length === 1 ? "仅 1 个观测日" : ""));
+      return wrap;
+    }
+    var W = 120, H = 28, PAD = 4;
+    var lo = Infinity, hi = -Infinity;
+    pts.forEach(function (p) {
+      if (p.p < lo) lo = p.p;
+      if (p.p > hi) hi = p.p;
+    });
+    var span = (hi - lo) || 1;
+    var xs = [], ys = [];
+    pts.forEach(function (p, i) {
+      xs.push(PAD + (W - 2 * PAD) *
+        (pts.length === 1 ? 0.5 : i / (pts.length - 1)));
+      ys.push(H - PAD - (H - 2 * PAD) * ((p.p - lo) / span));
+    });
+    var loIdx = 0;
+    for (var i = 1; i < pts.length; i++) {
+      if (pts[i].p < pts[loIdx].p) loIdx = i;
+    }
+    var NS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("width", W);
+    svg.setAttribute("height", H);
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.setAttribute("role", "img");
+    var line = xs.map(function (x, j) {
+      return x.toFixed(1) + "," + ys[j].toFixed(1);
+    }).join(" ");
+    var poly = document.createElementNS(NS, "polyline");
+    poly.setAttribute("points", line);
+    poly.setAttribute("class", "cabin-spark-line");
+    svg.appendChild(poly);
+    var dot = document.createElementNS(NS, "circle");
+    dot.setAttribute("cx", xs[loIdx].toFixed(1));
+    dot.setAttribute("cy", ys[loIdx].toFixed(1));
+    dot.setAttribute("r", "3");
+    dot.setAttribute("class", "cabin-spark-dot");
+    svg.appendChild(dot);
+    wrap.appendChild(svg);
+    wrap.appendChild(el("span", "cabin-spark-lab",
+      "近" + pts.length + "日 ¥" + Math.round(lo) + "–¥" + Math.round(hi)));
+    wrap.title = "每格=当日最低公务舱含税总价; 最低点 ¥" +
+      Math.round(lo) + " 于 " + pts[loIdx].d;
+    return wrap;
+  }
+
   function cabinTtRow(row) {
     var cls = "cabin-tt-row" + (row.url ? " link" : "");
     var r = el("div", cls);
@@ -2167,6 +2270,7 @@
       head.appendChild(badge);
     }
     c.appendChild(head);
+    c.appendChild(cabinSpark(g));  // v1.12: price sparkline under head
     if (b) {
       var meta = el("div", "cabin-leg-meta");
       meta.appendChild(el("span", "",

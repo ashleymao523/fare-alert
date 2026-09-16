@@ -1055,6 +1055,24 @@ checks["v1.11 cabin tab from zero"] = (
     and ("cabinClass=BUSINESS" in _webui110_src)
     and ("test_projection_sorted_cheapest_first" in _t111_src))
 
+# --- v1.12: time-quality heat map + cabin sparklines ---
+_t112_src = open(os.path.join("tests", "test_v112.py"),
+                 encoding="utf-8").read()
+_css112_src = open(os.path.join("webui", "static", "style.css"),
+                   encoding="utf-8").read()
+checks["v1.12 time heat + cabin spark"] = (
+    ('id="timeHeat"' in _idx111_src)
+    and ("time-heat-box" in _idx111_src)
+    and ("tab-timeheat" not in _idx111_src)
+    and ("function loadTimeHeat" in _app110_src)
+    and ("/api/time-coverage" in _app110_src)
+    and ("function cabinSpark" in _app110_src)
+    and ('"spark": spark' in _cm111_src)
+    and (".time-heat-box" in _css112_src)
+    and (".cabin-spark-line" in _css112_src)
+    and (".th-cell.exact" in _css112_src)
+    and ("test_spark_projection" in _t112_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

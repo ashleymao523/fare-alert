@@ -445,14 +445,26 @@ def history_timetable(history, per_leg=8):
     their cheapest row so the best city leads. Pure."""
     groups = []
     for rid, r in (history.get("routes") or {}).items():
-        rows = [o for o in (r.get("obs") or [])
-                if isinstance(o.get("price"), (int, float))
-                and (o.get("fno") or "")]
+        obs = [o for o in (r.get("obs") or [])
+               if isinstance(o.get("price"), (int, float))]
+        rows = [o for o in obs if (o.get("fno") or "")]
         rows.sort(key=lambda o: (o["price"], o.get("date") or ""))
+        # v1.12: per-date lowest price series for the leg sparkline -
+        # any observation qualifies (fno-less legacy rows still carry
+        # a real price), dates ascending, newest N=30 points.
+        by_date = {}
+        for o in obs:
+            d = str(o.get("date") or "")
+            if d and (d not in by_date
+                      or o["price"] < by_date[d]):
+                by_date[d] = o["price"]
+        spark = [{"d": d, "p": by_date[d]}
+                 for d in sorted(by_date)][-30:]
         groups.append({
             "route_id": rid,
             "from_city": r.get("from_city", ""),
             "to_city": r.get("to_city", ""),
+            "spark": spark,
             "rows": [{"date": o.get("date") or "",
                       "fno": o.get("fno") or "",
                       "dep": o.get("dep") or "",

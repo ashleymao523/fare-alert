@@ -509,6 +509,56 @@ input::placeholder { color: var(--faint); }
 }
 .cabin-tt-fno { font-weight: 700; }
 .cabin-tt-price { font-weight: 700; text-align: right; }
+/* ---- v1.12: 公务舱走势 sparkline + 时刻质量热力矩阵 ---- */
+.cabin-spark {
+  display: flex; align-items: center; gap: var(--sp-sm);
+  margin-top: var(--sp-xs); flex-wrap: wrap;
+}
+.cabin-spark-svg { display: block; flex: 0 0 auto; }
+.cabin-spark-line {
+  fill: none; stroke: var(--accent); stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.cabin-spark-dot { fill: var(--green); }
+.cabin-spark-lab { color: var(--muted); font-size: var(--fs-sm); }
+.time-heat-box {
+  display: flex; flex-direction: column; gap: var(--sp-sm);
+  margin-top: var(--sp-md);
+}
+.th-row {
+  display: flex; align-items: center; gap: var(--sp-md);
+  flex-wrap: wrap;
+}
+.th-name {
+  display: flex; align-items: center; gap: var(--sp-xs);
+  min-width: 16em; flex-wrap: wrap;
+  font-size: var(--fs-md); font-weight: 600;
+}
+.th-leg { color: var(--text-2, var(--text)); }
+.th-badge {
+  font-size: var(--fs-2xs); font-weight: 700;
+  padding: 1px var(--sp-xs); border-radius: var(--r-pill);
+}
+.th-badge.exact { color: var(--green-d); background: var(--green-bg); }
+.th-badge.borrow { color: var(--accent-ink); background: var(--accent-soft); }
+.th-badge.alt { color: var(--amber-d); background: var(--amber-bg); }
+.th-badge.noref { color: var(--muted); background: rgba(16, 24, 40, 0.06); }
+.th-strip {
+  display: flex; gap: var(--sp-1); flex: 1; min-width: 0;
+  flex-wrap: wrap;
+}
+.th-cell {
+  min-width: 2.2em; height: var(--fs-3xl);
+  border-radius: var(--r-1);
+  color: var(--on-accent);
+  font-size: var(--fs-2xs); font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  cursor: default;
+}
+.th-cell.exact { background: var(--green); }
+.th-cell.borrow { background: var(--accent); }
+.th-cell.alt { background: var(--amber); }
+.th-cell.noref { background: rgba(16, 24, 40, 0.22); }
 .agent-name { font-weight: 700; }
 .agent-st {
   font-size: var(--fs-sm); font-weight: 600;
