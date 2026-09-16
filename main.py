@@ -911,7 +911,8 @@ def _cabin_absorb(cw, leg, hid, biz_rows, cfg, state, log, push_enabled):
         ob = cabin_record_low(
             ch, hid, leg["from_city"], leg["to_city"], "business",
             d.date, total_price(d.bare_price, tax_cfg),
-            fno=d.flight_no or "")
+            fno=d.flight_no or "",
+            dep=d.dep_time or "", arr=d.arr_time or "")
         if ob.get("record"):
             new_records.append(ob)
     if biz:

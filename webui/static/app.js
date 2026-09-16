@@ -2130,6 +2130,117 @@
     api("/api/tasks").then(renderAgents).catch(function () {});
   }
 
+  /* ---------- 公务舱低价监视 (v1.11 cabin tab) ---------- */
+
+  function fmtCny(v) {
+    return (v == null || isNaN(v)) ? "—" : "¥" + Math.round(v);
+  }
+
+  function cabinTtRow(row) {
+    var cls = "cabin-tt-row" + (row.url ? " link" : "");
+    var r = el("div", cls);
+    var dep = row.dep || "", arr = row.arr || "";
+    var time = (dep || arr) ? (dep + "–" + arr) : "时刻待采";
+    r.appendChild(el("span", "cabin-tt-date", row.date || ""));
+    r.appendChild(el("span", "cabin-tt-fno", row.fno || "—"));
+    r.appendChild(el("span", "cabin-tt-time", time));
+    r.appendChild(el("span", "cabin-tt-price", fmtCny(row.price)));
+    if (row.url) {
+      r.title = "直达 Booking 公务舱搜索页";
+      r.addEventListener("click", function () {
+        window.open(row.url, "_blank", "noopener");
+      });
+    }
+    return r;
+  }
+
+  function cabinLegCard(g, b) {
+    var c = el("div", "cabin-leg");
+    var head = el("div", "cabin-leg-head");
+    head.appendChild(el("span", "cabin-leg-name",
+      (g.from_city || "?") + " → " + (g.to_city || "?")));
+    if (b) {
+      var badge = el("span", "cabin-low-badge",
+        "历史最低 " + fmtCny(b.low) +
+        (b.low_fno ? " · " + b.low_fno : "") +
+        (b.low_date ? " · " + b.low_date : ""));
+      head.appendChild(badge);
+    }
+    c.appendChild(head);
+    if (b) {
+      var meta = el("div", "cabin-leg-meta");
+      meta.appendChild(el("span", "",
+        "最新 " + fmtCny(b.latest) + " (" + (b.latest_date || "—") + ")"));
+      meta.appendChild(el("span", "",
+        b.gap > 0 ? "高于最低 ¥" + Math.round(b.gap) : "持平历史最低"));
+      meta.appendChild(el("span", "", "逐班样本 " + b.samples + " 条"));
+      c.appendChild(meta);
+    }
+    var rows = (g.rows && g.rows.length) ? g.rows : [];
+    if (rows.length) {
+      var grid = el("div", "cabin-tt");
+      var hd = el("div", "cabin-tt-row cabin-tt-head");
+      hd.appendChild(el("span", "", "日期"));
+      hd.appendChild(el("span", "", "航班"));
+      hd.appendChild(el("span", "", "起降"));
+      hd.appendChild(el("span", "", "含税总价"));
+      grid.appendChild(hd);
+      rows.forEach(function (row) { grid.appendChild(cabinTtRow(row)); });
+      c.appendChild(grid);
+    } else {
+      c.appendChild(el("div", "muted",
+        "暂无逐班观测: 下一轮巡检(每30分钟)自动补齐时刻"));
+    }
+    return c;
+  }
+
+  function renderCabin(doc) {
+    var box = $("cabinPanel");
+    box.textContent = "";
+    var patrol = doc && doc.patrol || {};
+    var st = el("div", "cabin-status");
+    st.appendChild(el("span", "",
+      "巡检: " + (patrol.last_status || "尚未巡检") +
+      (patrol.last_run ? " · 上次 " + patrol.last_run : "")));
+    var fire = el("button", "btn small", "立即巡检");
+    fire.addEventListener("click", function () {
+      fire.disabled = true;
+      fire.textContent = "探测中(约2-3分钟)…";
+      post("/api/tasks/cabin-patrol/run", {}).then(function (r) {
+        var p = r && r.patrol || {};
+        toast("巡检完成: " + (p.last_status || p.offers + " 条") + " ✓");
+        loadCabin();
+      }).catch(function (e) {
+        toast("巡检失败: " + e.message);
+      }).finally(function () {
+        fire.disabled = false;
+        fire.textContent = "立即巡检";
+      });
+    });
+    st.appendChild(fire);
+    box.appendChild(st);
+    var board = (doc && doc.board) || [];
+    var tt = (doc && doc.timetable) || [];
+    var bmap = {};
+    board.forEach(function (b) { bmap[b.route_id] = b; });
+    var groups = tt.length ? tt : board.map(function (b) {
+      return { route_id: b.route_id, from_city: b.from_city,
+               to_city: b.to_city, rows: [] };
+    });
+    if (!groups.length) {
+      box.appendChild(el("div", "muted",
+        "暂无公务舱历史: 巡检每 30 分钟自动采集逐班报价"));
+      return;
+    }
+    groups.forEach(function (g) {
+      box.appendChild(cabinLegCard(g, bmap[g.route_id]));
+    });
+  }
+
+  function loadCabin() {
+    api("/api/cabin").then(renderCabin).catch(function () {});
+  }
+
   /* ---------- 预算找目的地 (M3 反向搜索) ---------- */
 
   function initReverse() {
@@ -2373,6 +2484,7 @@
     if (name === "dash") renderDash();
     if (name === "crawl") loadCrawl();
     if (name === "agents") loadAgents();
+    if (name === "cabin") loadCabin();
     if (name === "reverse") initReverse();
     if (name === "weekly") initWeekly();
     if (name === "routes") renderRoutesEditor();
@@ -2421,6 +2533,7 @@
     });
 
     $("btnWeeklyRefresh").addEventListener("click", initWeekly);
+    $("btnRefreshCabin").addEventListener("click", loadCabin);
     $("btnWeeklyPush").addEventListener("click", function () {
       var btn = $("btnWeeklyPush");
       btn.disabled = true;

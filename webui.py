@@ -900,6 +900,8 @@ def api_cabin():
     from core.cabin_monitor import cabin_leg as cw_leg
     from core.cabin_monitor import history_board as cw_board
     from core.cabin_monitor import patrol_legs as cw_patrol
+    from core.cabin_monitor import history_timetable as cw_timetable
+    from core.intl import city_iata
     cfg = load_config(CONFIG_PATH) if CONFIG_PATH else {}
     cw = cw_load(cfg)
     ch = ch_load(DATA_DIR)
@@ -929,6 +931,20 @@ def api_cabin():
     # v0.66: standalone patrol echo - which watch_from x to legs run on
     # their own clock (no route needed) + last run status from state.
     pstate = state.get("_cabin_patrol") or {}
+    # v1.11: per-flight cheapest rows + booking deep links - the
+    # cabin tab renders WHICH business flight, WHEN it departs and
+    # for how much, one click from the real search page.
+    timetable = cw_timetable(ch)
+    for g in timetable:
+        fi = city_iata(g.get("from_city") or "")
+        ti = city_iata(g.get("to_city") or "")
+        for row in g.get("rows") or []:
+            if fi and ti and row.get("date"):
+                row["url"] = (
+                    "https://flights.booking.com/flights/"
+                    "{f}.{t}/{d}?type=ONEWAY&adults=1"
+                    "&cabinClass=BUSINESS".format(
+                        f=fi, t=ti, d=row["date"]))
     patrol = {
         "interval_minutes": int(cw.get("refresh_minutes") or 30),
         "legs": cw_patrol(cw, cfg.get("routes") or []),
@@ -938,6 +954,7 @@ def api_cabin():
     }
     return jsonify({"config": cw, "history": ch,
                     "board": cw_board(ch),
+                    "timetable": timetable,
                     "last_alert": last.get("last_hit"),
                     "qualifying_routes": qual,
                     "amadeus_ready": ama_ready,

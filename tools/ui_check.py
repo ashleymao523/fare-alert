@@ -1036,6 +1036,25 @@ checks["v1.10 per-flight cabin timetable"] = (
     and ("test_offers_become_per_flight_rows" in _tcp_src)
     and ("test_flights_coexist_same_date" in _tcp_src))
 
+# --- v1.11: cabin tab (from zero) ---
+_cm111_src = _cm109_src   # same file, re-read not needed
+_idx111_src = _idx110_src
+_t111_src = open(os.path.join("tests", "test_v111.py"),
+                 encoding="utf-8").read()
+checks["v1.11 cabin tab from zero"] = (
+    ("def history_timetable" in _cm111_src)
+    and ('dep="", arr=""' in _cm111_src)
+    and ("d.dep_time or """ in _main109_src)
+    and ('data-tab="cabin"' in _idx111_src)
+    and ('id="cabinPanel"' in _idx111_src)
+    and ("function loadCabin" in _app110_src)
+    and ('if (name === "cabin") loadCabin();' in _app110_src)
+    and ("btnRefreshCabin" in _app110_src)
+    and ("cabin-low-badge" in open(os.path.join(
+        "webui", "static", "style.css"), encoding="utf-8").read())
+    and ("cabinClass=BUSINESS" in _webui110_src)
+    and ("test_projection_sorted_cheapest_first" in _t111_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

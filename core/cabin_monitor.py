@@ -133,7 +133,7 @@ def absorb_point_cabin(cache, cw, now=None):
 
 
 def record_low(history, route_id, from_city, to_city, cabin, date,
-               price_total, fno=""):
+               price_total, fno="", dep="", arr=""):
     """Insert one business-cabin observation; ring-cap per route.
     v1.10 precision: the dedup key is (date, cabin, FLIGHT) - the
     booking timetable feeds several business flights per date now,
@@ -160,6 +160,7 @@ def record_low(history, route_id, from_city, to_city, cabin, date,
                       and (o.get("fno") or "") == fno)]
     entry = {"date": date, "cabin": cabin, "price": price_total,
              "fno": fno,
+             "dep": str(dep or ""), "arr": str(arr or ""),
              "ts": datetime.now().strftime("%Y-%m-%dT%H:%M")}
     if (prior is not None and isinstance(price_total, (int, float))
             and price_total < prior):
@@ -431,6 +432,36 @@ def history_board(history):
         })
     rows.sort(key=lambda x: x["low"])
     return rows
+
+
+def history_timetable(history, per_leg=8):
+    """v1.11: cheapest per-flight rows per leg for the new cabin tab.
+
+    Each leg's ring history contributes its N cheapest fno-carrying
+    observations (price asc, tie on date) - the cabin tab renders
+    them as a per-flight timetable: WHICH business flight, WHEN it
+    departs, for how much. v1.10 started persisting dep/arr on new
+    observations; legacy fno-less rows stay board-only. Legs sort by
+    their cheapest row so the best city leads. Pure."""
+    groups = []
+    for rid, r in (history.get("routes") or {}).items():
+        rows = [o for o in (r.get("obs") or [])
+                if isinstance(o.get("price"), (int, float))
+                and (o.get("fno") or "")]
+        rows.sort(key=lambda o: (o["price"], o.get("date") or ""))
+        groups.append({
+            "route_id": rid,
+            "from_city": r.get("from_city", ""),
+            "to_city": r.get("to_city", ""),
+            "rows": [{"date": o.get("date") or "",
+                      "fno": o.get("fno") or "",
+                      "dep": o.get("dep") or "",
+                      "arr": o.get("arr") or "",
+                      "price": o["price"]} for o in rows[:per_leg]],
+        })
+    groups.sort(key=lambda g: (g["rows"][0]["price"]
+                               if g["rows"] else 1e18))
+    return groups
 
 
 def cooldown_ok(last_alert_at, cw, now=None):

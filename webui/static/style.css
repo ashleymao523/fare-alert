@@ -461,6 +461,54 @@ input::placeholder { color: var(--faint); }
 .agent-card.idle { opacity: .78; }
 .agent-head { display: flex; align-items: center; gap: var(--sp-md); flex-wrap: wrap; }
 .agent-ico { font-size: var(--fs-3xl); }
+
+/* v1.11: cabin tab - patrol status + per-flight timetable */
+.cabin-status {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-sm); padding: var(--sp-sm) var(--sp-md);
+  background: var(--blue-bg, var(--green-bg));
+  border-radius: var(--r-md, 10px); margin-bottom: var(--sp-md);
+  font-size: var(--fs-md);
+}
+.cabin-leg {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg, 14px);
+  padding: var(--sp-md); margin-bottom: var(--sp-md);
+  background: var(--card, var(--bg));
+}
+.cabin-leg-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-sm); flex-wrap: wrap;
+}
+.cabin-leg-name { font-weight: 700; font-size: var(--fs-xl); }
+.cabin-low-badge {
+  font-size: var(--fs-sm); font-weight: 700;
+  color: var(--on-accent);
+  background: var(--green, var(--accent));
+  padding: 2px var(--sp-sm); border-radius: var(--r-pill);
+}
+.cabin-leg-meta {
+  display: flex; gap: var(--sp-md); flex-wrap: wrap;
+  color: var(--muted); font-size: var(--fs-sm);
+  margin-top: var(--sp-xs);
+}
+.cabin-tt { margin-top: var(--sp-sm); }
+.cabin-tt-row {
+  display: grid;
+  grid-template-columns: 6.2em 6.2em 1fr 6.2em;
+  gap: var(--sp-sm); align-items: center;
+  padding: 3px var(--sp-xs); border-radius: var(--r-sm, 8px);
+  font-size: var(--fs-md);
+}
+.cabin-tt-row.link { cursor: pointer; }
+.cabin-tt-row.link:hover { background: var(--blue-bg, var(--green-bg)); }
+.cabin-tt-row.cabin-tt-head {
+  color: var(--muted); font-size: var(--fs-sm);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.cabin-tt-fno { font-weight: 700; }
+.cabin-tt-price { font-weight: 700; text-align: right; }
 .agent-name { font-weight: 700; }
 .agent-st {
   font-size: var(--fs-sm); font-weight: 600;
