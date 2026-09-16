@@ -136,13 +136,45 @@ def airline_name(code):
 # price - display-only until the qunar cache prices the date itself.
 NON_REAL_SOURCES = ("nearby-ref", "interp", "booking-ref")
 
+# v1.03: departure/arrival times whose SOURCE is a same-date real
+# itinerary - board rows (airport-board), Amadeus schedules, Booking
+# same-date offers (booking, pinned by the v0.88 cross-fill) and
+# captured point-fill rows all vouch for the exact minute. booking-x
+# stays borrow: it is Booking's cheapest flight pinned onto an OTA row
+# whose own cheapest may differ - same date, possibly other flight.
+EXACT_TIME_SOURCES = ("amadeus", "airport-board", "booking", "point-fill")
+
+
+def time_kind(dep_src):
+    """v1.03: classify one departure source into calendar heat kinds.
+
+    exact  = same-date real itinerary (amadeus / airport-board /
+             booking offer / captured point-fill row)
+    borrow = dow-borrowed or other-flight reference (airport-board-x,
+             booking-x - provenance lives in borrow_dow / votes)
+    alt    = neighboring-flight reference (alt-ref)
+    noref  = no sourced time at all
+    """
+    src = (dep_src or "").strip()
+    if src in EXACT_TIME_SOURCES:
+        return "exact"
+    if src in ("airport-board-x", "booking-x"):
+        return "borrow"
+    if src == "alt-ref":
+        return "alt"
+    return "noref"
+
 
 def time_coverage(deals, today=None, dows=None):
     """Count dep/arr time quality across deals (pure, no IO).
 
-    dep: exact (amadeus/airport-board + dep_time) / borrow (airport-board-x
-    + dep_time) / missing. arr adds est (arr_est only, never real).
-    NON_REAL_SOURCES rows are skipped: their price is already a reference.
+    dep: exact (EXACT_TIME_SOURCES + dep_time) / borrow (airport-board-x,
+    booking-x + dep_time) / missing. arr adds est (arr_est only).
+    NON_REAL_SOURCES rows feed the ref_* counters instead: their PRICE
+    is a reference, but a booking-ref row still carries the same-date
+    real itinerary time - snapshot 2026-09-16 showed dep_exact=0 while
+    58/60 intl rows carried Booking's exact same-day departures, so
+    counting them separately keeps both truths visible.
 
     v0.80: promote_on/promote_dow - the earliest calendar date when a
     borrowed (airport-board-x) row can turn exact. The promote candidate
@@ -154,17 +186,25 @@ def time_coverage(deals, today=None, dows=None):
     flight - no deadline is promised for those.
     """
     cov = {"total": 0, "dep_exact": 0, "dep_borrow": 0, "dep_missing": 0,
-           "arr_exact": 0, "arr_borrow": 0, "arr_est": 0, "arr_missing": 0}
+           "arr_exact": 0, "arr_borrow": 0, "arr_est": 0, "arr_missing": 0,
+           "ref_total": 0, "ref_dep_exact": 0, "ref_dep_borrow": 0,
+           "ref_dep_missing": 0}
     base = today or _dt.date.today()
     promote = {}
     for d in deals:
-        if (getattr(d, "source", "") or "") in NON_REAL_SOURCES:
-            continue
-        cov["total"] += 1
         dep_src = getattr(d, "dep_src", "") or getattr(d, "time_src", "")
         arr_src = getattr(d, "arr_src", "") or getattr(d, "time_src", "")
+        if (getattr(d, "source", "") or "") in NON_REAL_SOURCES:
+            cov["ref_total"] += 1
+            if getattr(d, "dep_time", ""):
+                cov["ref_dep_exact" if dep_src in EXACT_TIME_SOURCES
+                     else "ref_dep_borrow"] += 1
+            else:
+                cov["ref_dep_missing"] += 1
+            continue
+        cov["total"] += 1
         if getattr(d, "dep_time", ""):
-            borrowed = dep_src not in ("amadeus", "airport-board")
+            borrowed = dep_src not in EXACT_TIME_SOURCES
             cov["dep_borrow" if borrowed else "dep_exact"] += 1
             if borrowed:
                 try:
@@ -183,7 +223,7 @@ def time_coverage(deals, today=None, dows=None):
         else:
             cov["dep_missing"] += 1
         if getattr(d, "arr_time", ""):
-            cov["arr_borrow" if arr_src not in ("amadeus", "airport-board")
+            cov["arr_borrow" if arr_src not in EXACT_TIME_SOURCES
                 else "arr_exact"] += 1
         elif getattr(d, "arr_est", ""):
             cov["arr_est"] += 1

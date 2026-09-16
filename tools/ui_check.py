@@ -871,9 +871,28 @@ checks["v1.02 自动精点引导: point-gaps auto_fill + 面板横幅 + 密钥�
     and ("amadeusTest" in _src102_src)
     and ("developer.amadeus.com/register" in _src102_src)
     and ("测试密钥" in _src102_src)
-    and (".gap-af {" in _css102_src)
-    and ("班期库已沉淀" in _weekly102_src)
-    and ("自动补齐" in _weekly102_src))
+   and (".gap-af {" in _css102_src)
+   and ("班期库已沉淀" in _weekly102_src)
+   and ("自动补齐" in _weekly102_src))
+
+_flights103_src = open(os.path.join("core", "flights.py"),
+                       encoding="utf-8").read()
+_webui103_src = open("webui.py", encoding="utf-8").read()
+_cal103_src = open(os.path.join("web", "src", "components",
+                   "CalendarView.jsx"), encoding="utf-8").read()
+_pf103_src = open(os.path.join("core", "point_fill.py"),
+                  encoding="utf-8").read()
+checks["v1.03 时刻口径修正: time_kind 统一分类 + 参考行计数 + 图例三分"] = (
+    ("EXACT_TIME_SOURCES" in _flights103_src)
+    and ("ref_total" in _flights103_src)
+    and ("ref_dep_exact" in _flights103_src)
+    and ("time_kind" in _webui103_src)
+    and ("当日真实时刻" in _cal103_src)
+    and ("当日真实时刻" in _dist_js)
+    and ("tc-refline" in _crawl102_src)
+    and ("tc-refline" in _dist_js)
+    and (".tc-refline {" in _css102_src)
+    and ("Chrome 136" in _pf103_src))
 
 bad = 0
 for k, v in checks.items():

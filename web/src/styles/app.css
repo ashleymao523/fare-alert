@@ -746,6 +746,7 @@ a.gap-chip.link:visited { color: inherit; }
 .pf-head { display: flex; align-items: center; gap: var(--sp-md); flex-wrap: wrap; margin-bottom: var(--sp-2); }
 .pf-link { font-size: var(--fs-sm); }
 .sed-bar { flex: 1; height: var(--sp-md); background: var(--card2); border-radius: var(--r-pill); overflow: hidden; display: flex; }
+.tc-refline { font-size: var(--fs-xs); color: var(--muted); margin: -2px 0 4px calc(8.5em + var(--sp-md)); }
 .sed-dows { margin-top: var(--sp-md); }
 .bm-box { border: 1px dashed var(--line-strong); border-radius: var(--r-xs); padding: var(--sp-md); margin-top: var(--sp-md); background: var(--card2); }
 .bm-head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-2); }

@@ -3,10 +3,10 @@ import { fmtMoney, fmtMD, weekday, parseDate, dayList, heatClass } from "../lib/
 import { fetchTimeCoverage } from "../lib/api.js";
 
 const KIND_LABEL = {
-  exact: "板库真实时刻",
-  borrow: "跨周借班时刻",
+  exact: "当日真实时刻",   // v1.03: 板库/Amadeus/Booking同日行程/精点回填
+  borrow: "参考借用时刻",  // v1.03: 跨周借班 + booking-x 同日他航班参考
   alt: "邻近参考时刻",
-  noref: "无价格(待精查)",
+  noref: "无时刻·待精查",
 };
 
 let covCache = null; // module cache: one /api/time-coverage per session
@@ -33,7 +33,7 @@ function TimeStrip({ routeId }) {
         <span class="tl"><i class="dot exact" />真实 {c.exact || 0}</span>
         <span class="tl"><i class="dot borrow" />借班 {c.borrow || 0}</span>
         <span class="tl"><i class="dot alt" />参考 {c.alt || 0}</span>
-        <span class="tl"><i class="dot noref" />无价 {c.noref || 0}</span>
+        <span class="tl"><i class="dot noref" />无时刻 {c.noref || 0}</span>
         {heals.length ? <span class="tl heal">⏳ {heals.join(" · ")}</span> : null}
       </div>
       <div class="tstrip-track">

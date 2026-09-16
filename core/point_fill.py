@@ -14,6 +14,22 @@
 #   "没有查询到符合条件的航班" - same fingerprint family as headless.
 #   Only a real user browser (desktop Chrome / phone) returns live
 #   prices, so the bookmarklet stays the only capture path for now.
+# - 2026-09-16 CDP probes (data/_cdp_probe*.py, live on this box):
+#   driving a REAL headed Chrome over the DevTools protocol cannot
+#   rescue automation either. Two hard walls, both measured:
+#   (a) Chrome 136+ silently IGNORES --remote-debugging-port when the
+#       DEFAULT user profile is used (no CDP target ever appears), so
+#       "attach the user's own trusted Chrome" is impossible by design;
+#   (b) a dedicated fresh --user-data-dir profile DOES expose CDP and
+#       renders the H5 app (device emulation + homepage warmup clear
+#       the login wall), but the list page returns the same soft-block
+#       "没有查询到符合条件的航班"; desktop-UA + desktop site renders
+#       the shell with an empty list. Risk control trusts device age /
+#       cookie history, not just the browser binary.
+#   Conclusion: automated keyless point query stays closed; Booking
+#   LOWEST_PRICE (reference quote + exact same-date itinerary) + the
+#   Amadeus per-date offers (free key) + this capture cache remain the
+#   three working fill tracks. Do not re-probe CDP without a new fact.
 #
 # Gap dates therefore fill via two tracks:
 #   track A (auto):  Amadeus per-date offers (_cached_fill_offers).

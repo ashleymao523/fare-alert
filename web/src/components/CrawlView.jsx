@@ -280,21 +280,27 @@ function TimeSedimentCard() {
     <div class="card">
       <div class="card-head">
         <h3>⏱ 时刻沉淀 · 按路线透明度</h3>
-        <span class="sub">起飞时刻: 精确(当日板) vs 跨日参考(借班期)</span>
+        <span class="sub">起飞时刻: 精确(当日板库/同日行程) vs 参考(跨周借班/同日他航班)</span>
       </div>
       {routes.length ? routes.map((r) => {
         const c = r.time_coverage;
         const pe = Math.round((c.dep_exact / c.total) * 100);
         const pb = Math.round((c.dep_borrow / c.total) * 100);
         return (
-          <div class="tc-row" key={r.id}>
-            <span class="tc-k">{r.from_city} → {r.to_city}</span>
-            <div class="sed-bar">
-              <div class="tc-fill ok" style={"width:" + pe + "%"} />
-              <div class="tc-fill mid" style={"width:" + pb + "%"} />
+          <div key={r.id}>
+            <div class="tc-row">
+              <span class="tc-k">{r.from_city} → {r.to_city}</span>
+              <div class="sed-bar">
+                <div class="tc-fill ok" style={"width:" + pe + "%"} />
+                <div class="tc-fill mid" style={"width:" + pb + "%"} />
+              </div>
+              <span class="tc-v" title={"精确 " + c.dep_exact + " · 借用 "
+                + c.dep_borrow + " · 缺失 " + c.dep_missing}>{pe}%</span>
             </div>
-            <span class="tc-v" title={"精确 " + c.dep_exact + " · 借用 "
-              + c.dep_borrow + " · 缺失 " + c.dep_missing}>{pe}%</span>
+            {c.ref_total ? (
+              <div class="tc-refline">参考价行 {c.ref_total} 日 · 同日真实时刻 {c.ref_dep_exact}
+                · 参考借用 {c.ref_dep_borrow} · 缺 {c.ref_dep_missing}</div>
+            ) : null}
           </div>
         );
       }) : <div class="muted">跑一次查询后展示各路线起飞时刻来源构成。</div>}

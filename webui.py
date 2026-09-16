@@ -1021,6 +1021,7 @@ def api_time_coverage():
     """
     import datetime as _dt
     from core.sched_board import load_sched_db, sched_stats
+    from core.flights import time_kind
     dows = sched_stats(load_sched_db(DATA_DIR)).get("dows") or {}
     today = _dt.date.today()
     heal = []
@@ -1039,14 +1040,11 @@ def api_time_coverage():
         for d in sorted(r.get("deals") or [],
                         key=lambda x: str(x.get("date") or "")):
             src = str(d.get("dep_src") or d.get("time_src") or "")
-            if src in ("amadeus", "airport-board"):
-                kind = "exact"
-            elif src == "airport-board-x":
-                kind = "borrow"
-            elif src == "alt-ref":
-                kind = "alt"
-            else:
-                kind = "noref"
+            # v1.03: booking (same-date Booking itinerary) and captured
+            # point-fill rows are EXACT times - 144/240 snapshot days
+            # used to paint grey "no time" because only board/amadeus
+            # counted. booking-x stays borrow (other-flight reference).
+            kind = time_kind(src)
             row = {"date": str(d.get("date") or ""), "kind": kind,
                    "dep": str(d.get("dep_time") or ""),
                    "arr": str(d.get("arr_time") or ""),
