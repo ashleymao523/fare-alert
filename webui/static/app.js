@@ -2341,6 +2341,19 @@
     });
     st.appendChild(fire);
     box.appendChild(st);
+    var sf = patrol.sh_fill || null;
+    if (sf) {
+      var bits = [];
+      if (sf.queries != null) bits.push("查询 " + sf.queries);
+      if (sf.exact) bits.push("精确回写 " + sf.exact);
+      if (sf.fnos != null) bits.push("航班 " + sf.fnos);
+      if (sf.neg) bits.push("负缓存 " + sf.neg);
+      if (sf.capped) bits.push("今日额度已满");
+      if (sf.breaker) bits.push("WAF 熔断");
+      if (bits.length)
+        box.appendChild(el("div", "muted",
+          "上海板时刻: " + bits.join(" · ")));
+    }
     var board = (doc && doc.board) || [];
     var tt = (doc && doc.timetable) || [];
     var bmap = {};

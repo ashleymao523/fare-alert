@@ -10,6 +10,7 @@ force bypass for the ops tool, and a +1d marker for cross-midnight
 arrivals so 22:25-22:10 reads as overnight, not negative."""
 import datetime as dt
 import os
+import shutil
 import sys
 import unittest
 
@@ -59,6 +60,7 @@ class TestEarliestFirst(unittest.TestCase):
 class TestForceBypass(unittest.TestCase):
     def test_sh_fill_forwards_force_to_fetch(self):
         tmp = os.path.join(os.environ.get("TEMP", "."), "sh119")
+        shutil.rmtree(tmp, ignore_errors=True)  # no cross-run state
         os.makedirs(tmp, exist_ok=True)
         sess = FakeSession()
         sh_fill(sess, {"sh_pace": 0}, tmp, _hist("2026-10-19"),

@@ -19,6 +19,10 @@ v1.18 用途(公务舱时刻精度阶梯的第 2 级):
 
 红线: 只读查询 / 低频(每 fno+方向+偏移 6h 缓存, 全局每日 24 次
 硬上限, 与萧山板共用 board_fetch_log.json 记账) / 公开数据无 PII.
+v1.20: --force 只绕 6h 行缓存, 不再绕每日硬上限(v1.19 实弹把账本
+烧到 32/24 的越权已修); 板上查无此班(success 空 flightList)落 24h
+负缓存, 后续同键查询零网络零预算返回 neg-cache——CZ3440/CZ3480 类
+共享号不再每天白烧 4 次额度, 省下的预算全给真航班的 dow 沉淀.
 """
 from __future__ import annotations
 
@@ -34,6 +38,7 @@ BOARD_URL = ("https://www.shanghaiairport.com/AvinexApi/"
              "OldFlightHandler.aspx")
 BOARD_REFERER = "https://www.shanghaiairport.com/flights/index.html"
 SH_TTL = 6 * 3600
+NEG_TTL = 24 * 3600  # empty-board rows are stable schedule facts
 SH_DAILY_MAX = 24
 SH_LOG_KIND = "sh_board"
 SH_LOG_NAME = "board_fetch_log.json"  # shared ledger with the HGH board
@@ -121,8 +126,11 @@ def fetch_flight(session, net_cfg, fno, direction, day_offset,
     direction: 1 departures / 2 arrivals; day_offset -1|0|1.
     6h per-key cache + a global daily network cap keep the cadence
     inside the AGENTS.md red lines. Returns (rows, how) with how in
-    ('net', 'cache', 'capped') - a capped call is a no-op, not an
-    error, so the patrol round stays quiet."""
+    ('net', 'cache', 'neg-cache', 'capped') - capped and neg-cache
+    calls are no-ops, not errors, so the patrol round stays quiet.
+    v1.20: force skips ONLY the fresh-rows cache; the daily cap is
+    enforced unconditionally (force refreshes stale rows, never the
+    budget)."""
     fno = _norm_no(fno)
     today = _dt.date.today().isoformat()
     path = os.path.join(
@@ -133,10 +141,13 @@ def fetch_flight(session, net_cfg, fno, direction, day_offset,
             with open(path, encoding="utf-8") as f:
                 ent = json.load(f)
             if time.time() - float(ent.get("ts", 0)) < SH_TTL:
-                return ent.get("rows", []), "cache"
+                rows = ent.get("rows", [])
+                if not rows and ent.get("neg"):
+                    return [], "neg-cache"
+                return rows, "cache"
         except Exception:
             pass
-    if not force and _log_count(data_dir, today) >= SH_DAILY_MAX:
+    if _log_count(data_dir, today) >= SH_DAILY_MAX:
         return [], "capped"
     form = urllib.parse.urlencode({
         "action": "GetData", "currentPage": 1, "pageSize": 20,
@@ -172,7 +183,8 @@ def fetch_flight(session, net_cfg, fno, direction, day_offset,
         raise
     rows = [x for x in (_normalize(rr) for rr in raw) if x]
     os.makedirs(data_dir, exist_ok=True)
-    _atomic_write(path, {"ts": time.time(), "rows": rows})
+    _atomic_write(path, {"ts": time.time(), "rows": rows,
+                         "neg": not rows})
     _bump_log(data_dir, today)
     return rows, "net"
 
@@ -241,6 +253,22 @@ def exact_targets(history, today=None, horizon=2):
                 "direction": 2 if METRO_KEY in str(tc) else 1,
             })
     return out
+
+
+def neg_hit(data_dir, fno, direction, day_offset):
+    """True when this (fno, direction, offset) is inside its 24h
+    negative-cache window (board answered success-empty before).
+    Read-only; missing/corrupt files read as not-neg."""
+    path = os.path.join(
+        data_dir, "board_sh_{f}_{d}_{o}.json".format(
+            f=_norm_no(fno), d=int(direction), o=int(day_offset)))
+    try:
+        with open(path, encoding="utf-8") as f:
+            ent = json.load(f)
+        return ((not ent.get("rows")) and bool(ent.get("neg"))
+                and time.time() - float(ent.get("ts", 0)) < NEG_TTL)
+    except Exception:
+        return False
 
 
 def dow_targets(history, sched_db, max_fnos=4):
@@ -349,6 +377,12 @@ def sh_fill(session, net_cfg, data_dir, history, log=None,
     # priority 2: fnos still missing dow deposits
     for t in dow_targets(history, db, max_fnos=max_fnos):
         k = (t["fno"], t["direction"])
+        # v1.20: a fno the board answered empty for BOTH offsets in
+        # the last 24h must not occupy a plan slot (it would starve
+        # real fnos even though its own queries cost nothing).
+        if all(neg_hit(data_dir, t["fno"], t["direction"], o)
+               for o in (0, 1)):
+            continue
         if k not in seen:
             seen.add(k)
             plan.append({"fno": t["fno"], "direction": t["direction"]})
@@ -384,6 +418,8 @@ def sh_fill(session, net_cfg, data_dir, history, log=None,
                 break
             if how == "net":
                 stats["queries"] += 1
+            elif how == "neg-cache":
+                stats["neg"] = stats.get("neg", 0) + 1
             if rows:
                 stats["exact"] += apply_exact_times(history, rows)
                 changed = merge_sh_rows(db, rows) or changed
