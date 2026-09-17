@@ -258,6 +258,23 @@ def _validate_config(body, current):
     if not isinstance(cw_th, (int, float)) or cw_th <= 0:
         raise ValueError("公务舱心理价位必须是正数")
     cwt["threshold_total"] = float(cw_th)
+    # v1.25: optional per-leg thresholds {"出发>目的": 总价} - exact
+    # keys only (leg_threshold accepts Chinese or IATA spellings);
+    # unparsable / non-positive values are dropped silently.
+    rts = cwt.get("route_thresholds")
+    if rts is None:
+        rts = {}
+    if not isinstance(rts, dict):
+        raise ValueError("route_thresholds必须是对象")
+    clean_rts = {}
+    for k, v in rts.items():
+        try:
+            tv = float(v)
+        except (TypeError, ValueError):
+            continue
+        if tv > 0 and ">" in str(k):
+            clean_rts[str(k).strip()] = tv
+    cwt["route_thresholds"] = clean_rts
     cw_cd = cwt.get("cooldown_hours", 12)
     if not isinstance(cw_cd, (int, float)) or cw_cd < 0:
         raise ValueError("公务舱冷却小时必须是非负数字")
@@ -937,6 +954,7 @@ def api_cabin():
     from core.cabin_monitor import history_board as cw_board
     from core.cabin_monitor import patrol_legs as cw_patrol
     from core.cabin_monitor import history_timetable as cw_timetable
+    from core.cabin_monitor import leg_threshold as cw_leg_threshold
     from core.intl import city_iata
     from core.sched_board import load_sched_db
     cfg = load_config(CONFIG_PATH) if CONFIG_PATH else {}
@@ -975,6 +993,15 @@ def api_cabin():
     # cabin rows - fno+dow+city triple-checked, no network involved.
     sched_flights = (load_sched_db(DATA_DIR).get("flights") or {})
     timetable = cw_timetable(ch, sched=sched_flights)
+    board_rows = cw_board(ch, sched=sched_flights)
+    # v1.25: stamp the effective per-leg threshold on every projection
+    # row so both frontends render the leg's own line, not the global.
+    for g in timetable:
+        g["threshold"] = cw_leg_threshold(
+            cw, g.get("from_city") or "", g.get("to_city") or "")
+    for b in board_rows:
+        b["threshold"] = cw_leg_threshold(
+            cw, b.get("from_city") or "", b.get("to_city") or "")
     for g in timetable:
         fi = city_iata(g.get("from_city") or "")
         ti = city_iata(g.get("to_city") or "")
@@ -1007,7 +1034,7 @@ def api_cabin():
         "cdp_fill": pstate.get("cdp_fill"),
     }
     return jsonify({"config": cw, "history": ch,
-                    "board": cw_board(ch, sched=sched_flights),
+                    "board": board_rows,
                     "timetable": timetable,
                     "last_alert": last.get("last_hit"),
                     "qualifying_routes": qual,

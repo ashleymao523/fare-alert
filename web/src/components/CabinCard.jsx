@@ -142,6 +142,8 @@ export default function CabinCard({ cfg, setCfg }) {
         ? live.to_cities
         : [live.default_to_city || cw.default_to_city || "杭州"]).slice(),
       threshold_total: live.threshold_total || cw.threshold_total || 1500,
+      routeThresholds: Object.assign({},
+        live.route_thresholds || cw.route_thresholds || {}),
       cooldown_hours:
         live.cooldown_hours != null ? live.cooldown_hours
           : (cw.cooldown_hours != null ? cw.cooldown_hours : 12),
@@ -168,6 +170,7 @@ export default function CabinCard({ cfg, setCfg }) {
       to_cities: draft.toCities.slice(),
       default_to_city: draft.toCities[0] || "杭州",
       threshold_total: Number(draft.threshold_total) || 1500,
+      route_thresholds: draft.routeThresholds || {},
       cooldown_hours: Number(draft.cooldown_hours) || 0,
       alert_record_low: !!draft.alertRecordLow,
       watch_from_cities: draft.cities.slice(),
@@ -240,6 +243,26 @@ export default function CabinCard({ cfg, setCfg }) {
               <input type="number" min="1" value={draft.threshold_total}
                 onInput={(e) => setD("threshold_total", e.target.value)} />
             </label>
+            {(data.board || []).length ? (
+              <div class="field2">
+                <span class="f-label2">分线阈值（可选, 覆盖统一心理价位, 留空=用统一值）</span>
+                <div class="push-grid">
+                  {data.board.map((b) => {
+                    const key = b.from_city + ">" + b.to_city;
+                    return (
+                      <label class="field2" key={key}>
+                        <span class="f-label2">{b.from_city} → {b.to_city}</span>
+                        <input type="number" min="0" placeholder="用统一阈值"
+                          value={draft.routeThresholds[key] || ""}
+                          onInput={(e) => setD("routeThresholds",
+                            Object.assign({}, draft.routeThresholds,
+                              { [key]: e.target.value }))} />
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             <label class="field2">
               <span class="f-label2">提醒冷却 (小时)</span>
               <input type="number" min="0" value={draft.cooldown_hours}
@@ -283,6 +306,9 @@ export default function CabinCard({ cfg, setCfg }) {
           <div class="cabin-meta">
             目的地 {dests} · 阈值 {fmt(cw.threshold_total)} ·
             冷却 {(cw.cooldown_hours || 0) + "h"}
+            {Object.keys(cw.route_thresholds || {}).length
+              ? " · 分线 " + Object.entries(cw.route_thresholds)
+                  .map(([k, v]) => k + " ¥" + Math.round(v)).join(" · ") : ""}
             {(cw.alert_record_low != null ? cw.alert_record_low : true)
               ? " · 新低即提醒" : ""}
             {(cw.watch_from_cities || []).length
@@ -358,8 +384,8 @@ export default function CabinCard({ cfg, setCfg }) {
                         <td><Spark obs={obs} /></td>
                         <td>{r.samples}</td>
                         <td>
-                          <span class={"badge " + (r.low <= (cw.threshold_total || 0) ? "green" : "gray")}>
-                            {r.low <= (cw.threshold_total || 0) ? "低于阈值" : "观察中"}
+                          <span class={"badge " + (r.low <= (r.threshold || cw.threshold_total || 0) ? "green" : "gray")}>
+                            {r.low <= (r.threshold || cw.threshold_total || 0) ? "低于阈值" : "观察中"}
                           </span>
                         </td>
                       </tr>

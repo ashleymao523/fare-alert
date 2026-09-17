@@ -47,9 +47,11 @@ class TestV124(unittest.TestCase):
     def test_03_index_cache_bust(self):
         with open("webui/templates/index.html", encoding="utf-8") as f:
             src = f.read()
-        self.assertIn("style.css?v=32", src)
-        self.assertIn("app.js?v=32", src)
-        self.assertIn("v1.24</span>", src)
+        # v1.25+: version-specific pins live in the latest vX test only;
+        # this suite asserts the cache-bust MECHANISM stays wired.
+        self.assertRegex(src, r"style\.css\?v=\d+")
+        self.assertRegex(src, r"app\.js\?v=\d+")
+        self.assertRegex(src, r"v1\.\d+</span>")
 
     def test_04_timetable_tsrc_default(self):
         from core.cabin_monitor import history_timetable
@@ -70,7 +72,9 @@ class TestV124(unittest.TestCase):
 
     def test_05_version_bump(self):
         from core.version import CODE_VERSION
-        self.assertEqual(CODE_VERSION, "1.24")
+        # v1.25+: any 1.x is fine here; the exact pin lives in the
+        # latest vX suite (test_v125 pins 1.25).
+        self.assertTrue(CODE_VERSION.startswith("1."))
 
 
 if __name__ == "__main__":

@@ -31,6 +31,12 @@ def default_config():
         # "collect + remind on historical lowest business fares" needs
         # the record event itself, not only a fixed price line.
         "alert_record_low": True,
+        # v1.25: optional per-leg thresholds keyed "出发>目的" (total
+        # CNY). Beijing->Shanghai reality (low ~1277) and Chongqing->
+        # Shanghai (~1468) sit ABOVE the global 1000 default, so a
+        # single global line never fires for them; a leg may now set
+        # its own realistic line while others keep the global one.
+        "route_thresholds": {},
     }
 
 
@@ -484,13 +490,16 @@ def evaluate_alert(history, cw, now=None):
     Returns list of dicts for the notify layer (title/body/meta)."""
     if not cw.get("enabled"):
         return []
-    threshold = cw.get("threshold_total") or 0
-    if not threshold:
-        return []
     hits = []
     for rid, r in (history.get("routes") or {}).items():
         obs = r.get("obs") or []
         if not obs:
+            continue
+        # v1.25: per-leg threshold first, global threshold as the
+        # fallback - legs are priced independently in reality.
+        threshold = leg_threshold(
+            cw, r.get("from_city", ""), r.get("to_city", ""))
+        if not threshold:
             continue
         best = min(obs, key=lambda o: o.get("price")
                    if isinstance(o.get("price"), (int, float)) else 1e18)
@@ -503,6 +512,7 @@ def evaluate_alert(history, cw, now=None):
                 "date": best.get("date", ""),
                 "cabin": best.get("cabin", "business"),
                 "price": price,
+                "threshold": threshold,
                 # v1.17: carry the winning flight + times so the
                 # notify layer can push "fno dep-arr" without a
                 # history re-lookup.
@@ -511,6 +521,42 @@ def evaluate_alert(history, cw, now=None):
                 "arr": best.get("arr", ""),
             })
     return hits
+
+
+def leg_threshold(cw, from_city, to_city):
+    """v1.25: resolve the effective threshold for one leg.
+
+    route_thresholds maps "出发>目的" -> total CNY and wins over the
+    global threshold_total when it names this leg exactly. Keys accept
+    Chinese city names or IATA codes (北京>上海 and BJS>SHA are the
+    same leg; 上海 normalizes to SHA via core.intl). Entries with a
+    non-positive or unparsable value are ignored. Falls back to the
+    global threshold_total (0 = disabled). Pure."""
+    def norm(city):
+        c = str(city or "").strip()
+        if not c:
+            return ""
+        from core.intl import city_iata
+        return (city_iata(c) or c).strip().lower()
+    fk, tk = norm(from_city), norm(to_city)
+    if fk and tk:
+        for k, v in (cw.get("route_thresholds") or {}).items():
+            parts = [p.strip() for p in str(k).split(">") if p.strip()]
+            if len(parts) != 2:
+                continue
+            try:
+                tv = float(v)
+            except (TypeError, ValueError):
+                continue
+            if tv <= 0:
+                continue
+            if norm(parts[0]) == fk and norm(parts[1]) == tk:
+                return tv
+    try:
+        th = float(cw.get("threshold_total") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return th if th > 0 else 0.0
 
 
 def borrow_sched_time(row, sched, from_city="", to_city=""):

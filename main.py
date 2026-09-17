@@ -34,6 +34,7 @@ from core.intl import fetch_cabin_offers, fetch_fill_offers
 from core.cabin_monitor import (
     load_config as cabin_cfg_load, load_history as cabin_history_load,
     record_low as cabin_record_low, route_qualifies as cabin_route_qualifies,
+    leg_threshold as cabin_leg_threshold,
     cabin_leg as cabin_watch_leg,
     absorb_point_cabin as cabin_absorb_point,
     evaluate_alert as cabin_evaluate_alert, cooldown_ok as cabin_cooldown_ok,
@@ -945,10 +946,10 @@ def _cabin_absorb(cw, leg, hid, biz_rows, cfg, state, log, push_enabled):
         except Exception:
             sched_db = {}
         if rec_hit is not None:
-            under = (" · 已低于阈值 ¥{t}".format(
-                t=int(cw.get("threshold_total") or 0))
-                if rec_hit["price"]
-                <= (cw.get("threshold_total") or 0) else "")
+            leg_th = cabin_leg_threshold(
+                cw, leg["from_city"], leg["to_city"])
+            under = (" · 已低于阈值 ¥{t}".format(t=int(leg_th))
+                     if leg_th and rec_hit["price"] <= leg_th else "")
             push_all(cfg, log,
                      "公务舱历史新低 {fc}到{tc}".format(
                          fc=leg["from_city"], tc=leg["to_city"]),
@@ -975,7 +976,10 @@ def _cabin_absorb(cw, leg, hid, biz_rows, cfg, state, log, push_enabled):
                          fn="", fc=h["from_city"], tc=h["to_city"]),
                      "{d} 公务舱 ¥{p} (阈值 ¥{t}){s}".format(
                          d=h["date"], p=int(h["price"]),
-                         t=int(cw.get("threshold_total") or 0),
+                         t=int(h.get("threshold")
+                               or cabin_leg_threshold(
+                                   cw, h["from_city"], h["to_city"])
+                               or 0),
                          s=cabin_push_ts(h, sched_db,
                                          h["from_city"], h["to_city"])),
                      route_id=h["route_id"], kind="cabin")

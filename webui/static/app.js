@@ -2322,7 +2322,8 @@
       lb.textContent = Math.round(pv);
       svg.appendChild(lb);
     }
-    var thv = parseFloat(((doc && doc.config) || {}).threshold_total);
+    var thv = parseFloat(g.threshold != null ? g.threshold :
+      ((doc && doc.config) || {}).threshold_total);
     if (thv > 0 && thv >= loG && thv <= hiG) {
       var ty = Y(thv);
       var tl = document.createElementNS(NS, "line");
@@ -2500,6 +2501,11 @@
         (b.low_fno ? " · " + b.low_fno : "") +
         (b.low_date ? " · " + b.low_date : ""));
       head.appendChild(badge);
+      if (b.threshold > 0) {
+        head.appendChild(el("span", "cabin-timed-chip",
+          "阈值 " + fmtCny(b.threshold) +
+          (b.low <= b.threshold ? " · 已达" : "")));
+      }
     }
     var fillBtn = el("button", "btn small cabin-fill-btn",
       "\u8865\u9f50\u65f6\u523b");
