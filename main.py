@@ -50,6 +50,7 @@ from core.cabin_monitor import (
 from core.point_fill import load_cache as load_point_cache
 from core.point_fill import merge_point_fill
 from core.cdp_board import fill as cdp_fill
+from core.cdp_cabin import patrol_fill as cdp_cabin_patrol_fill
 from core.sh_board import sh_fill
 from core.models import FlightDeal
 from core.version import CODE_VERSION
@@ -1121,6 +1122,19 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
     # v1.15: throttle visibility - the agents card explains an empty
     # round as gateway 429 (cooldown), not "no business seats".
     info["throttle"] = n_thr
+
+    # v1.27: real-browser precision capture - the CDP qunar cabin
+    # filter (筛选->舱位->公务/头等舱->确定, live-verified) answers
+    # the exact date the throttle-gated gateway misses. Fires when
+    # throttled or every 4th round; the daily cap bounds the browser
+    # minutes. Deposits absorb on the NEXT round's point pass.
+    try:
+        info["cdp_cabin"] = cdp_cabin_patrol_fill(
+            cw, cfg.get("routes") or [], DATA_DIR, log,
+            throttle_hits=n_thr)
+    except Exception as e:
+        log.warning("cdp cabin fill failed: %s" % e)
+        info["cdp_cabin"] = {"error": str(e)[:120]}
 
     # v1.18: Shanghai official board fill - the 429 lock grounded
     # Booking refills, but legs touching Shanghai can pull official
