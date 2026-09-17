@@ -48,9 +48,10 @@ def _hist(*dates):
 
 class TestEarliestFirst(unittest.TestCase):
     def test_soonest_departure_burns_first(self):
+        # 2026-10-28 Wed, 2026-10-19 Mon; window covers Monday
         hist = _hist("2026-10-28",  # Wednesday, CZ8803 covers it
                      "2026-10-19")  # Monday, no dow entry -> prio
-        out = dow_targets(hist, {"flights": {}})
+        out = dow_targets(hist, {"flights": {}}, window_dows={"0", "1"})
         # both dates share the fno; the MISSING Monday (dow 0) must
         # lead the needed set because 10-19 departs before 10-28
         self.assertEqual(out, [{"fno": "CZ8803", "direction": 2,
@@ -63,7 +64,11 @@ class TestForceBypass(unittest.TestCase):
         shutil.rmtree(tmp, ignore_errors=True)  # no cross-run state
         os.makedirs(tmp, exist_ok=True)
         sess = FakeSession()
-        sh_fill(sess, {"sh_pace": 0}, tmp, _hist("2026-10-19"),
+        # dynamic dates: today/tomorrow always sit in the queryable
+        # window regardless of which weekday the suite runs on
+        today = dt.date.today()
+        sh_fill(sess, {"sh_pace": 0}, tmp,
+                _hist(today.isoformat(), (today + dt.timedelta(days=1)).isoformat()),
                 force=True)
         self.assertEqual(len(sess.calls), 2)  # off0 + off1, no cache
 

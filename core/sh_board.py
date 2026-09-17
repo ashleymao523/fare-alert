@@ -271,10 +271,20 @@ def neg_hit(data_dir, fno, direction, day_offset):
         return False
 
 
-def dow_targets(history, sched_db, max_fnos=4):
+def dow_targets(history, sched_db, max_fnos=4, window_dows=None,
+                today=None):
     """Distinct timeless fnos on Shanghai legs whose needed weekdays
     are still missing from the sched db - once every needed dow is
-    deposited, the fno stops querying (queries self-extinguish)."""
+    deposited, the fno stops querying (queries self-extinguish).
+
+    v1.21 value-first scheduling: the board only answers yesterday/
+    today/tomorrow, so a query can ONLY deposit rows dated in that
+    window. An fno whose missing dows do not overlap the window gains
+    nothing from a slot today - it is skipped (its queries would be
+    pure budget burn), and fnos that can FINISH this round (every
+    missing dow inside the window) lead, fewest-missing first, so
+    legs converge to full time coverage instead of starving behind
+    daily flights that miss all seven dows."""
     need = {}
     # v1.19: remember the EARLIEST observation date per fno - refilling
     # soonest departures first maximizes the chance a row is still
@@ -295,19 +305,38 @@ def dow_targets(history, sched_db, max_fnos=4):
             need.setdefault(key, set()).add(str(d.weekday()))
             if key not in earliest or d < earliest[key]:
                 earliest[key] = d
+    today = today or _dt.date.today()
+    if window_dows is None:
+        window_dows = {str(today.weekday()),
+                       str((today + _dt.timedelta(days=1)).weekday())}
+    window = {str(d) for d in window_dows}
     flights = (sched_db or {}).get("flights") or {}
-    out = []
+    missing_map = {}
     for (fno, direction), dows in sorted(
             need.items(), key=lambda kv: earliest.get(kv[0],
                                                       _dt.date.max)):
         have = ((flights.get(fno) or {}).get("dows") or {})
-        if any(not (have.get(dw) or {}).get("dep")
-               and not (have.get(dw) or {}).get("arr")
-               for dw in dows):
-            out.append({"fno": fno, "direction": direction,
-                        "dows": sorted(dows)})
-        if len(out) >= max_fnos:
-            break
+        missing = sorted(
+            dw for dw in dows
+            if not (have.get(dw) or {}).get("dep")
+            and not (have.get(dw) or {}).get("arr"))
+        if not missing:
+            continue  # fully deposited - self-extinguished
+        if not (set(missing) & window):
+            continue  # nothing today's queries could deposit helps
+        missing_map[(fno, direction)] = missing
+
+    def _rank(kv):
+        fno_key, missing = kv
+        completable = set(missing) <= window
+        return (0 if completable else 1, len(missing),
+                earliest.get(fno_key, _dt.date.max))
+
+    out = [{"fno": fno, "direction": direction, "dows": missing}
+           for (fno, direction), missing in sorted(
+               missing_map.items(), key=_rank)]
+    if len(out) >= max_fnos:
+        out = out[:max_fnos]
     return out
 
 
@@ -356,7 +385,7 @@ def sh_fill(session, net_cfg, data_dir, history, log=None,
     pace = net_cfg.get("sh_pace")
     if pace is None:
         pace = max(2.0, float(net_cfg.get("call_interval") or 2.5))
-    stats = {"queries": 0, "exact": 0, "dow_new": 0,
+    stats = {"queries": 0, "exact": 0, "filled": 0,
              "fnos": 0, "capped": False}
     today = _dt.date.today()
     sched_path = os.path.join(data_dir, DB_NAME)
@@ -376,23 +405,32 @@ def sh_fill(session, net_cfg, data_dir, history, log=None,
             plan.append({"fno": t["fno"], "direction": t["direction"]})
     # priority 2: fnos still missing dow deposits
     for t in dow_targets(history, db, max_fnos=max_fnos):
-        k = (t["fno"], t["direction"])
         # v1.20: a fno the board answered empty for BOTH offsets in
         # the last 24h must not occupy a plan slot (it would starve
         # real fnos even though its own queries cost nothing).
-        if all(neg_hit(data_dir, t["fno"], t["direction"], o)
-               for o in (0, 1)):
+        # v1.21: only offsets whose date-dow is actually MISSING can
+        # deposit a new row - query those, skip the rest (half the
+        # budget used to go to offsets whose dow was already known).
+        useful = [o for o in (0, 1)
+                  if str((today + _dt.timedelta(days=o)).weekday())
+                  in t["dows"]]
+        if not useful:
             continue
+        if all(neg_hit(data_dir, t["fno"], t["direction"], o)
+               for o in useful):
+            continue
+        k = (t["fno"], t["direction"])
         if k not in seen:
             seen.add(k)
-            plan.append({"fno": t["fno"], "direction": t["direction"]})
+            t["offsets"] = useful
+            plan.append(t)
     plan = plan[:max_fnos]
     changed = False
     first_net = True
     fails = 0
     for p in plan:
         stop = False
-        for off in (0, 1):
+        for off in p.get("offsets", (0, 1)):
             if not first_net:
                 time.sleep(pace)
             try:
@@ -422,7 +460,9 @@ def sh_fill(session, net_cfg, data_dir, history, log=None,
                 stats["neg"] = stats.get("neg", 0) + 1
             if rows:
                 stats["exact"] += apply_exact_times(history, rows)
-                changed = merge_sh_rows(db, rows) or changed
+                if merge_sh_rows(db, rows):
+                    changed = True
+                    stats["filled"] += 1
         if stop:
             break
         stats["fnos"] += 1

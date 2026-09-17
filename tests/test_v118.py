@@ -142,13 +142,18 @@ class TestDowTargets(unittest.TestCase):
         "from_city": "北京", "to_city": "上海", "obs": [
             {"date": "2026-09-16", "fno": "HO1254"}]}}}
 
+    # 2026-09-16 is a Tuesday; v1.21 window is explicit in tests
+    WINDOW = {"2", "3"}  # Tuesday + Wednesday
+
     def test_missing_dow_queries_then_self_extinguishes(self):
         self.assertEqual(
-            dow_targets(self.HIST, {"flights": {}}),
+            dow_targets(self.HIST, {"flights": {}},
+                        window_dows=self.WINDOW),
             [{"fno": "HO1254", "direction": 2, "dows": ["2"]}])
         db = {"flights": {"HO1254": {"dows": {
             "2": {"dep": "21:25", "arr": "23:35"}}}}}
-        self.assertEqual(dow_targets(self.HIST, db), [])
+        self.assertEqual(
+            dow_targets(self.HIST, db, window_dows=self.WINDOW), [])
 
     def test_max_fnos_bounds_the_run(self):
         hist = {"routes": {"r1": {
@@ -157,7 +162,8 @@ class TestDowTargets(unittest.TestCase):
                 {"date": "2026-09-16", "fno": "HO1258"},
                 {"date": "2026-09-16", "fno": "HO1260"}]}}}
         self.assertEqual(len(dow_targets(hist, {"flights": {}},
-                                         max_fnos=2)), 2)
+                                         max_fnos=2,
+                                         window_dows=self.WINDOW)), 2)
 
 
 class _Resp:

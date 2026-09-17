@@ -129,12 +129,10 @@ class TestNegCache(unittest.TestCase):
             "from_city": "北京", "to_city": "上海", "obs": [
                 {"date": "2026-10-19", "fno": "CZ3440"},
                 {"date": "2026-10-20", "fno": "HO1254"}]}}}
-        seen = []
-        # run the same planning sh_fill does, via its knobs: max_fnos=2
-        # and both fnos targetable - the neg one must not lead.
+        # 10-19 Monday, 10-20 Tuesday; window covers both
         from core.sh_board import dow_targets
-        import core.sh_board as sb
-        plan_sources = dow_targets(hist, {"flights": {}}, max_fnos=4)
+        plan_sources = dow_targets(hist, {"flights": {}}, max_fnos=4,
+                                   window_dows={"0", "1"})
         # emulate sh_fill's slot filter inline (its loop is inside
         # sh_fill; here we assert the predicate the filter uses)
         kept = [t for t in plan_sources

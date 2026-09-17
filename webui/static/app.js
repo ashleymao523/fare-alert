@@ -2346,7 +2346,7 @@
       var bits = [];
       if (sf.queries != null) bits.push("查询 " + sf.queries);
       if (sf.exact) bits.push("精确回写 " + sf.exact);
-      if (sf.fnos != null) bits.push("航班 " + sf.fnos);
+      if (sf.filled != null) bits.push("时刻行 " + sf.filled);
       if (sf.neg) bits.push("负缓存 " + sf.neg);
       if (sf.capped) bits.push("今日额度已满");
       if (sf.breaker) bits.push("WAF 熔断");
