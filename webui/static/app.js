@@ -2350,9 +2350,22 @@
       if (sf.neg) bits.push("负缓存 " + sf.neg);
       if (sf.capped) bits.push("今日额度已满");
       if (sf.breaker) bits.push("WAF 熔断");
-      if (bits.length)
+    if (bits.length)
         box.appendChild(el("div", "muted",
           "上海板时刻: " + bits.join(" · ")));
+    }
+    var cf = patrol.cdp_fill || null;
+    if (cf) {
+      var cbits = [];
+      if (cf.queries != null) cbits.push("查询 " + cf.queries);
+      if (cf.exact) cbits.push("精确回写 " + cf.exact);
+      if (cf.filled != null) cbits.push("时刻行 " + cf.filled);
+      if (cf.neg) cbits.push("负缓存 " + cf.neg);
+      if (cf.capped) cbits.push("今日额度已满");
+      if (cf.breaker) cbits.push("浏览器熔断");
+      if (cbits.length)
+        box.appendChild(el("div", "muted",
+          "携程板时刻: " + cbits.join(" · ")));
     }
     var board = (doc && doc.board) || [];
     var tt = (doc && doc.timetable) || [];

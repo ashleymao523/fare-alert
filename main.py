@@ -48,6 +48,7 @@ from core.cabin_monitor import (
 )
 from core.point_fill import load_cache as load_point_cache
 from core.point_fill import merge_point_fill
+from core.cdp_board import fill as cdp_fill
 from core.sh_board import sh_fill
 from core.models import FlightDeal
 from core.version import CODE_VERSION
@@ -1131,6 +1132,20 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
                 os.path.join(DATA_DIR, "cabin_history.json"), hist)
     except Exception as e:
         log.warning("sh board fill failed: %s" % e)
+
+    # v1.22: ctrip detail board fill - any future date, per (fno,
+    # date) exact plan times through a real browser over CDP. Covers
+    # the far-window obs the Shanghai board can never answer and
+    # legs with no metro airport board at all (e.g. Chongqing).
+    try:
+        hist = cabin_history_load(DATA_DIR)  # reload: sh wrote
+        info["cdp_fill"] = cdp_fill(
+            cfg.get("network", {}), DATA_DIR, hist, log)
+        if info["cdp_fill"].get("exact"):
+            cabin_atomic_write(
+                os.path.join(DATA_DIR, "cabin_history.json"), hist)
+    except Exception as e:
+        log.warning("ctrip board fill failed: %s" % e)
 
     # v1.09 C: keyed Amadeus overlay still stacks on top when present.
     n_ama = 0

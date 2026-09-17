@@ -967,6 +967,8 @@ def api_cabin():
         # v1.18: Shanghai board fill stats - exact per-date official
         # times plus dow deposits (queries/fnos/capped for the badge).
         "sh_fill": pstate.get("sh_fill"),
+        # v1.22: ctrip detail board fill stats (any future date).
+        "cdp_fill": pstate.get("cdp_fill"),
     }
     return jsonify({"config": cw, "history": ch,
                     "board": cw_board(ch, sched=sched_flights),
