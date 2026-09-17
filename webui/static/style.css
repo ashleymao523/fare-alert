@@ -523,6 +523,17 @@ input::placeholder { color: var(--faint); }
   vertical-align: 1px;
   cursor: help;
 }
+.cabin-tt-time em.cabin-tt-cross {
+  font-style: normal;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--r-1);
+  padding: 0 3px;
+  margin-left: 5px;
+  vertical-align: 1px;
+}
 .cabin-leg-meta {
   display: flex; gap: var(--sp-md); flex-wrap: wrap;
   color: var(--muted); font-size: var(--fs-sm);

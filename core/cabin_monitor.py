@@ -698,6 +698,7 @@ def history_timetable(history, per_leg=8, sched=None):
                       "fno": o.get("fno") or "",
                       "dep": o.get("dep") or "",
                       "arr": o.get("arr") or "",
+                      "cross_day": bool(o.get("cross_day")),
                       "tsrc": o.get("tsrc") or "",
                       "price": o["price"]} for o in top],
         })

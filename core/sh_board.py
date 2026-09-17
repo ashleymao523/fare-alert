@@ -248,6 +248,10 @@ def dow_targets(history, sched_db, max_fnos=4):
     are still missing from the sched db - once every needed dow is
     deposited, the fno stops querying (queries self-extinguish)."""
     need = {}
+    # v1.19: remember the EARLIEST observation date per fno - refilling
+    # soonest departures first maximizes the chance a row is still
+    # bookable when its time lands.
+    earliest = {}
     for rid, r in (history.get("routes") or {}).items():
         fc, tc = r.get("from_city", ""), r.get("to_city", "")
         if not _is_sh_leg(fc, tc):
@@ -261,9 +265,13 @@ def dow_targets(history, sched_db, max_fnos=4):
                 continue
             key = (fno, 2 if METRO_KEY in str(tc) else 1)
             need.setdefault(key, set()).add(str(d.weekday()))
+            if key not in earliest or d < earliest[key]:
+                earliest[key] = d
     flights = (sched_db or {}).get("flights") or {}
     out = []
-    for (fno, direction), dows in sorted(need.items()):
+    for (fno, direction), dows in sorted(
+            need.items(), key=lambda kv: earliest.get(kv[0],
+                                                      _dt.date.max)):
         have = ((flights.get(fno) or {}).get("dows") or {})
         if any(not (have.get(dw) or {}).get("dep")
                and not (have.get(dw) or {}).get("arr")
@@ -307,7 +315,7 @@ def apply_exact_times(history, rows, now=None):
 
 
 def sh_fill(session, net_cfg, data_dir, history, log=None,
-            max_fnos=4):
+            max_fnos=4, force=False):
     """Driver: exact-date fills for in-window rows + dow deposits
     for the rest. Bounded per run (max_fnos x 2 offsets), globally
     daily-capped; returns stats for the patrol card."""
@@ -356,7 +364,7 @@ def sh_fill(session, net_cfg, data_dir, history, log=None,
             try:
                 rows, how = fetch_flight(
                     session, net_cfg, p["fno"], p["direction"],
-                    off, data_dir)
+                    off, data_dir, force=force)
             except Exception as e:
                 first_net = False
                 fails += 1

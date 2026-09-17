@@ -2247,6 +2247,10 @@
     r.appendChild(el("span", "cabin-tt-date", row.date || ""));
     r.appendChild(el("span", "cabin-tt-fno", row.fno || "—"));
     var timeBox = el("span", "cabin-tt-time", time);
+    if (row.cross_day) {
+      timeBox.title = "跨零点到达：落地时刻为次日（含经停/红眼航班）";
+      timeBox.appendChild(el("em", "cabin-tt-cross", "+1"));
+    }
     if (row.tsrc === "sched-borrow") {
       timeBox.appendChild(el("em", "cabin-tt-borrow", "借用"));
       timeBox.title = "时刻来自排班库同航班同星期实测，非当日专查；购票页为准";

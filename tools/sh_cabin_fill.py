@@ -35,6 +35,9 @@ def main() -> int:
         description="One-shot Shanghai-board cabin time fill.")
     ap.add_argument("--max", type=int, default=4,
                     help="max flight numbers per run (default 4)")
+    ap.add_argument("--force", action="store_true",
+                    help="bypass the 6h row cache (re-query even the "
+                         "keys already fetched today)")
     ap.add_argument("--dry", action="store_true",
                     help="only list targets, no network calls")
     args = ap.parse_args()
@@ -89,7 +92,8 @@ def main() -> int:
                 time.sleep(pace)  # Shanghai WAF: >=2s between POSTs
             try:
                 rows, how = fetch_flight(
-                    session, net, fno, direction, off, DATA_DIR)
+                    session, net, fno, direction, off, DATA_DIR,
+                    force=args.force)
             except Exception as e:
                 first_net = False
                 fails += 1
