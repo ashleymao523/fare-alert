@@ -2239,6 +2239,185 @@
     return wrap;
   }
 
+  /* v1.24: per-leg daily-lowest trend (wide area chart) - gradient
+     area under an accent line, extreme markers, dashed threshold
+     line from cabin_watch.threshold_total, hover crosshair with a
+     date+price readout. Pure client-side: renders the same backend
+     "spark" projection the v1.12 mini sparkline already used. */
+  var trendDoc = null;
+
+  function cabinTrendCard(g, doc) {
+    var wrap = el("div", "cabin-trend");
+    var pts = (g && g.spark) || [];
+    var head = el("div", "cabin-trend-head");
+    head.appendChild(el("span", "cabin-trend-title",
+      "每日最低价走势 · 近" + pts.length + "个观测日"));
+    if (pts.length >= 2) {
+      var hLo = Infinity, hHi = -Infinity, hLoD = "", hHiD = "";
+      pts.forEach(function (p) {
+        if (p.p < hLo) { hLo = p.p; hLoD = p.d; }
+        if (p.p > hHi) { hHi = p.p; hHiD = p.d; }
+      });
+      head.appendChild(el("span", "cabin-trend-range",
+        "低 " + fmtCny(hLo) + " (" + (hLoD || "").slice(5) + ")" +
+        " · 高 " + fmtCny(hHi) + " (" + (hHiD || "").slice(5) + ")"));
+    }
+    wrap.appendChild(head);
+    if (pts.length < 2) {
+      wrap.appendChild(el("div", "muted cabin-trend-empty",
+        "观测日不足，趋势图将在巡检积累数据后呈现"));
+      return wrap;
+    }
+    var W = 640, H = 150, PL = 46, PR = 16, PT = 14, PB = 22;
+    var lo = Infinity, hi = -Infinity;
+    pts.forEach(function (p) {
+      if (p.p < lo) lo = p.p;
+      if (p.p > hi) hi = p.p;
+    });
+    var span = (hi - lo) || 1;
+    var loG = lo - span * 0.14, hiG = hi + span * 0.14;
+    var spanG = (hiG - loG) || 1;
+    function X(i) {
+      return PL + (W - PL - PR) * (i / (pts.length - 1));
+    }
+    function Y(p) {
+      return PT + (H - PT - PB) * (1 - (p - loG) / spanG);
+    }
+    var NS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.setAttribute("class", "cabin-trend-svg");
+    svg.setAttribute("role", "img");
+    var defs = document.createElementNS(NS, "defs");
+    var grad = document.createElementNS(NS, "linearGradient");
+    grad.setAttribute("id", "cabin-trend-grad-" + g.route_id);
+    grad.setAttribute("x1", "0"); grad.setAttribute("y1", "0");
+    grad.setAttribute("x2", "0"); grad.setAttribute("y2", "1");
+    var s1 = document.createElementNS(NS, "stop");
+    s1.setAttribute("offset", "0%");
+    s1.setAttribute("stop-color", "var(--accent)");
+    s1.setAttribute("stop-opacity", "0.2");
+    var s2 = document.createElementNS(NS, "stop");
+    s2.setAttribute("offset", "100%");
+    s2.setAttribute("stop-color", "var(--accent)");
+    s2.setAttribute("stop-opacity", "0.02");
+    grad.appendChild(s1); grad.appendChild(s2);
+    defs.appendChild(grad);
+    svg.appendChild(defs);
+    var gi, pv, gy, gl, lb;
+    for (gi = 0; gi <= 3; gi++) {
+      pv = loG + spanG * (gi / 3);
+      gy = Y(pv);
+      gl = document.createElementNS(NS, "line");
+      gl.setAttribute("x1", PL); gl.setAttribute("x2", W - PR);
+      gl.setAttribute("y1", gy.toFixed(1));
+      gl.setAttribute("y2", gy.toFixed(1));
+      gl.setAttribute("class", "cabin-trend-grid");
+      svg.appendChild(gl);
+      lb = document.createElementNS(NS, "text");
+      lb.setAttribute("x", PL - 6);
+      lb.setAttribute("y", (gy + 3).toFixed(1));
+      lb.setAttribute("text-anchor", "end");
+      lb.setAttribute("class", "cabin-trend-lab");
+      lb.textContent = Math.round(pv);
+      svg.appendChild(lb);
+    }
+    var thv = parseFloat(((doc && doc.config) || {}).threshold_total);
+    if (thv > 0 && thv >= loG && thv <= hiG) {
+      var ty = Y(thv);
+      var tl = document.createElementNS(NS, "line");
+      tl.setAttribute("x1", PL); tl.setAttribute("x2", W - PR);
+      tl.setAttribute("y1", ty.toFixed(1));
+      tl.setAttribute("y2", ty.toFixed(1));
+      tl.setAttribute("class", "cabin-trend-th");
+      svg.appendChild(tl);
+      var tt = document.createElementNS(NS, "text");
+      tt.setAttribute("x", W - PR);
+      tt.setAttribute("y", (ty - 4).toFixed(1));
+      tt.setAttribute("text-anchor", "end");
+      tt.setAttribute("class", "cabin-trend-th-lab");
+      tt.textContent = "阈值 " + fmtCny(thv);
+      svg.appendChild(tt);
+    }
+    var xs = [], ys = [];
+    pts.forEach(function (p, i) { xs.push(X(i)); ys.push(Y(p.p)); });
+    var lineD = xs.map(function (x, j) {
+      return (j ? "L" : "M") + x.toFixed(1) + " " + ys[j].toFixed(1);
+    }).join(" ");
+    var area = document.createElementNS(NS, "path");
+    area.setAttribute("d", lineD + " L" +
+      xs[xs.length - 1].toFixed(1) + " " + (H - PB) +
+      " L" + xs[0].toFixed(1) + " " + (H - PB) + " Z");
+    area.setAttribute("fill",
+      "url(#cabin-trend-grad-" + g.route_id + ")");
+    svg.appendChild(area);
+    var path = document.createElementNS(NS, "path");
+    path.setAttribute("d", lineD);
+    path.setAttribute("class", "cabin-trend-line");
+    svg.appendChild(path);
+    var li = 0, hix = 0;
+    pts.forEach(function (p, i) {
+      if (p.p < pts[li].p) li = i;
+      if (p.p > pts[hix].p) hix = i;
+    });
+    [[li, "cabin-trend-dot-low"], [hix, "cabin-trend-dot-high"]]
+      .forEach(function (m) {
+        var c = document.createElementNS(NS, "circle");
+        c.setAttribute("cx", xs[m[0]].toFixed(1));
+        c.setAttribute("cy", ys[m[0]].toFixed(1));
+        c.setAttribute("r", "3.5");
+        c.setAttribute("class", m[1]);
+        svg.appendChild(c);
+      });
+    var last = pts.length - 1;
+    [0, Math.round(last / 2), last].forEach(function (i, k, arr) {
+      if (k > 0 && i === arr[k - 1]) return;
+      var t = document.createElementNS(NS, "text");
+      t.setAttribute("x", xs[i].toFixed(1));
+      t.setAttribute("y", H - 6);
+      t.setAttribute("text-anchor",
+        k === 0 ? "start" : (k === arr.length - 1 ? "end" : "middle"));
+      t.setAttribute("class", "cabin-trend-lab");
+      t.textContent = (pts[i].d || "").slice(5);
+      svg.appendChild(t);
+    });
+    var xh = document.createElementNS(NS, "line");
+    xh.setAttribute("class", "cabin-trend-xhair");
+    xh.setAttribute("y1", PT); xh.setAttribute("y2", H - PB);
+    xh.style.display = "none";
+    svg.appendChild(xh);
+    var tip = document.createElementNS(NS, "circle");
+    tip.setAttribute("r", "4");
+    tip.setAttribute("class", "cabin-trend-tipdot");
+    tip.style.display = "none";
+    svg.appendChild(tip);
+    var box = el("div", "cabin-trend-tip");
+    box.style.display = "none";
+    wrap.appendChild(svg);
+    wrap.appendChild(box);
+    svg.addEventListener("mousemove", function (ev) {
+      var r = svg.getBoundingClientRect();
+      var mx = (ev.clientX - r.left) / r.width * W;
+      var step = (W - PL - PR) / Math.max(1, pts.length - 1);
+      var i = Math.round((mx - PL) / step);
+      i = Math.max(0, Math.min(pts.length - 1, i));
+      xh.setAttribute("x1", xs[i].toFixed(1));
+      xh.setAttribute("x2", xs[i].toFixed(1));
+      xh.style.display = "";
+      tip.setAttribute("cx", xs[i].toFixed(1));
+      tip.setAttribute("cy", ys[i].toFixed(1));
+      tip.style.display = "";
+      box.style.display = "";
+      box.textContent = pts[i].d + " · 最低 " + fmtCny(pts[i].p);
+    });
+    svg.addEventListener("mouseleave", function () {
+      xh.style.display = "none";
+      tip.style.display = "none";
+      box.style.display = "none";
+    });
+    return wrap;
+  }
+
   function cabinTtRow(row) {
     var cls = "cabin-tt-row" + (row.url ? " link" : "");
     var r = el("div", cls);
@@ -2305,7 +2484,7 @@
     });
   }
 
-  function cabinLegCard(g, b) {
+  function cabinLegCard(g, b, doc) {
     var c = el("div", "cabin-leg");
     var head = el("div", "cabin-leg-head");
     head.appendChild(el("span", "cabin-leg-name",
@@ -2329,6 +2508,8 @@
     });
     head.appendChild(fillBtn);
     c.appendChild(head);
+    var tdoc = doc || trendDoc;
+    if (tdoc) c.appendChild(cabinTrendCard(g, tdoc));
     c.appendChild(cabinSpark(g));  // v1.12: price sparkline under head
     if (b) {
       var meta = el("div", "cabin-leg-meta");
@@ -2360,6 +2541,7 @@
   function renderCabin(doc) {
     var box = $("cabinPanel");
     box.textContent = "";
+    trendDoc = doc || null;
     var patrol = doc && doc.patrol || {};
     var st = el("div", "cabin-status");
     st.appendChild(el("span", "",
@@ -2422,7 +2604,7 @@
       return;
     }
     groups.forEach(function (g) {
-      box.appendChild(cabinLegCard(g, bmap[g.route_id]));
+      box.appendChild(cabinLegCard(g, bmap[g.route_id], doc));
     });
   }
 

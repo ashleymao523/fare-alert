@@ -1019,3 +1019,53 @@ input::placeholder { color: var(--faint); }
 .wk-card:hover { box-shadow: 0 6px 22px rgba(16,24,40,.08);
   transform: translateY(-1px); }
 .wk-text { border-left: 3px solid var(--accent-ink, var(--green-d)); }
+
+/* ---- v1.24: 公务舱每日最低价趋势 (wide area chart) ---- */
+.cabin-trend {
+  position: relative;
+  margin-top: var(--sp-sm);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md, 12px);
+  background: var(--card2);
+  padding: var(--sp-sm) var(--sp-sm) var(--sp-1);
+}
+.cabin-trend-head {
+  display: flex; align-items: baseline; gap: var(--sp-sm);
+  flex-wrap: wrap; margin-bottom: var(--sp-1);
+}
+.cabin-trend-title {
+  font-size: var(--fs-sm); font-weight: 700; color: var(--text-2);
+}
+.cabin-trend-range { font-size: var(--fs-xs); color: var(--muted); }
+.cabin-trend-empty { font-size: var(--fs-sm); padding: var(--sp-2) 0; }
+.cabin-trend-svg { display: block; width: 100%; height: auto; }
+.cabin-trend-grid { stroke: var(--line-soft); stroke-width: 1; }
+.cabin-trend-lab { fill: var(--faint); font-size: var(--fs-2xs); }
+.cabin-trend-line {
+  fill: none; stroke: var(--accent); stroke-width: 2.2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.cabin-trend-dot-low {
+  fill: var(--green); stroke: var(--card); stroke-width: 1.5;
+}
+.cabin-trend-dot-high {
+  fill: var(--amber); stroke: var(--card); stroke-width: 1.5;
+}
+.cabin-trend-th {
+  stroke: var(--red); stroke-width: 1;
+  stroke-dasharray: 4 4; opacity: 0.7;
+}
+.cabin-trend-th-lab {
+  fill: var(--red-d); font-size: var(--fs-2xs); font-weight: 700;
+}
+.cabin-trend-xhair { stroke: var(--line-strong); stroke-width: 1; }
+.cabin-trend-tipdot {
+  fill: var(--accent); stroke: var(--card); stroke-width: 2;
+}
+.cabin-trend-tip {
+  position: absolute; top: 40px; right: 28px;
+  background: var(--text); color: var(--card);
+  font-size: var(--fs-xs); font-weight: 600;
+  padding: 3px 9px; border-radius: var(--r-pill);
+  box-shadow: var(--sh-2); pointer-events: none;
+}

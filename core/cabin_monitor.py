@@ -699,7 +699,9 @@ def history_timetable(history, per_leg=8, sched=None):
                       "dep": o.get("dep") or "",
                       "arr": o.get("arr") or "",
                       "cross_day": bool(o.get("cross_day")),
-                      "tsrc": o.get("tsrc") or "",
+                      "tsrc": o.get("tsrc")
+                              or ("patrol" if (o.get("dep") or "")
+                                  and (o.get("arr") or "") else ""),
                       "price": o["price"]} for o in top],
         })
     groups.sort(key=lambda g: (g["rows"][0]["price"]
