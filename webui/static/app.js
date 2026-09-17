@@ -2270,6 +2270,41 @@
     return r;
   }
 
+  function fillTimes(btn, card, g) {
+    if (btn.dataset.busy) return;
+    btn.dataset.busy = "1";
+    btn.disabled = true;
+    btn.textContent = "\u7cbe\u67e5\u4e2d\u2026";
+    var line = el("div", "cabin-fill-status muted",
+      "\u6b63\u5728\u9010\u73ed\u7cbe\u67e5\u8d77\u964d\u65f6\u523b\uff08\u4e0e\u5de1\u903b\u5171\u4eab\u6bcf\u65e5\u989d\u5ea6\uff09\u2026");
+    if (card.children.length > 1) {
+      card.insertBefore(line, card.children[1]);
+    } else {
+      card.appendChild(line);
+    }
+    post("/api/tasks/cdp-fill/run", {
+      from_city: g.from_city,
+      to_city: g.to_city
+    }).then(function (doc) {
+      var s = (doc && doc.stats) || {};
+      var bits = ["\u7cbe\u67e5\u5b8c\u6210"];
+      if (s.queries != null) bits.push("\u67e5\u8be2 " + s.queries);
+      if (s.exact != null) bits.push("\u56de\u5199 " + s.exact);
+      if (s.neg) bits.push("\u8d1f\u7f13\u5b58 " + s.neg);
+      if (s.capped) bits.push("\u4eca\u65e5\u989d\u5ea6\u5df2\u6ee1");
+      if (s.breaker) bits.push("\u6d4f\u89c8\u5668\u7194\u65ad");
+      line.textContent = bits.join(" \u00b7 ") +
+        "\uff0c\u8868\u683c\u5df2\u5237\u65b0";
+      return api("/api/cabin").then(renderCabin);
+    }).catch(function (e) {
+      line.textContent = "\u7cbe\u67e5\u5931\u8d25\uff1a" +
+        (e.message || e);
+      btn.disabled = false;
+      btn.textContent = "\u8865\u9f50\u65f6\u523b";
+      delete btn.dataset.busy;
+    });
+  }
+
   function cabinLegCard(g, b) {
     var c = el("div", "cabin-leg");
     var head = el("div", "cabin-leg-head");
@@ -2287,6 +2322,12 @@
         (b.low_date ? " · " + b.low_date : ""));
       head.appendChild(badge);
     }
+    var fillBtn = el("button", "btn small cabin-fill-btn",
+      "\u8865\u9f50\u65f6\u523b");
+    fillBtn.addEventListener("click", function () {
+      fillTimes(fillBtn, c, g);
+    });
+    head.appendChild(fillBtn);
     c.appendChild(head);
     c.appendChild(cabinSpark(g));  // v1.12: price sparkline under head
     if (b) {

@@ -460,3 +460,98 @@ def fill(net_cfg, data_dir, history, log=None, max_fnos=4,
             if log:
                 log.warning("ctrip board history write failed: %s", e)
     return stats
+
+
+def route_targets(history, from_city, to_city, max_fnos=8,
+                  today=None):
+    """Timeless obs rows on ONE leg -> per-fno targets, earliest
+    date first. City contract matches _apply_exact (containment,
+    page-wide names are supersets of the stored city). Pure."""
+    today = today or _dt.date.today()
+    earliest = {}
+    for rid, r in (history.get("routes") or {}).items():
+        fc = str(r.get("from_city") or "")
+        tc = str(r.get("to_city") or "")
+        if from_city and fc != from_city:
+            continue
+        if to_city and tc != to_city:
+            continue
+        for o in (r.get("obs") or []):
+            fno = _norm_no(o.get("fno"))
+            if not fno or o.get("dep") or o.get("arr"):
+                continue
+            d = _day(o.get("date"))
+            if d is None or d < today:
+                continue
+            if fno not in earliest or d < earliest[fno]:
+                earliest[fno] = d
+    out = [{"fno": f, "date": d.isoformat()}
+           for f, d in sorted(earliest.items(), key=lambda kv: kv[1])]
+    return out[:max(0, int(max_fnos))]
+
+
+def fill_route(history, data_dir, from_city, to_city, log=None,
+               max_fnos=8, force=False):
+    """Route-targeted on-demand backfill: every timeless (fno, date)
+    obs on ONE leg, earliest date first. Same red lines as fill() -
+    row cache, neg cache, the shared daily 24-query ledger and the
+    browser breaker. Returns {stats, rows} for per-fno streaming."""
+    stats = {"queries": 0, "exact": 0, "filled": 0, "fnos": 0,
+             "neg": 0, "capped": False}
+    rows = []
+    sched_path = os.path.join(data_dir, DB_NAME)
+    try:
+        with open(sched_path, encoding="utf-8") as f:
+            db = json.load(f)
+    except Exception:
+        db = {"fmt": 2, "updated": 0, "flights": {}}
+    changed_db = False
+    fails = 0
+    for t in route_targets(history, from_city, to_city,
+                           max_fnos=max_fnos):
+        if neg_hit(data_dir, t["fno"], t["date"]):
+            stats["neg"] += 1
+            continue
+        try:
+            row, how = fetch_flight({}, data_dir, t["fno"], t["date"],
+                                    force=force)
+        except Exception as e:
+            fails += 1
+            rows.append({"fno": t["fno"], "date": t["date"],
+                         "how": "fail", "error": str(e)[:120]})
+            if log:
+                log.warning("ctrip on-demand %s@%s failed: %s",
+                            t["fno"], t["date"], e)
+            if fails >= 2:
+                stats["breaker"] = True
+                break
+            continue
+        fails = 0
+        if how == "capped":
+            stats["capped"] = True
+            break
+        if how == "net":
+            stats["queries"] += 1
+        elif how == "neg-cache":
+            stats["neg"] += 1
+        if row:
+            stats["exact"] += _apply_exact(history, row, t["date"])
+            if _merge_row(db, row, t["date"]):
+                stats["filled"] += 1
+                changed_db = True
+        rows.append({"fno": t["fno"], "date": t["date"], "how": how,
+                     "dep": (row or {}).get("dep", ""),
+                     "arr": (row or {}).get("arr", ""),
+                     "from": (row or {}).get("from", ""),
+                     "to": (row or {}).get("to", "")})
+        stats["fnos"] += 1
+    if changed_db:
+        db["updated"] = time.time()
+        try:
+            os.makedirs(data_dir, exist_ok=True)
+            _atomic_write(sched_path, db)
+        except Exception as e:
+            if log:
+                log.warning("ctrip on-demand sched db write failed: %s",
+                            e)
+    return {"stats": stats, "rows": rows}

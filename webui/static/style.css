@@ -499,6 +499,20 @@ input::placeholder { color: var(--faint); }
   white-space: nowrap;
 }
 
+.cabin-fill-btn { flex: none; }
+
+.cabin-fill-status {
+  margin: var(--sp-sm) 0;
+  font-size: var(--fs-sm);
+}
+
+.cabin-fill-btn { flex: none; }
+
+.cabin-fill-status {
+  margin: var(--sp-sm) 0;
+  font-size: var(--fs-sm);
+}
+
 .cabin-tt-time em.cabin-tt-borrow {
   font-style: normal;
   font-size: var(--fs-xs);

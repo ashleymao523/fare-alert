@@ -516,6 +516,42 @@ def api_tasks_cabin_run():
     return jsonify({"ok": True, "patrol": info})
 
 
+@app.post("/api/tasks/cdp-fill/run")
+def api_tasks_cdp_fill_run():
+    """v1.23: on-demand route backfill of business-cabin flight times
+    through the Ctrip CDP detail board (same code path as the patrol
+    fill, targeted at ONE leg, bounded by the shared daily ledger and
+    the browser breaker). Returns per-fno rows so the UI can show
+    per-fno progress and refill the timetable without a reload."""
+    body = request.get_json(silent=True) or {}
+    from_city = str(body.get("from_city") or "").strip()
+    to_city = str(body.get("to_city") or "").strip()
+    max_fnos = max(1, min(12, int(body.get("max_fnos") or 8)))
+    force = bool(body.get("force"))
+    if not from_city or not to_city:
+        return jsonify({"ok": False,
+                        "error": "from_city and to_city required"}), 400
+    with _lock:
+        from core.cabin_monitor import load_history as ch_load, \
+            _atomic_write as cabin_atomic_write
+        from core.cdp_board import fill_route
+        hist = ch_load(DATA_DIR)
+        try:
+            out = fill_route(hist, DATA_DIR, from_city, to_city,
+                             log=_log, max_fnos=max_fnos, force=force)
+        except Exception as e:
+            _log.error("cdp on-demand fill failed: %s", e)
+            return jsonify({"ok": False, "error": str(e)}), 500
+        if out.get("stats", {}).get("exact"):
+            try:
+                cabin_atomic_write(
+                    os.path.join(DATA_DIR, "cabin_history.json"), hist)
+            except Exception as e:
+                _log.warning("cdp on-demand history write failed: %s", e)
+    return jsonify({"ok": True, "from_city": from_city,
+                    "to_city": to_city, **out})
+
+
 @app.get("/api/point-gaps")
 def api_point_gaps():
     """v0.76: reference-only dates per route - the precise-query
