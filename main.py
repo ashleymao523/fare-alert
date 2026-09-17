@@ -48,6 +48,7 @@ from core.cabin_monitor import (
 )
 from core.point_fill import load_cache as load_point_cache
 from core.point_fill import merge_point_fill
+from core.sh_board import sh_fill
 from core.models import FlightDeal
 from core.version import CODE_VERSION
 from core.notify import has_channel, push_all
@@ -1115,6 +1116,21 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
     # v1.15: throttle visibility - the agents card explains an empty
     # round as gateway 429 (cooldown), not "no business seats".
     info["throttle"] = n_thr
+
+    # v1.18: Shanghai official board fill - the 429 lock grounded
+    # Booking refills, but legs touching Shanghai can pull official
+    # plan times straight from shanghaiairport.com (zero key): exact
+    # per-date times for today/tomorrow obs + dow deposits for the
+    # borrow ladder. Bounded + daily-capped inside sh_fill.
+    try:
+        hist = cabin_history_load(DATA_DIR)  # reload: absorb wrote
+        info["sh_fill"] = sh_fill(
+            session, cfg.get("network", {}), DATA_DIR, hist, log)
+        if info["sh_fill"].get("exact"):
+            cabin_atomic_write(
+                os.path.join(DATA_DIR, "cabin_history.json"), hist)
+    except Exception as e:
+        log.warning("sh board fill failed: %s" % e)
 
     # v1.09 C: keyed Amadeus overlay still stacks on top when present.
     n_ama = 0

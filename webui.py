@@ -964,6 +964,9 @@ def api_cabin():
         "throttle_streak": pstate.get("throttle_streak"),
         "interval_effective_minutes":
             pstate.get("interval_effective_minutes"),
+        # v1.18: Shanghai board fill stats - exact per-date official
+        # times plus dow deposits (queries/fnos/capped for the badge).
+        "sh_fill": pstate.get("sh_fill"),
     }
     return jsonify({"config": cw, "history": ch,
                     "board": cw_board(ch, sched=sched_flights),

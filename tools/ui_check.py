@@ -1208,6 +1208,31 @@ checks["v1.17 cabin push dep-arr times"] = (
     and ("test_threshold_hit_carries_fno_dep_arr" in _t117_src)
     and ("test_cabin_absorb_appends_suffix_on_both_paths" in _t117_src))
 
+# --- v1.18: Shanghai official board exact cabin times ---
+_sh_src = open(os.path.join("core", "sh_board.py"),
+               encoding="utf-8").read()
+_t118_src = open(os.path.join("tests", "test_v118.py"),
+                 encoding="utf-8").read()
+_main118_src = open("main.py", encoding="utf-8").read()
+_webui118_src = open("webui.py", encoding="utf-8").read()
+checks["v1.18 sh board exact cabin times"] = (
+    ("def fetch_flight(" in _sh_src)
+    and ("def merge_sh_rows(" in _sh_src)
+    and ("def exact_targets(" in _sh_src)
+    and ("def apply_exact_times(" in _sh_src)
+    and ("def sh_fill(" in _sh_src)
+    and ('src": "shanghai-board"' in _sh_src)
+    and ("from core.sh_board import sh_fill" in _main118_src)
+    and ('info["sh_fill"] = sh_fill(' in _main118_src)
+    and ('"sh_fill": pstate.get("sh_fill")' in _webui118_src)
+    and ("cabin-tt-sh" in appjs)
+    and ("shanghai-board" in appjs)
+    and ("em.cabin-tt-sh" in css)
+    and ("test_exact_fill_and_dow_deposit" in _t118_src)
+    and ("test_daily_cap_is_a_noop_not_an_error" in _t118_src)
+    and ("test_airport_board_stays_authoritative" in _t118_src)
+    and ("test_backend_frontend_and_ops_tool_wired" in _t118_src))
+
 bad = 0
 for k, v in checks.items():
     if not v1_dom and k in legacy_keys:

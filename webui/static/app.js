@@ -2251,6 +2251,10 @@
       timeBox.appendChild(el("em", "cabin-tt-borrow", "借用"));
       timeBox.title = "时刻来自排班库同航班同星期实测，非当日专查；购票页为准";
     }
+    if (row.tsrc === "shanghai-board") {
+      timeBox.appendChild(el("em", "cabin-tt-sh", "上海板"));
+      timeBox.title = "时刻为上海机场官网该日期官方计划时刻；购票页为准";
+    }
     r.appendChild(timeBox);
     r.appendChild(el("span", "cabin-tt-price", fmtCny(row.price)));
     if (row.url) {

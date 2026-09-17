@@ -511,6 +511,18 @@ input::placeholder { color: var(--faint); }
   vertical-align: 1px;
   cursor: help;
 }
+.cabin-tt-time em.cabin-tt-sh {
+  font-style: normal;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--card2);
+  border-radius: var(--r-1);
+  padding: 1px 4px;
+  margin-left: 5px;
+  vertical-align: 1px;
+  cursor: help;
+}
 .cabin-leg-meta {
   display: flex; gap: var(--sp-md); flex-wrap: wrap;
   color: var(--muted); font-size: var(--fs-sm);
