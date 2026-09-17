@@ -222,7 +222,7 @@ class TestShFillDriver(unittest.TestCase):
                "计划出发时间": today + " 21:25:00",
                "计划到达时间": today + " 23:35:00",
                "出发地": "北京 大兴", "目的地": "上海 浦东"}
-        stats = sh_fill(FakeSession([raw]), {}, tmp, hist)
+        stats = sh_fill(FakeSession([raw]), {"sh_pace": 0}, tmp, hist)
         self.assertEqual(stats["exact"], 1)
         o = hist["routes"]["r1"]["obs"][0]
         self.assertEqual((o["dep"], o["arr"], o["tsrc"]),

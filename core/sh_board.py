@@ -152,9 +152,17 @@ def fetch_flight(session, net_cfg, fno, direction, day_offset,
             "Referer": BOARD_REFERER,
             "X-Requested-With": "XMLHttpRequest",
             "Accept": "application/json",
+            # WAF contract (verified 2026-09-17): a bytes body without
+            # an explicit Content-Type gets a 403 challenge page; the
+            # endpoint also mislabels its JSON as text/html.
+            "Content-Type":
+                "application/x-www-form-urlencoded; charset=UTF-8",
         }, timeout=net_cfg.get("timeout_seconds", 25))
         r.raise_for_status()
-        j = r.json()
+        try:
+            j = r.json()
+        except ValueError:  # server mislabels JSON as text/html
+            j = json.loads(r.text)
         if not j.get("success"):
             raise RuntimeError("sh board bad flag")
         raw = json.loads(
@@ -304,6 +312,14 @@ def sh_fill(session, net_cfg, data_dir, history, log=None,
     for the rest. Bounded per run (max_fnos x 2 offsets), globally
     daily-capped; returns stats for the patrol card."""
     from .sched_board import load_sched_db
+    # Shanghai WAF rate-limits rapid-fire POSTs (verified: 8 calls at
+    # ~0.1s spacing all got 403, 3s spacing all passed) - pace the
+    # driver the same way the booking paths do, and stop early when
+    # the WAF keeps answering 403 (a dirty IP cools down; hammering
+    # only extends the block). Tests inject sh_pace=0.
+    pace = net_cfg.get("sh_pace")
+    if pace is None:
+        pace = max(2.0, float(net_cfg.get("call_interval") or 2.5))
     stats = {"queries": 0, "exact": 0, "dow_new": 0,
              "fnos": 0, "capped": False}
     today = _dt.date.today()
@@ -330,18 +346,30 @@ def sh_fill(session, net_cfg, data_dir, history, log=None,
             plan.append({"fno": t["fno"], "direction": t["direction"]})
     plan = plan[:max_fnos]
     changed = False
+    first_net = True
+    fails = 0
     for p in plan:
         stop = False
         for off in (0, 1):
+            if not first_net:
+                time.sleep(pace)
             try:
                 rows, how = fetch_flight(
                     session, net_cfg, p["fno"], p["direction"],
                     off, data_dir)
             except Exception as e:
+                first_net = False
+                fails += 1
                 if log:
                     log.warning("sh board %s off%d failed: %s"
                                 % (p["fno"], off, e))
+                if fails >= 2:
+                    stats["breaker"] = True
+                    stop = True
+                    break
                 continue
+            first_net = False
+            fails = 0
             if how == "capped":
                 stats["capped"] = True
                 stop = True

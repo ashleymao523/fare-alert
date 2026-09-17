@@ -17,6 +17,7 @@ import datetime as dt
 import json
 import os
 import sys
+import time
 
 sys.path.insert(0, ".")
 
@@ -75,17 +76,33 @@ def main() -> int:
     exact = 0
     changed = False
     capped = False
+    first_net = True
+    fails = 0
+    pace = net.get("sh_pace")
+    if pace is None:
+        pace = max(2.0, float(net.get("call_interval") or 2.5))
     for fno, direction in plan:
         if capped:
             break
         for off in (0, 1):
+            if not first_net:
+                time.sleep(pace)  # Shanghai WAF: >=2s between POSTs
             try:
                 rows, how = fetch_flight(
                     session, net, fno, direction, off, DATA_DIR)
             except Exception as e:
+                first_net = False
+                fails += 1
                 print("  {f} off{o}: FAIL {e}".format(
                     f=fno, o=off, e=str(e)[:80]))
+                if fails >= 2:
+                    print("  WAF breaker: 2 consecutive fails,"
+                          " cooling down - rerun later")
+                    capped = True
+                    break
                 continue
+            first_net = False
+            fails = 0
             if how == "capped":
                 print("  daily cap reached, stopping")
                 capped = True
