@@ -164,7 +164,11 @@ export default function TrendChart({ route, dealsKey, title, hint }) {
         {hp && hp.t != null ? (
           <div class="trend-tip" style={{ left: (x(hover) / W) * 100 + "%", top: (y(hp.t) / H) * 100 + "%" }}>
             <b>{fmtMoney(hp.t)}</b> {hp.date} {weekday(hp.date)}<br />
-            {hp.d.flight_no || hp.d.airline || ""}{hp.d.dep_time ? " · " + hp.d.dep_time + "起飞" : ""}
+            {hp.d.flight_no || hp.d.airline || ""}
+            {hp.d.dep_time && hp.d.arr_time
+              ? <span class="tip-time"> · {hp.d.dep_time}→{hp.d.arr_time}</span>
+              : hp.d.dep_time ? " · " + hp.d.dep_time + "起飞" : ""}
+            {hp.d.duration_text ? <span class="tip-dur"> · {hp.d.duration_text}</span> : null}
             {hp.d.source === "nearby-ref" ? " · 临近日参考" : ""}
             {hp.d.source === "interp" ? " · 插值估算" : ""}
           </div>

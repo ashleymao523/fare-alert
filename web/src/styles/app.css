@@ -254,6 +254,8 @@ a.kpi:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transfo
   font-size: var(--fs-sm); white-space: nowrap; transform: translate(-50%, -110%);
 }
 .trend-tip b { font-variant-numeric: tabular-nums; }
+.trend-tip .tip-time { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.trend-tip .tip-dur { opacity: 0.75; }
 .t-line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .t-area { fill: url(#trendGrad); }
 .t-grid { stroke: var(--chart-grid); stroke-width: 1; stroke-dasharray: 2 4; }
@@ -1009,3 +1011,4 @@ a.gap-chip.link:visited { color: inherit; }
   background: color-mix(in srgb, var(--green) 12%, transparent);
   color: var(--green);
 }
+.day .d-flight { font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

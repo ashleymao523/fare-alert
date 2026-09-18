@@ -28,7 +28,10 @@ export default function Top5({ route }) {
                 <td class="num">¥{Math.round(d.total_price)}</td>
                 <td>
                   {(d.airline || "—") + " " + (d.flight_no || "")}
-                  {d.dep_time ? <div class="muted">{d.dep_time}起飞</div> : null}
+                  {d.dep_time
+                    ? <div class="muted">{d.dep_time}{d.arr_time ? "→" + d.arr_time : "起飞"}
+                        {d.duration_text ? " · " + d.duration_text : ""}</div>
+                    : null}
                   {d.source === "amadeus-fill" ? <span class="badge amber">Amadeus补</span> : null}
                 </td>
                 <td>{d.baggage === false ? "无免费托运" : (d.baggage === true ? "含免费托运" : "以舱位为准")}</td>

@@ -90,11 +90,10 @@ def main():
         check("queued 6x2 mapped rows", st["queued"] == 12, str(st))
         check("absorbed counts only new flight+dow pairs",
               st["absorbed"] == 4, str(st))
-        check("probe dates are 3 Sats + 3 Suns",
-              sorted(c[2] for c in fx.calls) == [
-                  "2026-09-19", "2026-09-20", "2026-09-26",
-                  "2026-09-27", "2026-10-03", "2026-10-04"],
-              str(fx.calls))
+        expected = sorted(_next_dates(5, 3) + _next_dates(6, 3))
+        check("probe dates are 3 Sats + 3 Suns (rolling window)",
+              sorted(c[2] for c in fx.calls) == expected,
+              "calls=%s expected=%s" % (fx.calls, expected))
         out = json.load(open(os.path.join(
             tmp, "flight_sched_db.json"), encoding="utf-8"))
         f3u = out["flights"].get("3U8084")

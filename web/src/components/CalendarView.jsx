@@ -90,6 +90,8 @@ function Bars({ route, map, days, selDate, onSelect }) {
               (m.d.source === "nearby-ref"
                 ? " (临近日参考" + (m.d.ref_offset ? " · 距" + m.d.ref_offset + "天" : "") + ")"
                 : m.d.source === "interp" ? " (两侧真实价插值估算)" : "")
+              + (m.d.dep_time ? " · " + m.d.dep_time + (m.d.arr_time ? "→" + m.d.arr_time : "") : "")
+              + (m.d.duration_text ? " · " + m.d.duration_text : "")
             : ds + " " + weekday(ds) + " · 无数据";
           return (
             <div
@@ -138,13 +140,17 @@ function CalGrid({ route, map, days, selDate, onSelect }) {
       (src === "nearby-ref" ? " ref" : "") +
       (src === "interp" ? " interp" : "") +
       (ds === selDate ? " selected" : "");
-    const chip = m.d.dep_time
-      ? m.d.dep_time + "起飞"
-      : (m.d.flight_no || ((m.d.alt_times || []).length ? (m.d.alt_times[0].no + " " + m.d.alt_times[0].dep) : ""));
+    const d = m.d;
+    const timePair = d.dep_time
+      ? d.dep_time + (d.arr_time ? "→" + d.arr_time : "起飞")
+      : (d.alt_times || []).length ? (d.alt_times[0].dep + (d.alt_times[0].arr ? "→" + d.alt_times[0].arr : "")) : "";
+    const chip = timePair || d.flight_no || "";
     cells.push(
       <div
         class={cls}
-        title={ds + " " + weekday(ds) + " " + fmtMoney(m.t) + (chip ? " · " + chip : "")}
+        title={ds + " " + weekday(ds) + " " + fmtMoney(m.t)
+          + (chip ? " · " + chip : "")
+          + (m.d.duration_text ? " · " + m.d.duration_text : "")}
         onClick={() => onSelect(ds)}
       >
         <div class={"d-date" + ((wd === 0 || wd === 6) && src !== "nearby-ref" ? " wk" : "")}>{fmtMD(ds)}</div>
