@@ -118,8 +118,8 @@ def build_ledger(data_dir, cfg=None, now=None):
         str(cp.get("last_status") or "尚未巡检"),
         manual="/api/tasks/cabin-patrol/run"))
 
-    # v1.29: the CDP real-browser capture hook - cadence is
-    # every-4th-patrol (or on throttle), display as ~4x patrol.
+    # v1.29: the CDP real-browser capture hook - v1.30 cadence is
+    # every-2nd-patrol (or on throttle), display as ~2x patrol.
     led_path = os.path.join(data_dir, "cdp_cabin_ledger.json")
     cdp_last = None
     try:
@@ -129,11 +129,11 @@ def build_ledger(data_dir, cfg=None, now=None):
     led = _load(led_path)
     _today = now.strftime("%Y-%m-%d")
     _used = int((led.get("days") or {}).get(_today) or 0)
-    _cap = int((cw.get("cdp_capture_daily_cap") or 12))
+    _cap = int((cw.get("cdp_capture_daily_cap") or 24))
     agents.append(_agent(
         "cdp-cabin", "公务舱精准采集", "🎯", cdp_last,
-        max(4 * int(cw.get("refresh_minutes", 30) or 30), 60), now,
-        "第 {r} 轮 · 今日 {u}/{c} · 真浏览器按日精点".format(
+        max(2 * int(cw.get("refresh_minutes", 30) or 30), 30), now,
+        "第 {r} 轮 · 今日 {u}/{c} · 真浏览器精点(价+时刻)".format(
             r=led.get("rounds") or 0, u=_used, c=_cap),
         manual="/api/tasks/cdp-cabin/run"))
 

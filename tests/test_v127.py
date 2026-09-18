@@ -60,9 +60,9 @@ class TestV127(unittest.TestCase):
             # absorb-side pure function accepts it
             from core.cabin_monitor import absorb_point_cabin
             groups = absorb_point_cabin(cache, {"cabins": ["business"]})
-            # absorb groups by point-{from}-{to}, not the cache key
-            self.assertIn("point-北京-上海", groups)
-            rows = groups["point-北京-上海"]["rows"]
+            # v1.30: absorb groups by leg-{from}-{to}, not the cache key
+            self.assertIn("leg-北京-上海", groups)
+            rows = groups["leg-北京-上海"]["rows"]
             self.assertTrue(rows and rows[0]["cabin"] == "business")
 
     def test_05_patrol_fill_cadence_and_cap(self):
@@ -83,8 +83,8 @@ class TestV127(unittest.TestCase):
                                 throttle_hits=0)
             self.assertEqual(info1.get("skipped"), "cadence")
             # throttle fires the capture branch, but the daily cap
-            # (used=12 >= default cap 12) shuts it down
-            led["days"] = {dt.date.today().isoformat(): 12}
+            # (used=24 >= default cap 24) shuts it down
+            led["days"] = {dt.date.today().isoformat(): 24}
             with open(os.path.join(td, "cdp_cabin_ledger.json"),
                       "w", encoding="utf-8") as f:
                 json.dump(led, f)

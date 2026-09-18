@@ -31,7 +31,8 @@ SEAT_LABELS = {
 }
 TRAIN_TYPE_KEEP = "GDCZTK"
 STATION_CACHE_VERSION = 2
-TRAIN_CACHE_VERSION = 3  # v3: TrainFare 增加 url 字段(12306 预填查询直达链接)
+TRAIN_CACHE_VERSION = 4  # v4: multi-route cache - per-route entries
+# stop clobbering each other's 24h window (v3: TrainFare url field)
 
 
 def _headers(net_cfg):
@@ -151,27 +152,42 @@ def query_pair(session, net_cfg, date, from_name, to_name, stations):
     return fares
 
 
-def refresh_train_info(session, net_cfg, route_cfg, data_dir):
-    """Query all configured station pairs, cache 24h in data/train_cache.json."""
+def refresh_train_info(session, net_cfg, route_cfg, data_dir, force=False):
+    """Query all configured station pairs; multi-route 24h cache in
+    data/train_cache.json. v4 keys entries by route_id so N routes
+    each keep their own fresh window (v3 single-blob meant only the
+    LAST route ever hit cache - the rest refetched every scan).
+    force=True bypasses the fresh check for manual refreshes."""
     cache_file = os.path.join(data_dir, "train_cache.json")
+    rid = route_cfg["id"]
+    cache = {}
     if os.path.exists(cache_file):
         try:
             with open(cache_file, encoding="utf-8") as f:
                 cached = json.load(f)
-            age = dt.datetime.now() - dt.datetime.fromisoformat(cached["updated_at"])
-            ok_age = age.total_seconds() < 24 * 3600
-            ok_ver = cached.get("v") == TRAIN_CACHE_VERSION
-            if ok_age and ok_ver and cached.get("route_id") == route_cfg["id"]:
-                cached["from_cache"] = True
-                return cached
+            if (isinstance(cached, dict) and cached.get("v") == 4
+                    and isinstance(cached.get("routes"), dict)):
+                cache = cached
         except Exception:
             pass
+    if not force:
+        entry = (cache.get("routes") or {}).get(rid)
+        if isinstance(entry, dict):
+            try:
+                age = dt.datetime.now() - dt.datetime.fromisoformat(
+                    entry["updated_at"])
+                if 0 <= age.total_seconds() < 24 * 3600:
+                    out = dict(entry)
+                    out["from_cache"] = True
+                    return out
+            except Exception:
+                pass
     stations = get_stations(session, net_cfg, os.path.join(data_dir, "stations.json"))
     query_date = (dt.date.today() + dt.timedelta(days=1)).isoformat()
     result = {
         "v": TRAIN_CACHE_VERSION,
         "from_cache": False,
-        "route_id": route_cfg["id"],
+        "route_id": rid,
         "updated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "query_date": query_date,
         "pairs": {},
@@ -185,6 +201,10 @@ def refresh_train_info(session, net_cfg, route_cfg, data_dir):
             time.sleep(1.5)
         except Exception as e:
             result["pairs"][key] = {"error": str(e)}
-    with open(cache_file, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False, indent=1)
+    cache["v"] = TRAIN_CACHE_VERSION
+    cache.setdefault("routes", {})[rid] = result
+    tmp = cache_file + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, cache_file)
     return result

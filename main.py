@@ -903,13 +903,21 @@ def _enrich_flight_times(session, net, route, deals, cfg, ama_cfg,
     return deals
 
 
-def _cabin_absorb(cw, leg, hid, biz_rows, cfg, state, log, push_enabled):
+def _cabin_absorb(cw, leg, hid, biz_rows, cfg, state, log, push_enabled,
+                  source=""):
     """v0.66: shared business-cabin collector + alert core.
 
     Route-scan legs (direct/mirror) and standalone patrol legs both
     land here: business-tagged offers join the ring history, then
     record-low / threshold pushes fire under one cooldown. The caller
     owns the state dict; only cabin_history.json is written here."""
+    # v1.30: one canonical history route per real-world leg. The
+    # caller's hid stays for log/route_id provenance, but history,
+    # alerted_low and push route_ids all key on leg-* so booking
+    # estimates and qunar captures of the SAME flight land in one
+    # place (source-tagged, precise-wins in record_low).
+    hid = "leg-{fc}-{tc}".format(
+        fc=leg["from_city"], tc=leg["to_city"])
     biz = [d for d in (biz_rows or [])
            if (d.cabin or "") == "business"
            and d.source not in NON_REAL_SOURCES]
@@ -921,7 +929,8 @@ def _cabin_absorb(cw, leg, hid, biz_rows, cfg, state, log, push_enabled):
             ch, hid, leg["from_city"], leg["to_city"], "business",
             d.date, total_price(d.bare_price, tax_cfg),
             fno=d.flight_no or "",
-            dep=d.dep_time or "", arr=d.arr_time or "")
+            dep=d.dep_time or "", arr=d.arr_time or "",
+            source=source)
         if ob.get("record"):
             new_records.append(ob)
     if biz:
@@ -1038,7 +1047,8 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
                    source="point-cabin", cabin=r["cabin"])
                for r in g["rows"]]
         n_point += _cabin_absorb(cw, g["leg"], hid, biz, cfg,
-                                 state, log, push_enabled)
+                                 state, log, push_enabled,
+                                 source="qunar")
     info["point_rows"] = n_point
 
     # v1.09 B: keyless BUSINESS probes via the booking LOWEST_PRICE
@@ -1063,7 +1073,7 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
     prev_streak = int(((state.get("_cabin_patrol") or {})
                        .get("throttle_streak")) or 0)
     for leg in legs:
-        hid = "patrol-{fc}-{tc}".format(
+        hid = "leg-{fc}-{tc}".format(
             fc=leg["from_city"], tc=leg["to_city"])
         try:
             fi = city_iata(leg["from_city"])
@@ -1109,7 +1119,8 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
                 rows = cabin_bk_rows(d, got, tax_amt, fx)
                 if rows:
                     n_biz += _cabin_absorb(cw, leg, hid, rows, cfg,
-                                           state, log, push_enabled)
+                                           state, log, push_enabled,
+                                           source="booking")
         except Exception as e:
             errs += 1
             log.warning("cabin booking probe failed [{}->{}]: {}".format(
@@ -1169,7 +1180,7 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
     n_ama = 0
     if ready:
         for leg in legs:
-            hid = "patrol-{fc}-{tc}".format(
+            hid = "leg-{fc}-{tc}".format(
                 fc=leg["from_city"], tc=leg["to_city"])
             try:
                 fi = city_iata(leg["from_city"])
@@ -1185,7 +1196,8 @@ def cabin_patrol_once(cfg, state, log, push_enabled=True, session=None):
                     cabin=(cw.get("cabins") or ["business"])[0],
                     data_dir=DATA_DIR)
                 n_ama += _cabin_absorb(
-                    cw, leg, hid, biz, cfg, state, log, push_enabled)
+                    cw, leg, hid, biz, cfg, state, log, push_enabled,
+                    source="amadeus")
                 info["legs_ok"] += 1
             except Exception as e:
                 errs += 1
@@ -1475,7 +1487,8 @@ def run_once(cfg, log, push_enabled=True, verbose=False, trigger="cli"):
                 _cabin_absorb(cw, leg, hid,
                               deals if leg["mode"] == "direct"
                               else mirror_cabin,
-                              cfg, state, log, push_enabled)
+                              cfg, state, log, push_enabled,
+                              source="amadeus")
             except Exception as e:
                 log.warning("cabin monitor failed [{}]: {}".format(
                     route_snap["id"], e))

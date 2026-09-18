@@ -59,7 +59,7 @@ def main() -> int:
 
     plan = []
     for leg in legs:
-        hid = "patrol-{fc}-{tc}".format(
+        hid = "leg-{fc}-{tc}".format(
             fc=leg["from_city"], tc=leg["to_city"])
         gaps = time_gap_dates(hist, hid, date_from, date_to)
         gaps = gaps[:max(0, args.max)]
@@ -133,7 +133,7 @@ def main() -> int:
                 n_rows += len(rows)
                 # push off + empty state: only cabin_history.json moves
                 _cabin_absorb(cw, leg, hid, rows, cfg, {},
-                              _SilentLog(), False)
+                              _SilentLog(), False, source="booking")
         n_hit += done
         print("{fc}->{tc}: {done}/{n} gap dates got business offers".format(
             fc=leg["from_city"], tc=leg["to_city"],

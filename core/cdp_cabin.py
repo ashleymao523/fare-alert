@@ -366,7 +366,7 @@ def patrol_fill(cw, routes, data_dir, log=None, throttle_hits=0):
     today = dt.date.today().isoformat()
     days = led.setdefault("days", {})
     used = int(days.get(today) or 0)
-    cap = int((cw or {}).get("cdp_capture_daily_cap") or 12)
+    cap = int((cw or {}).get("cdp_capture_daily_cap") or 24)
     info = {"round": rnd, "used": used, "cap": cap}
 
     def _flush():
@@ -378,7 +378,9 @@ def patrol_fill(cw, routes, data_dir, log=None, throttle_hits=0):
         except Exception:
             pass
 
-    if throttle_hits <= 0 and (rnd % 4) != 1:
+    # v1.30: every-2nd-round cadence (was 4th) - precision gaps now
+    # far outnumber time gaps, and the daily cap is the real bound.
+    if throttle_hits <= 0 and (rnd % 2) != 1:
         _flush()
         info["skipped"] = "cadence"
         return info
@@ -390,12 +392,12 @@ def patrol_fill(cw, routes, data_dir, log=None, throttle_hits=0):
     from .cabin_monitor import load_history as _cabin_history_load
     hist = _cabin_history_load(data_dir)
     legs = patrol_legs(cw or {}, routes or [])
-    k = int((cw or {}).get("cdp_dates_per_round") or 2)
+    k = int((cw or {}).get("cdp_dates_per_round") or 4)
     d_from = (dt.date.today() + dt.timedelta(days=1)).isoformat()
     d_to = (dt.date.today() + dt.timedelta(days=60)).isoformat()
     targets = []
     for leg in legs:
-        hid = "patrol-{fc}-{tc}".format(fc=leg["from_city"],
+        hid = "leg-{fc}-{tc}".format(fc=leg["from_city"],
                                         tc=leg["to_city"])
         for g in time_gap_dates(hist or {}, hid, d_from, d_to)[:k]:
             targets.append({"from_city": leg["from_city"],

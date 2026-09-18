@@ -2440,7 +2440,15 @@
       timeBox.title = "时刻为上海机场官网该日期官方计划时刻；购票页为准";
     }
     r.appendChild(timeBox);
-    r.appendChild(el("span", "cabin-tt-price", fmtCny(row.price)));
+    var priceBox = el("span", "cabin-tt-price", fmtCny(row.price));
+    if (row.src === "qunar" || row.src === "point-cabin") {
+      priceBox.appendChild(el("em", "cabin-tt-precise", "精准"));
+      priceBox.title = "去哪儿页面实抓的最终支付总价";
+    } else if (row.src) {
+      priceBox.appendChild(el("em", "cabin-tt-est", "估算"));
+      priceBox.title = "Booking/Amadeus 折算价, 待实弹精准化";
+    }
+    r.appendChild(priceBox);
     if (row.url) {
       r.title = "直达 Booking 公务舱搜索页";
       r.addEventListener("click", function () {
@@ -2494,6 +2502,11 @@
       head.appendChild(el("span", "cabin-timed-chip",
         "时刻 " + (g.timed || 0) + "/" + (g.total || g.rows.length) +
         ((g.borrowed || 0) ? " · 借用" + g.borrowed : "")));
+    }
+    if (g.rows && g.rows.length && g.precise != null) {
+      head.appendChild(el("span", "cabin-timed-chip",
+        "精准 " + (g.precise || 0) + "/" +
+        (g.total || g.rows.length)));
     }
     if (b) {
       var badge = el("span", "cabin-low-badge",

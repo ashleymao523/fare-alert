@@ -11,6 +11,22 @@ from .models import FlightDeal
 
 HISTORY_CAP = 300
 
+# v1.30: precision classes per observation source. A qunar
+# pay-total captured on the real OTA page is ground truth; an
+# Amadeus offer is real inventory priced in EUR conversion; a
+# keyless booking aggregate is an estimate (full-fare biased).
+# Open-source recon (qunar-flight-reminder, SpiderApplication et
+# al.) shows no maintained signature bypass, so the real-browser
+# capture stays the precise source and history entries must carry
+# WHICH class they are.
+SRC_CLASS = {"qunar": 2, "point-cabin": 2, "amadeus": 1, "booking": 0}
+
+
+def src_class(src):
+    """Precision class of an observation source string (0=estimate
+    when unknown/legacy). Pure."""
+    return SRC_CLASS.get(str(src or "").strip().lower(), 0)
+
 
 def default_config():
     return {
@@ -78,10 +94,85 @@ def load_history(data_dir):
         with open(path, encoding="utf-8") as f:
             obj = json.load(f)
         if isinstance(obj, dict):
+            if _migrate_v130(obj):
+                try:
+                    _atomic_write(path, obj)
+                except OSError:
+                    pass  # read-only media: re-derive next load
             return obj
     except (OSError, ValueError):
         pass
     return {"routes": {}}
+
+
+def _obs_better(o, cur):
+    """True when observation o should replace cur for the same
+    (date, cabin, fno) slot: higher precision class wins outright;
+    within a class the newer ts wins (legacy replace semantics)."""
+    oc, cc = src_class(o.get("src")), src_class(cur.get("src"))
+    if oc != cc:
+        return oc > cc
+    return str(o.get("ts") or "") >= str(cur.get("ts") or "")
+
+
+def _migrate_v130(obj):
+    """v1.30 one-shot: merge legacy point-*/patrol-* route ids into
+    one canonical leg-* route per real-world city pair.
+
+    The v0.42-v1.29 layout kept TWO history routes for the same leg
+    (booking patrol wrote patrol-*, qunar captures wrote point-*), so
+    the leaderboard showed duplicates with wildly different lows and
+    the threshold check ran per duplicate - a full-fare booking
+    estimate of 4487 sat next to the real qunar 1200 for the same
+    flight. Migration stamps each merged row with its origin source
+    (point-* -> qunar, patrol-* -> booking) and dedups per
+    (date, cabin, fno) precise-wins. Idempotent; returns True when
+    the object changed (caller persists)."""
+    routes = obj.get("routes") or {}
+    if not any(str(k).startswith(("point-", "patrol-"))
+               for k in routes):
+        return False
+    out = {}
+    for rid, r in routes.items():
+        rid = str(rid)
+        if rid.startswith("point-"):
+            new_id, src = "leg-" + rid[6:], "qunar"
+        elif rid.startswith("patrol-"):
+            new_id, src = "leg-" + rid[7:], "booking"
+        else:
+            out[rid] = r
+            continue
+        cur = out.setdefault(new_id, {
+            "from_city": (r.get("from_city") or ""),
+            "to_city": (r.get("to_city") or ""),
+            "obs": [], "lowest": None})
+        if not cur.get("from_city"):
+            cur["from_city"] = r.get("from_city") or ""
+        if not cur.get("to_city"):
+            cur["to_city"] = r.get("to_city") or ""
+        for o in (r.get("obs") or []):
+            if isinstance(o, dict) and not (o.get("src") or "").strip():
+                o["src"] = src
+            cur.setdefault("obs", []).append(o)
+    for rid, r in out.items():
+        best = {}
+        for o in (r.get("obs") or []):
+            if not isinstance(o, dict):
+                continue
+            key = (o.get("date") or "", o.get("cabin") or "",
+                   (o.get("fno") or ""))
+            if key not in best or _obs_better(o, best[key]):
+                best[key] = o
+        obs = sorted(best.values(),
+                     key=lambda o: o.get("date") or "")
+        if len(obs) > HISTORY_CAP:
+            del obs[:len(obs) - HISTORY_CAP]
+        lows = [o["price"] for o in obs
+                if isinstance(o.get("price"), (int, float))]
+        r["obs"] = obs
+        r["lowest"] = min(lows) if lows else None
+    obj["routes"] = out
+    return True
 
 
 def absorb_point_cabin(cache, cw, now=None):
@@ -125,7 +216,7 @@ def absorb_point_cabin(cache, cw, now=None):
             tc = str(e.get("to_city") or "").strip()
             if not (fc and tc):
                 continue
-            hid = "point-%s-%s" % (fc, tc)
+            hid = "leg-%s-%s" % (fc, tc)
             g = out.setdefault(hid, {
                 "leg": {"from_city": fc, "to_city": tc}, "rows": []})
             g["rows"].append({
@@ -139,7 +230,7 @@ def absorb_point_cabin(cache, cw, now=None):
 
 
 def record_low(history, route_id, from_city, to_city, cabin, date,
-               price_total, fno="", dep="", arr=""):
+               price_total, fno="", dep="", arr="", source=""):
     """Insert one business-cabin observation; ring-cap per route.
     v1.10 precision: the dedup key is (date, cabin, FLIGHT) - the
     booking timetable feeds several business flights per date now,
@@ -161,12 +252,27 @@ def record_low(history, route_id, from_city, to_city, cabin, date,
             if isinstance(o.get("price"), (int, float))]
     prior = min(lows) if lows else None
     fno = str(fno or "")
-    obs[:] = [o for o in obs
-              if not (o.get("date") == date and o.get("cabin") == cabin
-                      and (o.get("fno") or "") == fno)]
+    dup = None
+    for o in obs:
+        if (o.get("date") == date and o.get("cabin") == cabin
+                and (o.get("fno") or "") == fno):
+            dup = o
+            break
+    if dup is not None and src_class(source) < src_class(dup.get("src")):
+        # v1.30 precision contract: an estimate never overwrites a
+        # precise row of the same flight - return the incumbent so
+        # callers treat it as a no-record observation. Strip the
+        # incumbent's stale record tag: the dup dict IS the stored
+        # entry and keeps its historical flag, but returning it raw
+        # would let _cabin_absorb re-arm a phantom new-record push.
+        return {k: v for k, v in dup.items()
+                if k not in ("record", "record_prev")}
+    if dup is not None:
+        obs.remove(dup)
     entry = {"date": date, "cabin": cabin, "price": price_total,
              "fno": fno,
              "dep": str(dep or ""), "arr": str(arr or ""),
+             "src": str(source or ""),
              "ts": datetime.now().strftime("%Y-%m-%dT%H:%M")}
     if (prior is not None and isinstance(price_total, (int, float))
             and price_total < prior):
@@ -228,6 +334,25 @@ def _gap_map(route):
     for d, o in cheap.items():
         if not ((o.get("dep") or "") and (o.get("arr") or "")):
             gaps[d] = True
+    # v1.30: precision gap (c) - a date whose only src-tagged
+    # observations are estimates (booking aggregate / EUR-derived)
+    # lacks qunar pay-total ground truth even when its times are
+    # complete, so it deserves a real-browser capture exactly like a
+    # timeless one. Legacy src-less rows are NOT flagged: they keep
+    # the pure v1.14 time-gap contract (and old test fixtures stay
+    # meaningful).
+    est_dates, precise_dates = set(), set()
+    for o in route.get("obs") or []:
+        d = str(o.get("date") or "")
+        s = str(o.get("src") or "").strip().lower()
+        if not (d and s):
+            continue
+        if src_class(s) >= 2:
+            precise_dates.add(d)
+        else:
+            est_dates.add(d)
+    for d in est_dates - precise_dates:
+        gaps[d] = True
     return gaps
 
 
@@ -656,6 +781,12 @@ def history_board(history, sched=None):
             "latest_date": latest.get("date", ""),
             "gap": round(float(latest["price"]) - float(low["price"]), 2),
             "samples": len(obs),
+            # v1.30: which source owns the record low + how many
+            # observations are qunar-precise, so the board can show
+            # whether a leg's story is ground truth or estimate.
+            "low_src": low.get("src") or "",
+            "precise": sum(1 for o in obs
+                           if src_class(o.get("src")) >= 2),
         })
         if sched:
             low_row = {"date": rows[-1]["low_date"],
@@ -740,11 +871,15 @@ def history_timetable(history, per_leg=8, sched=None):
             "timed": timed,
             "total": len(top),
             "borrowed": borrowed,
+            # v1.30: precise pay-total coverage of the shown rows.
+            "precise": sum(1 for o in top
+                           if src_class(o.get("src")) >= 2),
             "rows": [{"date": o.get("date") or "",
                       "fno": o.get("fno") or "",
                       "dep": o.get("dep") or "",
                       "arr": o.get("arr") or "",
                       "cross_day": bool(o.get("cross_day")),
+                      "src": o.get("src") or "",
                       "tsrc": o.get("tsrc")
                               or ("patrol" if (o.get("dep") or "")
                                   and (o.get("arr") or "") else ""),

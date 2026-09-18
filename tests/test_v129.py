@@ -54,8 +54,8 @@ def main():
     if a:
         ok &= check("manual trigger wired",
                     a["manual_trigger"] == "/api/tasks/cdp-cabin/run")
-        ok &= check("cadence = 4x patrol = 120min",
-                    a["cadence_minutes"] == 120, a["cadence_minutes"])
+        ok &= check("cadence = 2x patrol = 60min (v1.30 speedup)",
+                    a["cadence_minutes"] == 60, a["cadence_minutes"])
         ok &= check("detail shows round + cap",
                     "7" in a["detail"] and "0/12" in a["detail"],
                     a["detail"])

@@ -48,13 +48,13 @@ class CabinMonitorTests(unittest.TestCase):
             },
         }
         groups = absorb_point_cabin(cache, cw, now=now)
-        self.assertEqual(set(groups), {"point-北京-杭州",
-                                       "point-重庆-杭州"})
-        rows = groups["point-北京-杭州"]["rows"]
+        self.assertEqual(set(groups), {"leg-北京-杭州",
+                                       "leg-重庆-杭州"})
+        rows = groups["leg-北京-杭州"]["rows"]
         self.assertEqual(len(rows), 1)                 # economy+stale out
         self.assertEqual(rows[0]["total"], 1800.0)
         self.assertEqual(rows[0]["cabin"], "business")
-        self.assertEqual(groups["point-重庆-杭州"]["leg"]["from_city"],
+        self.assertEqual(groups["leg-重庆-杭州"]["leg"]["from_city"],
                          "重庆")
 
     def test_record_low_same_day_replaces(self):
