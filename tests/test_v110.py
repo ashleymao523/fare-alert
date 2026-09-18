@@ -14,7 +14,7 @@ from core.agent_tasks import _iso, build_ledger, classify, next_due
 
 
 NOW = datetime(2026, 9, 16, 12, 0, 0)
-ORDER = ["scan-all", "cabin-patrol", "dow-balance", "auto-backup",
+ORDER = ["scan-all", "cabin-patrol", "cdp-cabin", "dow-balance", "auto-backup",
          "fx-refresh", "health-patrol", "weekly-digest"]
 
 

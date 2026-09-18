@@ -569,6 +569,28 @@ def api_tasks_cdp_fill_run():
                     "to_city": to_city, **out})
 
 
+@app.post("/api/tasks/cdp-cabin/run")
+def api_tasks_cdp_cabin_run():
+    """v1.29: on-demand business-cabin precise capture through the
+    real-browser CDP pipeline (same code path as the patrol hook,
+    forced past the every-4th-round cadence so a human can refill
+    gap dates NOW instead of waiting ~2h). The shared daily cap
+    still bounds browser minutes; deposits land in the point-fill
+    cache and absorb on the next patrol round (or via the
+    cabin-patrol manual button)."""
+    with _lock:
+        cfg = load_config(CONFIG_PATH)
+        cw = ((cfg.get("cabin_watch") or {}))
+        try:
+            from core.cdp_cabin import patrol_fill
+            info = patrol_fill(cw, cfg.get("routes") or [],
+                               DATA_DIR, log=_log, throttle_hits=1)
+        except Exception as e:
+            _log.error("manual cdp cabin capture failed: %s", e)
+            return jsonify({"ok": False, "error": str(e)}), 500
+    return jsonify({"ok": True, "cdp_cabin": info})
+
+
 @app.get("/api/point-gaps")
 def api_point_gaps():
     """v0.76: reference-only dates per route - the precise-query
