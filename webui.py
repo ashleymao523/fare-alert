@@ -591,6 +591,93 @@ def api_tasks_cdp_cabin_run():
     return jsonify({"ok": True, "cdp_cabin": info})
 
 
+@app.post("/api/tasks/cdp-day/run")
+def api_tasks_cdp_day_run():
+    """v1.31: on-demand ECONOMY day capture - the day detail's
+    查当日真实班次 button. Mines the whole visible qunar touch list
+    for ONE date (exact per-flight dep/arr + pay price) and returns
+    the rows so the UI can paint the 24h timeline immediately. The
+    lowest row lands in the route's point-fill bucket (reference-only
+    days promote on the spot), timed rows queue for the schedule
+    board. Shares the CDP daily ledger with the cabin patrol."""
+    body = request.get_json(silent=True) or {}
+    from_city = str(body.get("from_city") or "").strip()
+    to_city = str(body.get("to_city") or "").strip()
+    date = str(body.get("date") or "").strip()
+    cabin = str(body.get("cabin") or "").strip().lower()
+    if cabin not in ("", "business", "first"):
+        return jsonify({"ok": False, "error": "bad cabin"}), 400
+    if not (from_city and to_city and date):
+        return jsonify({"ok": False, "error": "cities and date required"}), 400
+    try:
+        datetime.date.fromisoformat(date)
+    except ValueError:
+        return jsonify({"ok": False, "error": "bad date"}), 400
+    with _lock:
+        cfg = load_config(CONFIG_PATH)
+        cw = cfg.get("cabin_watch") or {}
+        if not cw.get("cdp_capture", True):
+            return jsonify({"ok": False, "error": "cdp-capture disabled"})
+        cap = int(cw.get("cdp_capture_daily_cap") or 24)
+        led_path = os.path.join(DATA_DIR, "cdp_cabin_ledger.json")
+        led = _read_json(led_path, {}) or {}
+        today = datetime.date.today().isoformat()
+        used = int((led.get("days") or {}).get(today) or 0)
+        if used >= cap:
+            return jsonify({"ok": False, "error": "daily-cap",
+                            "used": used, "cap": cap})
+        snap = _read_json(SNAPSHOT_PATH, None) or {}
+        rid = ""
+        for r in snap.get("routes") or []:
+            if (str(r.get("from_city") or "") == from_city
+                    and str(r.get("to_city") or "") == to_city):
+                rid = str(r.get("id") or "")
+                break
+        if not rid and not cabin:
+            # v1.32: a business-cabin day capture lives in the
+            # cdp-cabin bucket and never touches the economy
+            # snapshot, so watch legs WITHOUT an economy route
+            # (e.g. 北京-上海 patrol legs) must pass through too.
+            return jsonify({"ok": False, "error": "route not in snapshot"}), 404
+        from core.alerts import tax_amount
+        from core.cdp_cabin import capture_day
+        try:
+            out = capture_day(cfg.get("net") or {}, DATA_DIR,
+                              from_city, to_city, date, rid,
+                              log=(lambda m: _log.info(str(m))),
+                              tax=tax_amount(cfg.get("tax", {})),
+                              cabin=cabin)
+        except Exception as e:
+            _log.error("cdp day capture failed: %s", e)
+            return jsonify({"ok": False, "error": str(e)}), 500
+        led.setdefault("days", {})[today] = used + 1
+        led["rounds"] = int(led.get("rounds") or 0)
+        try:
+            tmp = led_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(led, f, ensure_ascii=False)
+            os.replace(tmp, led_path)
+        except Exception as e:
+            _log.warning("cdp day ledger write failed: %s", e)
+        patched = 0
+        from core.point_fill import (_atomic_write, load_cache,
+                                     patch_snapshot_deals)
+        cache = load_cache(DATA_DIR)
+        for r in snap.get("routes") or []:
+            if r.get("id") != rid:
+                continue
+            patched += patch_snapshot_deals(r.get("deals") or [], cache, rid)
+            patched += patch_snapshot_deals(
+                r.get("return_deals") or [], cache, rid)
+        if patched:
+            snap["updated_at"] = datetime.datetime.now().isoformat(
+                timespec="seconds")
+            _atomic_write(SNAPSHOT_PATH, snap)
+    return jsonify({"ok": True, "date": date, "route_id": rid,
+                    "cabin": cabin, "used": used + 1, "cap": cap,
+                    "patched": patched, **out})
+
+
 @app.get("/api/point-gaps")
 def api_point_gaps():
     """v0.76: reference-only dates per route - the precise-query

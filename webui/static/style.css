@@ -567,6 +567,73 @@ input::placeholder { color: var(--faint); }
   color: var(--amber-d);
   background: var(--amber-bg);
 }
+.day-cap-wrap {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--sp-md, 12px);
+  margin-top: var(--sp-md, 12px);
+}
+.day-cap { margin-top: var(--sp-md, 12px); }
+.day-cap-wrap .day-cap { margin-top: 0; }
+.day-cap-biz .day-cap-btn {
+  border-color: var(--accent);
+}
+.day-cap-btn { width: 100%; }
+.day-cap-err {
+  margin-top: var(--sp-xs, 6px); font-size: var(--fs-sm);
+  color: var(--amber-d); background: var(--amber-bg);
+  border-radius: var(--r-1); padding: 4px 10px;
+}
+.day-cap-empty { margin-top: var(--sp-xs, 6px); font-size: var(--fs-sm); }
+.day-cap-head {
+  display: flex; align-items: center; gap: var(--sp-sm);
+  margin: var(--sp-sm) 0 var(--sp-xs);
+}
+.day-cap-title { font-weight: 700; font-size: var(--fs-base); }
+.day-tl24 {
+  position: relative; height: 44px; margin: 6px 6px 10px;
+}
+.day-tl24-line {
+  position: absolute; left: 0; right: 0; top: 21px; height: 2px;
+  background: linear-gradient(90deg,
+    var(--line-soft) 0%, var(--accent-soft) 50%, var(--line-soft) 100%);
+  border-radius: var(--r-pill);
+}
+.day-tl24-tick {
+  position: absolute; top: 26px; transform: translateX(-50%);
+  font-size: var(--fs-xs); color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.day-tl24-dot {
+  position: absolute; top: 15px; width: 10px; height: 10px;
+  transform: translateX(-50%);
+  border-radius: 50%; background: var(--accent);
+  border: 2px solid var(--card); cursor: help;
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+.day-tl24-dot.min {
+  background: var(--green); top: 12px; width: 14px; height: 14px;
+  box-shadow: 0 0 0 2px var(--green-bg), var(--sh-1);
+}
+.day-cap-list { display: flex; flex-direction: column; gap: 3px; }
+.day-cap-row {
+  display: grid; grid-template-columns: 5.5em 1fr auto auto;
+  gap: var(--sp-sm); align-items: center;
+  padding: 4px 8px; border-radius: var(--r-1);
+  color: var(--text-2); text-decoration: none;
+}
+.day-cap-row:hover { background: var(--accent-soft); }
+.day-cap-row.min { background: var(--green-bg); }
+.day-cap-row.min:hover { background: var(--green-bg); filter: brightness(0.98); }
+.day-cap-fno { font-size: var(--fs-sm); color: var(--text); }
+.day-cap-time {
+  font-size: var(--fs-sm); color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.day-cap-price {
+  font-size: var(--fs-sm); font-weight: 700; color: var(--accent-ink);
+  font-variant-numeric: tabular-nums;
+}
 .cabin-leg-meta {
   display: flex; gap: var(--sp-md); flex-wrap: wrap;
   color: var(--muted); font-size: var(--fs-sm);

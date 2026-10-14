@@ -100,6 +100,49 @@ return best;
 """
 
 
+LIST_MINER_JS = """
+(function(){
+var FNO=/([A-Z][A-Z0-9])\\s?(\\d{3,4})/;
+function times(s){var out=[],re=/(\\d{1,2}:\\d{2})/,m;
+while(out.length<2&&s&&(m=re.exec(s))){out.push(m[1]);s=s.slice(m.index+m[1].length);}
+return out;}
+function cardOf(el){for(var up=0,a=el;up<7&&a;a=a.parentElement,up++){
+var t=a.innerText||"";if(FNO.test(t)&&/\\d{1,2}:\\d{2}/.test(t)){return a;}}return null;}
+var seen={},pnodes=document.querySelectorAll("[class*=price]");
+for(var i=0;i<pnodes.length;i++){
+var pd=(pnodes[i].textContent||"").replace(/[^\\d]/g,"");
+if(!pd){continue;}
+var pp=parseInt(pd,10);
+if(!(pp>=50&&pp<=99999)){continue;}
+var card=cardOf(pnodes[i]);
+if(!card){continue;}
+var ct=card.innerText||"";
+var fm=ct.match(FNO);
+if(!fm){continue;}
+var no=fm[1]+fm[2];var ts=times(ct);
+var r={p:pp,no:no,dep:ts[0]||"",arr:ts[1]||""};
+if(!seen[no]||pp<seen[no].p){seen[no]=r;}}
+var rows=[];for(var k in seen){rows.push(seen[k]);}
+rows.sort(function(a,b){return a.p-b.p;});
+return rows.slice(0,12);
+})()
+"""
+
+
+def _tap_plan(cabin):
+    """v1.31: business/first needs the verified 4-tap filter dance;
+    the DEFAULT touch list already IS the economy board - zero taps,
+    straight to mining the whole visible card list."""
+    if str(cabin or "").strip().lower() in ("business", "first"):
+        return [TAP_FILTER_JS, TAP_CABIN_ROW_JS, TAP_BIZ_JS,
+                TAP_CONFIRM_JS]
+    return []
+
+
+SCROLL_STEP_JS = ("(function(){window.scrollBy(0,700);"
+                  "return 'scrolled';})()")
+
+
 def list_url(fc, tc, date):
     q = urllib.parse.urlencode({
         "depCity": fc, "arrCity": tc, "goDate": date,
@@ -228,10 +271,165 @@ class _CDP:
                                       "flatten": True})["sessionId"]
 
 
+def _scroll_mine(cdp, deadline, cap=12, dry_stop=3, step_s=1.8):
+    """v1.32: shared virtual-scroll list miner.
+
+    The touch list is VIRTUAL - cards scrolled past leave the DOM,
+    so a single mine sees only the viewport. Walk the page in 700px
+    steps, mine each viewport, merge by fno (min price) until the
+    feed stops yielding new flights or the deadline hits. Used by
+    BOTH the economy board (no taps) and the cabin-filtered board
+    (post 4-tap) so one session banks every visible offer."""
+    seen = {}
+    dry = 0
+    while time.time() < deadline:
+        time.sleep(step_s)
+        try:
+            got = cdp.ev(LIST_MINER_JS) or []
+        except Exception:
+            got = []
+        fresh = 0
+        for r in got:
+            no = str(r.get("no") or "")
+            if not no:
+                continue
+            try:
+                pr = float(r.get("p"))
+            except (TypeError, ValueError):
+                continue
+            if no not in seen or pr < seen[no]["p"]:
+                seen[no] = {"p": pr, "no": no,
+                            "dep": r.get("dep") or "",
+                            "arr": r.get("arr") or ""}
+                fresh += 1
+        dry = 0 if fresh else dry + 1
+        if len(seen) >= cap or dry >= dry_stop:
+            break
+        try:
+            cdp.ev(SCROLL_STEP_JS)
+        except Exception:
+            pass
+    return seen
+
+
+def _capture_target(cdp, fc, tc, d, cabin, data_dir, log=None,
+                    wait_s=12.0, rows_sink=None, cache_id=None,
+                    tax=0.0):
+    """v1.31: capture ONE (route, date) on an already-open CDP tab.
+    business/first keeps the v1.27 4-tap filter dance + min-card
+    miner; cabin="" (economy) skips every tap - the default touch
+    list IS the economy board - and mines the WHOLE visible card
+    list so the day detail can paint exact per-flight dep/arr.
+    Returns n rows stored; rows_sink (a list) collects the captured
+    rows for callers that want the full set, not just the lowest."""
+    try:
+        cdp.nav(list_url(fc, tc, d))
+        time.sleep(4.0)
+        wall = cdp.ev("location.href")
+        if wall and "login" in str(wall):
+            if log:
+                log("cdp-cabin {fc}->{tc} {d}: login-wall "
+                    "(warm the profile once in a real "
+                    "browser)".format(fc=fc, tc=tc, d=d))
+            return 0
+        taps = []
+        plan = _tap_plan(cabin)
+        for js in plan:
+            taps.append(cdp.ev(js))
+            time.sleep(2.0 if js is TAP_FILTER_JS else 1.5)
+        rows = []
+        cab_tag = str(cabin or "").strip().lower() or "business"
+        if plan:
+            # v1.32: the cabin-filtered list is itself virtual-
+            # scrolled - mine the WHOLE filtered board so one
+            # session banks every business/first offer (v1.27
+            # could only see the single min card). The v1.27
+            # single-card miner stays as the fallback for pages
+            # that render one summary card instead of a list.
+            time.sleep(1.0)
+            deadline = time.time() + max(8.0, wait_s)
+            seen = _scroll_mine(cdp, deadline)
+            best = None
+            if not seen:
+                while time.time() < deadline:
+                    time.sleep(2.0)
+                    best = cdp.ev(MINER_JS)
+                    if best and best.get("p") and best.get("no"):
+                        break
+            for r in sorted(seen.values(), key=lambda x: x["p"]):
+                try:
+                    rows.append({
+                        "date": d, "total": float(r.get("p")),
+                        "flight_no": str(r.get("no") or ""),
+                        "dep_time": str(r.get("dep") or ""),
+                        "arr_time": str(r.get("arr") or ""),
+                        "cabin": cab_tag,
+                        "from_city": fc, "to_city": tc})
+                except (TypeError, ValueError):
+                    continue
+            if not rows and best and best.get("p") \
+                    and best.get("no"):
+                rows = [{"date": d, "total": best["p"],
+                         "flight_no": best["no"],
+                         "dep_time": best.get("dep") or "",
+                         "arr_time": best.get("arr") or "",
+                         "cabin": cab_tag,
+                         "from_city": fc, "to_city": tc}]
+        else:
+            deadline = time.time() + max(10.0, wait_s)
+            seen = _scroll_mine(cdp, deadline)
+            for r in sorted(seen.values(), key=lambda x: x["p"]):
+                try:
+                    rows.append({
+                        "date": d, "total": float(r.get("p")),
+                        "flight_no": str(r.get("no") or ""),
+                        "dep_time": str(r.get("dep") or ""),
+                        "arr_time": str(r.get("arr") or ""),
+                        "cabin": "", "from_city": fc, "to_city": tc})
+                except (TypeError, ValueError):
+                    continue
+        n = 0
+        if rows:
+            from core.point_fill import put_rows
+            _, n = put_rows(
+                data_dir,
+                cache_id or "cdp-cabin-{fc}-{tc}".format(fc=fc, tc=tc),
+                rows, tax=float(tax or 0.0))
+            if rows_sink is not None:
+                try:
+                    rows_sink.extend(rows)
+                except Exception:
+                    pass
+        if log:
+            log("cdp-cabin {fc}->{tc} {d}: {r} taps={t}".format(
+                fc=fc, tc=tc, d=d,
+                r=(rows[0]["flight_no"] if rows else "no-data"),
+                t=",".join(str(x) for x in taps)))
+        return n
+    except Exception as e:
+        if log:
+            log("cdp-cabin {fc}->{tc} {d}: ERR {c}: {m}".format(
+                fc=fc, tc=tc, d=d, c=type(e).__name__,
+                m=str(e)[:120]))
+        # a dead renderer/session must not poison the rest of
+        # the batch - reconnect and continue.
+        try:
+            cdp.connect()
+            cdp.sess = cdp.rpc("Target.attachToTarget",
+                               {"targetId": cdp.tid,
+                                "flatten": True})["sessionId"]
+        except Exception:
+            pass
+        return 0
+
+
 def capture_batch(net_cfg, data_dir, targets, log=None,
-                  wait_s=12.0, home_s=4.0):
-    """targets: [{from_city, to_city, date}]. One browser serves the
-    whole batch (launch cost dominates). Returns n_dates_stored."""
+                  wait_s=12.0, home_s=4.0, rows_sink=None):
+    """targets: [{from_city, to_city, date, cabin?, cache_id?,
+    tax?}]. One browser serves the whole batch (launch cost
+    dominates). Returns n_dates_stored; rows_sink optionally
+    collects every captured row (economy day boards carry the
+    whole flight list, not just the cheapest card)."""
     exe = find_browser()
     if not exe:
         return 0
@@ -276,65 +474,11 @@ def capture_batch(net_cfg, data_dir, targets, log=None,
             d = str(t.get("date") or "").strip()
             if not (fc and tc and d):
                 continue
-            try:
-                cdp.nav(list_url(fc, tc, d))
-                time.sleep(4.0)
-                wall = cdp.ev("location.href")
-                if wall and "login" in str(wall):
-                    if log:
-                        log("cdp-cabin {fc}->{tc} {d}: login-wall "
-                            "(warm the profile once in a real "
-                            "browser)".format(fc=fc, tc=tc, d=d))
-                    continue
-                taps = [cdp.ev(TAP_FILTER_JS)]
-                time.sleep(2.0)
-                taps.append(cdp.ev(TAP_CABIN_ROW_JS))
-                time.sleep(1.5)
-                taps.append(cdp.ev(TAP_BIZ_JS))
-                time.sleep(1.5)
-                taps.append(cdp.ev(TAP_BIZ_JS) if False else
-                            cdp.ev(TAP_CONFIRM_JS))
-                # poll: the post-confirm re-render races a single
-                # evaluate (renderer swap can null it) - mine on the
-                # same cadence the recon verified.
-                best = None
-                deadline = time.time() + max(6.0, wait_s)
-                while time.time() < deadline:
-                    time.sleep(2.0)
-                    best = cdp.ev(MINER_JS)
-                    if best and best.get("p") and best.get("no"):
-                        break
-                if best and best.get("p") and best.get("no"):
-                    cache, n = put_rows(
-                        data_dir, "cdp-cabin-{fc}-{tc}".format(
-                            fc=fc, tc=tc),
-                        [{"date": d, "total": best["p"],
-                          "flight_no": best["no"],
-                          "dep_time": best.get("dep") or "",
-                          "arr_time": best.get("arr") or "",
-                          "cabin": "business",
-                          "from_city": fc, "to_city": tc}],
-                        tax=float(t.get("tax") or 0.0))
-                    stored += n
-                if log:
-                    log("cdp-cabin {fc}->{tc} {d}: {r} taps={t}".format(
-                        fc=fc, tc=tc, d=d,
-                        r=(best or {}).get("no") or "no-data",
-                        t=",".join(str(x) for x in taps)))
-            except Exception as e:
-                if log:
-                    log("cdp-cabin {fc}->{tc} {d}: ERR {c}: {m}".format(
-                        fc=fc, tc=tc, d=d, c=type(e).__name__,
-                        m=str(e)[:120]))
-                # a dead renderer/session must not poison the rest of
-                # the batch - reconnect and continue.
-                try:
-                    cdp.connect()
-                    cdp.sess = cdp.rpc("Target.attachToTarget",
-                                       {"targetId": cdp.tid,
-                                        "flatten": True})["sessionId"]
-                except Exception:
-                    pass
+            stored += _capture_target(
+                cdp, fc, tc, d, t.get("cabin") or "business",
+                data_dir, log=log, wait_s=wait_s,
+                rows_sink=rows_sink, cache_id=t.get("cache_id"),
+                tax=float(t.get("tax") or 0.0))
     finally:
         if cdp and cdp.ws:
             try:
@@ -343,6 +487,35 @@ def capture_batch(net_cfg, data_dir, targets, log=None,
                 pass
         _tree_kill(proc)
     return stored
+
+
+def capture_day(net_cfg, data_dir, from_city, to_city, date,
+                route_id, log=None, tax=0.0, cabin=""):
+    """v1.31: ONE economy date through the real browser - the day
+    detail's '查当日真实班次' button. Mines the whole visible card
+    list (exact dep/arr + pay price per flight), deposits the lowest
+    row into the route's point-fill bucket (merge_point_fill then
+    promotes reference-only days) and queues every timed row for the
+    schedule board. Returns {rows, stored, queued}."""
+    from core.point_fill import queue_sched_deposit
+    cab = str(cabin or "").strip().lower()
+    if cab not in ("business", "first"):
+        cab = ""
+    bucket = ("cdp-cabin-{fc}-{tc}".format(
+        fc=from_city, tc=to_city) if cab else route_id)
+    sink = []
+    stored = capture_batch(
+        net_cfg, data_dir,
+        [{"from_city": from_city, "to_city": to_city, "date": date,
+          "cabin": cab, "cache_id": bucket, "tax": tax}],
+        log=log, rows_sink=sink, wait_s=25.0)
+    queued = queue_sched_deposit(data_dir, sink)
+    rows = [{"flight_no": str(r.get("flight_no") or ""),
+             "dep_time": str(r.get("dep_time") or ""),
+             "arr_time": str(r.get("arr_time") or ""),
+             "total": r.get("total")} for r in sink]
+    rows.sort(key=lambda r: (r["dep_time"], float(r["total"] or 0)))
+    return {"rows": rows, "stored": stored, "queued": queued}
 
 
 def patrol_fill(cw, routes, data_dir, log=None, throttle_hits=0):
@@ -388,7 +561,8 @@ def patrol_fill(cw, routes, data_dir, log=None, throttle_hits=0):
         _flush()
         info["skipped"] = "daily-cap"
         return info
-    from .cabin_monitor import patrol_legs, time_gap_dates
+    from .cabin_monitor import (patrol_legs, precision_gap_dates,
+                                time_gap_dates)
     from .cabin_monitor import load_history as _cabin_history_load
     hist = _cabin_history_load(data_dir)
     legs = patrol_legs(cw or {}, routes or [])
@@ -399,7 +573,19 @@ def patrol_fill(cw, routes, data_dir, log=None, throttle_hits=0):
     for leg in legs:
         hid = "leg-{fc}-{tc}".format(fc=leg["from_city"],
                                         tc=leg["to_city"])
-        for g in time_gap_dates(hist or {}, hid, d_from, d_to)[:k]:
+        # v1.32: time gaps keep priority, then PRECISION gaps
+        # (booking-only dates) fill the budget - the patrol used
+        # to sleep on 'no-gaps' while 30+ days per leg still ran
+        # on estimates alone.
+        got = time_gap_dates(hist or {}, hid, d_from, d_to)[:k]
+        have = set(got)
+        for g in precision_gap_dates(hist or {}, hid, d_from, d_to):
+            if len(got) >= k:
+                break
+            if g not in have:
+                got.append(g)
+                have.add(g)
+        for g in got:
             targets.append({"from_city": leg["from_city"],
                             "to_city": leg["to_city"], "date": g})
     if not targets:

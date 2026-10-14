@@ -845,6 +845,139 @@
     });
   }
 
+  function dayTimePos(t) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "").trim());
+    if (!m) return null;
+    var min = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    if (min < 0 || min > 1440) return null;
+    return min / 1440 * 100;
+  }
+
+  function qunarDayUrl(from, to, date) {
+    return "https://m.flight.qunar.com/ncs/page/flightlist?" +
+      "depCity=" + encodeURIComponent(from) +
+      "&arrCity=" + encodeURIComponent(to) +
+      "&goDate=" + encodeURIComponent(date) +
+      "&from=touch_index_search";
+  }
+
+  function dayCapKey(route, date, cabin) {
+    var k = (route.id || route.from_city + "-" + route.to_city) + "@" + date;
+    return cabin ? k + "|" + cabin : k;
+  }
+
+  function dayCapLabel(cabin) {
+    return cabin === "business" ? "公务舱" : "经济舱";
+  }
+
+  function buildDayCapBody(j, route, date, cabin) {
+    var wrap = el("div", "day-cap-body");
+    var rows = j.rows || [];
+    var minP = null;
+    rows.forEach(function (r) {
+      var p = parseFloat(r.total);
+      if (p > 0 && (minP === null || p < minP)) minP = p;
+    });
+    var head = el("div", "day-cap-head");
+    head.appendChild(el("span", "day-cap-title",
+      "当日" + dayCapLabel(cabin) + "班次 · " + rows.length + " 班"));
+    head.appendChild(el("span", "badge green",
+      "去哪儿实抓 · 精准" + dayCapLabel(cabin) + "价"));
+    wrap.appendChild(head);
+    var strip = el("div", "day-tl24");
+    strip.appendChild(el("div", "day-tl24-line"));
+    ["00", "06", "12", "18", "24"].forEach(function (h) {
+      var t = el("span", "day-tl24-tick", h);
+      t.style.left = (parseInt(h, 10) / 24 * 100) + "%";
+      strip.appendChild(t);
+    });
+    rows.forEach(function (r) {
+      var p = dayTimePos(r.dep_time);
+      if (p === null) return;
+      var dot = el("span",
+        "day-tl24-dot" + (r.total === minP ? " min" : ""));
+      dot.style.left = p + "%";
+      dot.title = (r.fno || "?") + " " + (r.dep_time || "?") + "-" +
+        (r.arr_time || "?") + " ¥" + r.total;
+      strip.appendChild(dot);
+    });
+    wrap.appendChild(strip);
+    var list = el("div", "day-cap-list");
+    rows.forEach(function (r) {
+      var row = el("a", "day-cap-row" + (r.total === minP ? " min" : ""));
+      row.href = qunarDayUrl(route.from_city, route.to_city, date);
+      row.target = "_blank";
+      row.rel = "noopener";
+      row.appendChild(el("b", "day-cap-fno", r.fno || "—"));
+      row.appendChild(el("span", "day-cap-time",
+        (r.dep_time || "--:--") + " - " + (r.arr_time || "--:--")));
+      row.appendChild(el("span", "day-cap-price", "¥" + r.total));
+      if (r.total === minP) {
+        row.appendChild(el("em", "badge green", "当日最低"));
+      }
+      list.appendChild(row);
+    });
+    wrap.appendChild(list);
+    return wrap;
+  }
+
+  function renderDayCap(box, route, date, cabin) {
+    cabin = cabin || "";
+    box.textContent = "";
+    var cached = (S.dayCap || {})[dayCapKey(route, date, cabin)];
+    var tag = dayCapLabel(cabin);
+    var btn = el("button", "btn small day-cap-btn");
+    btn.type = "button";
+    btn.textContent = cached && cached.rows && cached.rows.length
+      ? "↻ 刷新当日" + tag + "班次"
+      : "🔍 查当日" + tag + "班次（真浏览器精查）";
+    btn.onclick = function () { runDayCap(box, route, date, btn, cabin); };
+    box.appendChild(btn);
+    if (cached) {
+      if (cached.rows && cached.rows.length) {
+        box.appendChild(buildDayCapBody(cached, route, date, cabin));
+      } else {
+        box.appendChild(el("div", "day-cap-empty muted",
+          "当日页面未解析到班次卡片（可能已售罄或无直飞）"));
+      }
+    }
+  }
+
+  function runDayCap(box, route, date, btn, cabin) {
+    cabin = cabin || "";
+    var tag = dayCapLabel(cabin);
+    btn.disabled = true;
+    btn.textContent = "真浏览器采集" + tag + "中 · 约15秒…";
+    fetch("/api/tasks/cdp-day/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from_city: route.from_city,
+        to_city: route.to_city,
+        date: date,
+        cabin: cabin
+      })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.ok) {
+        var msg = j.error === "daily-cap"
+          ? "今日真浏览器额度已用完 (" + j.used + "/" + j.cap +
+            ") · 明日自动恢复"
+          : "精查失败: " + (j.error || "未知错误");
+        box.appendChild(el("div", "day-cap-err", msg));
+        btn.disabled = false;
+        btn.textContent = "🔍 查当日" + tag + "班次（真浏览器精查）";
+        return;
+      }
+      S.dayCap = S.dayCap || {};
+      S.dayCap[dayCapKey(route, date, cabin)] = j;
+      renderDayCap(box, route, date, cabin);
+    }).catch(function (e) {
+      box.appendChild(el("div", "day-cap-err", "请求失败: " + e));
+      btn.disabled = false;
+      btn.textContent = "🔍 查当日" + tag + "班次（真浏览器精查）";
+    });
+  }
+
   function renderDayDetail(route) {
     var box = $("dayDetail");
     box.textContent = "";
@@ -1046,6 +1179,14 @@
     link.rel = "noopener";
     link.textContent = "去哪儿购票页 →";
     box.appendChild(link);
+    var capWrap = el("div", "day-cap-wrap");
+    var capBox = el("div", "day-cap");
+    var capBiz = el("div", "day-cap day-cap-biz");
+    capWrap.appendChild(capBox);
+    capWrap.appendChild(capBiz);
+    box.appendChild(capWrap);
+    renderDayCap(capBox, route, d.date, "");
+    renderDayCap(capBiz, route, d.date, "business");
   }
 
   var TREND_IDS_MAIN = { svg: "trendSvg", cross: "trendCross", dot: "trendDot" };

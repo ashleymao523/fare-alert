@@ -434,6 +434,42 @@ def time_gap_dates(history, route_id, date_from, date_to):
     return out
 
 
+def precision_gap_dates(history, route_id, date_from, date_to):
+    """v1.32: window dates observed ONLY by estimate sources.
+
+    The CDP patrol used to sleep on 'no-gaps' once every date had
+    dep/arr times, while 30+ days per leg still carried nothing
+    but booking aggregates (the 4487.8-vs-1200 lesson). A precision
+    gap is a date that HAS observations yet none precise
+    (src_class > 0) - exactly where a real-browser capture can
+    flip the threshold verdict. Unobserved dates are NOT gaps (no
+    inventory evidence either way). Pure."""
+    try:
+        d0 = datetime.strptime(str(date_from), "%Y-%m-%d").date()
+        d1 = datetime.strptime(str(date_to), "%Y-%m-%d").date()
+    except Exception:
+        return []
+    if d1 < d0:
+        return []
+    route = ((history or {}).get("routes") or {}).get(route_id) or {}
+    seen, precise = set(), set()
+    for o in route.get("obs") or []:
+        d = str(o.get("date") or "")
+        if not d:
+            continue
+        seen.add(d)
+        if src_class(o.get("src")) > 0:
+            precise.add(d)
+    out = []
+    cur = d0
+    while cur <= d1 and len(out) < 400:
+        iso = cur.isoformat()
+        if iso in seen and iso not in precise:
+            out.append(iso)
+        cur += timedelta(days=1)
+    return out
+
+
 def patrol_gap(base_seconds, prev_streak, throttle_hits):
     """v1.15.1: adaptive 429 backoff for the patrol clock.
 
