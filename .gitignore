@@ -24,3 +24,7 @@ Thumbs.db
 # ad-hoc probe stdout/stderr captures
 probe_out.txt
 probe_err.txt
+
+# migration packer runtime logs
+pack_log.txt
+pack_err.txt
