@@ -48,7 +48,13 @@ SKIP_SUFFIXES = (".pyc", ".pyo")
 
 
 def _git_files():
-    proc = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True)
+    # quotePath=false keeps CJK filenames as raw UTF-8 instead of octal
+    # escapes - with the default a name like 部署指南.md arrives as
+    # "docs\351\203\250..." and the file silently drops out of the zip.
+    proc = subprocess.run(
+        ["git", "-c", "core.quotePath=false", "ls-files"],
+        cwd=ROOT, capture_output=True,
+    )
     out = proc.stdout.decode("utf-8", "replace")
     files = []
     for line in out.splitlines():
