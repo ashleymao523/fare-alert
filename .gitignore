@@ -28,3 +28,4 @@ probe_err.txt
 # migration packer runtime logs
 pack_log.txt
 pack_err.txt
+session/

@@ -42,7 +42,7 @@ DATA_ITEMS = [
     "data/sched_deposit.json",
     "data/cdp_cabin_ledger.json",
 ]
-DATA_DIRS = ["data/report", os.path.join("data", "edge_prof_recon_warm")]
+DATA_DIRS = ["data/report", os.path.join("data", "edge_prof_recon_warm"), "session"]
 SKIP_NAMES = {"__pycache__"}
 SKIP_SUFFIXES = (".pyc", ".pyo")
 
